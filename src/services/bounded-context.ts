@@ -1,4 +1,4 @@
-import { newEntityId } from "@sincpro/client-framework/client/ids";
+import { newEntityId } from "@sincpro/client-framework/common/ids";
 import { type Context, contextAt } from "@sincpro/client-framework/context/context";
 import type { ContextValues } from "@sincpro/client-framework/context/store";
 import type { Attributes, Span } from "@sincpro/client-framework/observability/ports";

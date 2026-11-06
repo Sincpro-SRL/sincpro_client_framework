@@ -20,17 +20,18 @@ it says what this package is responsible for and what it is not. This file is ho
 
 ## Where things go
 
-| Folder               | What                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------- |
-| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract, ids     |
-| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                |
-| `src/services/`      | `UseBoundedContext`, `Feature`, `ApplicationService`, the process, the execution            |
-| `src/context/`       | The `ContextStore` port, `memoryContexts`, and `Context` — one level of it                  |
-| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                       |
-| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed      |
-| `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named |
-| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                           |
-| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts          |
+| Folder               | What                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt` |
+| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract            |
+| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                  |
+| `src/services/`      | `UseBoundedContext`, `Feature`, `ApplicationService`, the process, the execution              |
+| `src/context/`       | The `ContextStore` port, `memoryContexts`, and `Context` — one level of it                    |
+| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                         |
+| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed        |
+| `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named   |
+| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                             |
+| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts            |
 
 ## Hard rules (the build enforces them — `make doctor`)
 
@@ -89,6 +90,16 @@ it says what this package is responsible for and what it is not. This file is ho
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
   an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
   `ProcessOptions.outcomeOf`, never by catching in a Feature.
+
+- **Only what is transversal comes here.** A value's wire form (a decimal as text, a day never
+  an instant, a money with its currency) is the backend's contract, the same on every platform,
+  so it lives in `src/common/`. How a value is shown to a person, typed in an input, or kept in
+  SQLite or IndexedDB is the platform's — @sincpro/web-framework's or @sincpro/mobile's.
+- **A decimal never becomes a `number`.** It travels as text and is computed with `Decimal` or
+  `Money` (exact, on `BigInt`); `Number(...)` or `parseFloat` on an amount is the float the
+  backend sends text to avoid. And a day is never a `Date`: a `Date` is an instant.
+- **The in-memory server copies by the wire's rules** (`valuesOf` → `readValues`): what it receives
+  and answers is what a real server would — a `Money` as `{ amount, currency }`, a `Date` as text.
 
 ## Before you hand it back
 

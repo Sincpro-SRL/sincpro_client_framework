@@ -3,6 +3,7 @@ import type {
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/transport";
+import { plainCodec, travels } from "@sincpro/client-framework/context/codec";
 import type { Span } from "@sincpro/client-framework/observability/ports";
 import type { Criteria } from "@sincpro/criteria";
 
@@ -58,8 +59,8 @@ function isTransport(value: unknown): value is Transport {
 
 /**
  * What every request of an execution carries: its trace (`traceparent`, W3C) and its context
- * (`sincpro-context`, the header sincpro_framework's entrances read). Nothing when there is no
- * trace and no context.
+ * (`sincpro-context`, the header sincpro_framework's entrances read, written with `plainCodec`).
+ * Nothing when there is no trace and no context that travels.
  */
 export function headersOf(execution: Execution): Record<string, string> {
   const headers: Record<string, string> = {};
@@ -69,7 +70,9 @@ export function headersOf(execution: Execution): Record<string, string> {
       `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`;
     if (span.state) headers["tracestate"] = span.state;
   }
-  if (Object.keys(context).length > 0) headers["sincpro-context"] = JSON.stringify(context);
+  // Only what travels: an object or a function held in the context stays in this process.
+  if (Object.values(context).some(travels))
+    headers["sincpro-context"] = plainCodec.dumps(context);
   return headers;
 }
 
