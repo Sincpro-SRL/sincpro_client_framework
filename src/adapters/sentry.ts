@@ -25,11 +25,11 @@ export type ExceptionClient = {
  *
  *     // @sincpro/web-framework/errors builds the browser's client with GlitchTip's DSN
  *     const reporter = sentryReporter(client);
- *     const runtime = createRuntime({ reporter });
+ *     configureProcess({ reporter });
  *
  * Context: it imports nothing — it takes the client the platform made (with its DSN, release
  * and data rules), so it costs no dependency and works on every platform. What is reported is
- * already decided by the runtime (`outcomeOf`: only `failed`); this only says where it happened.
+ * already decided by the process (`outcomeOf`: only `failed`); this only says where it happened.
  * The context goes as a context, not as tags: a tag is indexed and searched, and an execution's
  * values are not the place for that.
  */

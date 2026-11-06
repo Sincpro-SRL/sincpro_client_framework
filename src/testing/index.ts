@@ -11,9 +11,9 @@ import type {
  * A tracer and a reporter that keep what they were told, so a test reads it back.
  *
  *     const tracer = memoryTracer();
- *     const project = bindServices(createRuntime({ tracer }), "project", { closeIssue });
- *     await project.closeIssue.execute(input);
- *     tracer.spans.map((one) => one.name);   // ["project/closeIssue", "project/send", …]
+ *     configureProcess({ tracer });
+ *     await project.CloseIssue.execute(input);
+ *     tracer.spans.map((one) => one.name);   // ["project/CloseIssue", "project/Issues.close", …]
  *
  * Context: a use case is proven in Node with nothing of a platform; these are the platform's
  * part, held in memory. Not test doubles of this package — real implementations of its ports.

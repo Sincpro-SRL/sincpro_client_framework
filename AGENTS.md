@@ -8,7 +8,8 @@ it says what this package is responsible for and what it is not. This file is ho
 - **Read the manifesto.** A piece that serves nothing there does not go in; a piece it forbids
   does not either. If you think it should, change the manifesto first and say why.
 - **Look at the backend.** This package mirrors sincpro_framework (`~/dev/sincpro_framework`):
-  `Feature`, `ApplicationService`, the context, the span per use case. When in doubt about a
+  the bounded context and its dependencies, `Feature`, `ApplicationService`, the context and its
+  store, the process, the span per use case. When in doubt about a
   word or a behaviour, read how the backend does it, not memory.
 - **Look at who uses it.** @sincpro/web-framework (`~/dev/sincpro_web_framework`) and
   @sincpro/mobile (`~/dev/mobile/sincpro_mobile`). A piece only one of them needs, and that
@@ -20,7 +21,8 @@ it says what this package is responsible for and what it is not. This file is ho
 | -------------------- | ------------------------------------------------------------------------------------------- |
 | `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract, ids     |
 | `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                |
-| `src/services/`      | `Feature`, `ApplicationService`, the runtime, the execution and what binds to it            |
+| `src/services/`      | `UseBoundedContext`, `Feature`, `ApplicationService`, the process, the execution            |
+| `src/context/`       | The `ContextStore` port, `memoryContexts`, and `Context` — one level of it                  |
 | `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                       |
 | `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed      |
 | `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named |
@@ -33,7 +35,7 @@ it says what this package is responsible for and what it is not. This file is ho
   no `document`, `window`, `localStorage`, `navigator`. What a platform must give, it gives
   through a port.
 - **Node only in the generator.** `node:` imports, `process` and `Buffer` live in `src/codegen/`
-  and nowhere else; nothing in the runtime imports `codegen/`.
+  and nowhere else; nothing an application runs imports `codegen/`.
 - **Self-imports, no extensions.** Inside `src/`, import `@sincpro/client-framework/<path>` —
   never a relative path, never `.ts`.
 
@@ -48,16 +50,28 @@ it says what this package is responsible for and what it is not. This file is ho
 
 ## Known traps
 
-- **A run sees the instance through a view of its own.** Inside a method, `this.deps`,
-  `this.context` and `this.features` are that run's — bound to its execution. So a Feature keeps
-  nothing of a request on `this`, and declares no `#private` fields (they refuse the view); use
-  TypeScript's `private`.
-- **A span is named by the key, not the class** (`bindServices(runtime, "project", { sendIssue })`
-  → `project/sendIssue`; an ApplicationService's Features by their keys too): a production build
-  renames classes. Only an unbound Feature falls back to its class name.
-- **The trace reaches the wire through `deps`.** A dependency is bound to the run when it is a
-  `Transport` or carries `BIND` (every generated client does, through `bindable`); anything else
-  is handed as it is. A client built outside `deps` and closed over sends no trace.
+- **A run sees the instance through a view of its own.** Inside a method, each dependency
+  (`this.client`), `this.context` and `this.feature` are that run's — bound to its execution. So a
+  service declares no `#private` fields (they refuse the view); use TypeScript's `private`.
+- **A service is a singleton of its bounded context.** What a method writes on `this` lands on the
+  instance, shared by the next call, the call beside it and every `with`/`scoped` variant — as in
+  sincpro_framework. What belongs to one request goes in its arguments or its context.
+- **A span is named by the registered name, not the class** (`register({ features: { Issues } })`
+  → `project/Issues.close`, identity `project.Issues.close`): a production build renames classes,
+  never the keys of an object.
+- **The dependencies are typed, not declared.** `BaseFeature<ProjectDependencies>` types
+  `this.client` from an interface, which does not exist at run time; the bounded context answers
+  whatever was added with `addDependency`. A dependency nobody added reads `undefined`.
+- **The trace reaches the wire through the dependencies.** A dependency is bound to the run when it
+  is a `Transport` or carries `BIND` (every generated client does, through `bindable`); anything
+  else is handed as it is. A client built elsewhere and closed over sends no trace.
+- **The process is read on every call, never at import.** `project` is defined when its module
+  loads, before `main` runs `configureProcess`; nothing may capture the tracer, the reporter or the
+  store at definition time. `configureProcess` replaces everything at once — a test calls it in
+  `beforeEach` and starts with an empty context.
+- **A store's `load` may answer a new object each time** (one that parses JSON does): `Context`
+  keeps one object per `version`, so a screen can hand `values` to `useSyncExternalStore`. A store
+  that changes without moving the version is a broken store.
 - **What the generator writes is compared byte for byte** (`tests/support/forge-contract/`, out
   of prettier and eslint). After changing the generator on purpose, run `make codegen-fixtures`
   and read the diff.
@@ -71,7 +85,7 @@ it says what this package is responsible for and what it is not. This file is ho
   all-zeros span: the adapter gives no ids, so no `traceparent` of zeros reaches the server.
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
   an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
-  `RuntimeOptions.outcomeOf`, never by catching in a Feature.
+  `ProcessOptions.outcomeOf`, never by catching in a Feature.
 
 ## Before you hand it back
 
