@@ -59,11 +59,11 @@
     "printWidth": 94
   },
   "peerDependencies": {
-    "@sincpro/criteria": "^1.1.0"
+    "@sincpro/criteria": "^2.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@sincpro/criteria": "^1.1.0",
+    "@sincpro/criteria": "^2.0.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",

@@ -38,7 +38,7 @@ test("the criteria joins a route that already has its own query", async () => {
 test("the criteria travels as plain JSON — what the framework's REST entrypoint reads", async () => {
   const calls: Call[] = [];
   const transport = restTransport({ fetch: server(200, PAGE, calls) });
-  await transport.list("/projects", plain(criteria().where(["id", "=", "x"])));
+  await transport.list("/projects", plain(criteria().selection(["id", "=", "x"])));
   const sent = new URL(calls[0]?.url ?? "", "http://x").searchParams.get("criteria") ?? "";
   assert.deepEqual(JSON.parse(sent).selection, { field: "id", operator: "=", value: "x" });
 });
