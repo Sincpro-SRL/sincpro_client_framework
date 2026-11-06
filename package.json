@@ -17,6 +17,14 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./opentelemetry": {
+      "types": "./dist/adapters/opentelemetry.d.ts",
+      "default": "./dist/adapters/opentelemetry.js"
+    },
+    "./sentry": {
+      "types": "./dist/adapters/sentry.d.ts",
+      "default": "./dist/adapters/sentry.js"
     }
   },
   "bin": {
@@ -59,10 +67,18 @@
     "printWidth": 94
   },
   "peerDependencies": {
+    "@opentelemetry/api": "^1.10.0",
     "@sincpro/criteria": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/sdk-trace": "3.1.0",
     "@sincpro/criteria": "^2.0.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",

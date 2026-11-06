@@ -16,15 +16,16 @@ it says what this package is responsible for and what it is not. This file is ho
 
 ## Where things go
 
-| Folder               | What                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract, ids |
-| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones            |
-| `src/services/`      | `Feature`, `ApplicationService`, the runtime, the execution and what binds to it        |
-| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                   |
-| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed  |
-| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                       |
-| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts      |
+| Folder               | What                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract, ids     |
+| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                |
+| `src/services/`      | `Feature`, `ApplicationService`, the runtime, the execution and what binds to it            |
+| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                       |
+| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed      |
+| `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named |
+| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                           |
+| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts          |
 
 ## Hard rules (the build enforces them — `make doctor`)
 
@@ -62,6 +63,12 @@ it says what this package is responsible for and what it is not. This file is ho
   and read the diff.
 - **A module name the generator writes is built in parts** (`codegen/names.ts`, `FRAMEWORK`): the
   build's `tsc-alias` rewrites this package's specifiers inside strings too.
+- **An adapter wraps what the application built, never builds it.** `openTelemetryTracer` takes
+  the app's tracer, `sentryReporter` the app's client: no `register()`, no `Sentry.init()`, no
+  endpoint or DSN here, nothing read from the environment. A vendor's SDK is imported only in
+  `src/adapters/`, and nothing else imports an adapter (`make doctor`).
+- **A span nothing records claims no trace.** OpenTelemetry's API with no provider answers an
+  all-zeros span: the adapter gives no ids, so no `traceparent` of zeros reaches the server.
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
   an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
   `RuntimeOptions.outcomeOf`, never by catching in a Feature.

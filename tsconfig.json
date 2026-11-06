@@ -16,6 +16,8 @@
     "resolveJsonModule": true,
     "paths": {
       "@sincpro/client-framework": ["./src/index.ts"],
+      "@sincpro/client-framework/opentelemetry": ["./src/adapters/opentelemetry.ts"],
+      "@sincpro/client-framework/sentry": ["./src/adapters/sentry.ts"],
       "@sincpro/client-framework/*": ["./src/*"]
     }
   },

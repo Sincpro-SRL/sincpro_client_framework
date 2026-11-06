@@ -152,6 +152,21 @@ function intercepted<T extends object>(target: T, binding: Binding): T {
   return proxy;
 }
 
+/**
+ * Whether this is the first run to report this error. A Feature that fails inside an
+ * ApplicationService throws through it: the error is reported once, by the run where it
+ * happened — its span is the one that says where — and every run around it still ends `failed`.
+ */
+const REPORTED = new WeakSet<object>();
+
+function firstReport(error: unknown): boolean {
+  if (error === null || (typeof error !== "object" && typeof error !== "function"))
+    return true;
+  if (REPORTED.has(error)) return false;
+  REPORTED.add(error);
+  return true;
+}
+
 function quietly<T>(work: () => T, otherwise: T): T {
   try {
     return work();
@@ -232,7 +247,7 @@ function run(
   const finish = (failed: boolean, error?: unknown) => {
     const outcome = failed ? quietly(() => runtime.outcomeOf(error), "failed") : "ok";
     quietly(() => span.end(outcome, error), undefined);
-    if (outcome === "failed")
+    if (outcome === "failed" && firstReport(error))
       quietly(
         () =>
           runtime.reporter?.report(error, {
