@@ -106,12 +106,14 @@ Dependencies point down only. This package knows nothing above it.
 
 ## Where it stands
 
-**New.** The first cut brings two things here: the client and the generator, out of
-@sincpro/web-framework, where they already run without the DOM; and `Feature` and
-`ApplicationService`, from @sincpro/mobile, with the context carried by each call instead of a
-global stack. Then the ports for tracing and error reporting, the domains, and the application.
-The plan is written in @sincpro/web-framework (`docs/prd/PRD_02_marco-de-trabajo.md`, in Spanish
-like the rest of Sincpro's design records).
+**The first cut is here.** The client and the generator came out of @sincpro/web-framework,
+where they already ran without the DOM. `Feature` and `ApplicationService` came from
+@sincpro/mobile, with each call carrying its own execution instead of a global stack. And the
+ports for tracing and error reporting are in, with the trace and the context written on every
+request a use case sends.
+
+**Next:** the domains and the application. The plan is written in @sincpro/web-framework
+(`docs/prd/PRD_02_marco-de-trabajo.md`, in Spanish like the rest of Sincpro's design records).
 
 ## How we decide
 

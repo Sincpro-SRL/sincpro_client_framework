@@ -1,0 +1,7216 @@
+{
+  "$defs": {
+    "All": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "All",
+      "type": "object"
+    },
+    "Any_": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "Any_",
+      "type": "object"
+    },
+    "ArtifactLocation": {
+      "properties": {
+        "host": {
+          "title": "Host",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "path"
+      ],
+      "title": "ArtifactLocation",
+      "type": "object"
+    },
+    "ArtifactTransfer": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "minLength": 1,
+          "title": "Destination",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ArtifactLocation"
+        }
+      },
+      "required": [
+        "source",
+        "destination"
+      ],
+      "title": "ArtifactTransfer",
+      "type": "object"
+    },
+    "ComponentKind": {
+      "enum": [
+        "application",
+        "service",
+        "library",
+        "module",
+        "worker"
+      ],
+      "title": "ComponentKind",
+      "type": "string"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "One question about one field.\n\n`value` is required: a condition without a value is not a condition, and a `None` default\nlet `Condition(field=\"name\")` build happily, meaning \"name equals nothing\".\n\nIt is `JsonValue` and not `Any`: what a condition compares is a value that travelled in a\nJSON — a number, a text, a boolean, a list of them — and `Any` let any Python object\nthrough until the SQL translator tripped over it, far from here.\n\n`operator` does have a default, and that is a different case: omitting it means equality.\n\nBeside JSON it takes `datetime`, `date` and `Decimal`, because a Feature also builds\nconditions from Python and forcing it to serialise a date to text for the model to read\nback was a detour. In `model_dump(mode=\"json\")` they come out as text all the same.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "operator": {
+          "$ref": "#/$defs/Operator",
+          "default": "="
+        },
+        "value": {
+          "$ref": "#/$defs/Value"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Count": {
+      "description": "How many exist in total.\n\n`exact=False` means *at least* `value`: counting stops at a ceiling so its cost does not\ngrow with the table. A client renders that as `10000+`, and a collection reads it as\n\"you are holding a fragment\".",
+      "properties": {
+        "exact": {
+          "title": "Exact",
+          "type": "boolean"
+        },
+        "value": {
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
+    "CountMode": {
+      "enum": [
+        "none",
+        "capped",
+        "exact"
+      ],
+      "title": "CountMode",
+      "type": "string"
+    },
+    "Criteria": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/CountMode",
+          "default": "capped"
+        },
+        "grouping": {
+          "$ref": "#/$defs/Grouping",
+          "description": "How to split the result set, when it is being counted rather than listed. Ignored by a\nplain search: a page of records has no buckets."
+        },
+        "order": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "$ref": "#/$defs/Pagination",
+          "description": "How many, and from where. Always the object: `{\"limit\": 80, \"strategy\": {\"token\": \"eyJ…\"}}`."
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The filter: a `Condition`, or an `All`/`Any`/`Not` grouping more of them.\n\n**The declared type is exactly what is accepted.** No abbreviated spelling and no\nconversion, so pydantic and the type checker see the same thing and `criteria.selection` reads\nwith an exhaustive `match`. All the validator does is build the nodes when the tree\narrives serialised from JSON — which is the same tree, not another form.",
+          "title": "Selection"
+        },
+        "specification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Specification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What to bring back of each record: field name → how to bring it, the value being a\ncriteria exactly like this one. `None` and `{}` are NOT the same thing:\n\n    None    nothing was asked          →  every scalar, no relation expanded\n    {}      asked, nothing survived    →  the identity alone\n\nRead as one, a mask whose every field was dropped hands back the whole record, which is\nexactly what it existed to prevent."
+        }
+      },
+      "title": "Criteria",
+      "type": "object"
+    },
+    "Cursor": {
+      "additionalProperties": false,
+      "description": "Locating a page by where the previous one ended. **The strategy this engine implements.**\n\n    in      Cursor()                          the first page; nothing came before it\n    in      Cursor(token=\"eyJrIjo…\")          the next one, resumed from that row\n    out     the rows past that row, in the criteria's own order\n\nA row inserted or deleted mid-walk changes nothing, because the cursor names a ROW and not\na position. The token is minted from the last row of the page before; `keys_for` turns it\nback into the keys it holds, checked against the ordering in play.",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        }
+      },
+      "title": "Cursor",
+      "type": "object"
+    },
+    "DraftState": {
+      "description": "The record was answered from its owner's draft — what a form saved as a draft and\nnobody stored yet.\n\n`version` is what the next edit names as `version`; `stale` says the stored record moved on\nsince the draft started, so saving it would be refused.",
+      "properties": {
+        "kept_at": {
+          "format": "date-time",
+          "title": "Kept At",
+          "type": "string"
+        },
+        "origin_version": {
+          "title": "Origin Version",
+          "type": "integer"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "origin_version",
+        "kept_at"
+      ],
+      "title": "DraftState",
+      "type": "object"
+    },
+    "Dropped": {
+      "description": "A condition that was asked for and could not be honoured.\n\nReported rather than raised: a shared link outlives the schema it was written against, and\na dropped filter always *widens* the result — so it is dropped and said out loud.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "reason"
+      ],
+      "title": "Dropped",
+      "type": "object"
+    },
+    "EditAction": {
+      "description": "What an `Edit` does with the record the form holds — save it as a draft, store it, or\ndrop it.",
+      "enum": [
+        "save_draft",
+        "save",
+        "discard"
+      ],
+      "title": "EditAction",
+      "type": "string"
+    },
+    "FieldState": {
+      "description": "How a form shows one field for the record a preview built: its hints, evaluated.",
+      "properties": {
+        "items": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "type": "object"
+          },
+          "default": {},
+          "description": "For a list of records — an invoice's lines —, how a form shows each one's fields, by the\nrecord: its identity, or its position for a record that has none (`\"2\"`). Empty for any\nother field, for a relation nobody read and for the records a many-to-many references.",
+          "title": "Items",
+          "type": "object"
+        },
+        "readonly": {
+          "default": false,
+          "title": "Readonly",
+          "type": "boolean"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "title": "FieldState",
+      "type": "object"
+    },
+    "FormWarning": {
+      "description": "A warning to a form about the values it holds; it refuses nothing.\n\nFormWarning(message=\"a discount above 10% needs approval\", field=\"discount\", path=(\"discount\",))\nFormWarning(message=\"price below cost\", field=\"lines\", path=(\"lines\", 2, \"price\"))\n\n`path` is where it points inside the record — a line's cell included, by its position in the\nlist the form sent — and `field` the record's own field it is under (`path[0]`); both empty\nwhen the warning is about the record as a whole.",
+      "properties": {
+        "blocks_save": {
+          "default": false,
+          "description": "Whether saving the record as it is would be refused: an `@check` that fails here fails the\nsave; `warn_form` only advises.",
+          "title": "Blocks Save",
+          "type": "boolean"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "title": "Path",
+          "type": "array"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The rule that warned (`Sale.delivery_when_confirmed`), when an `@check` did; `None` for\nadvice the domain gave with `warn_form`.",
+          "title": "Rule"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "FormWarning",
+      "type": "object"
+    },
+    "FromContext": {
+      "additionalProperties": false,
+      "description": "A value of the server's own context — the user, the tenant, a date it holds — never one the\nclient sends.",
+      "properties": {
+        "$": {
+          "const": "context",
+          "default": "context",
+          "title": "$",
+          "type": "string"
+        },
+        "key": {
+          "description": "The key it reads, as the context holds it.",
+          "title": "Key",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "FromContext",
+      "type": "object"
+    },
+    "FromField": {
+      "additionalProperties": false,
+      "description": "Another field of the same row: a column compared with a column.\n\n    {\"field\": \"total\", \"operator\": \">\", \"value\": {\"$\": \"field\", \"name\": \"credit_limit\"}}\n\nIt is not read before the row: it is the other side of the comparison, and it takes only the\noperators that compare (`=`, `!=`, `<`, `<=`, `>`, `>=`) and a field of the same type.",
+      "properties": {
+        "$": {
+          "const": "field",
+          "default": "field",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The field it reads, of the same entity.",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FromField",
+      "type": "object"
+    },
+    "Grain": {
+      "description": "A calendar unit a date snaps to the start of.",
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "Grain",
+      "type": "string"
+    },
+    "Grouping": {
+      "additionalProperties": false,
+      "description": "How a result set is split: the levels, and the numbers folded out of every group.\n\n    in      {\"by\": [\"produced_by\", \"registered_at:month\"], \"measures\": {\"filas\": [\"sum\", \"row_count\"]}}\n    out     every level `by` names, each group counted and folded, carrying how to open it\n\nAll the levels named are answered, one statement each: grouping by three fields is three\nstatements whatever the number of rows. A screen that drills down one click at a time asks\nfor one level and, on the click, reads `bucket.criteria` with a grouping of its own; it never\nhas to know how deep the whole tree is.",
+      "properties": {
+        "group_by": {
+          "default": [],
+          "description": "The levels the set is split by, one statement each.",
+          "items": {
+            "$ref": "#/$defs/GroupingLevel"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "measures": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Measure"
+          },
+          "default": {},
+          "description": "The numbers every group answers, each under a name the caller chose.",
+          "title": "Measures",
+          "type": "object"
+        },
+        "order": {
+          "default": [],
+          "description": "How the groups of each level come back: by the level's own field, by a name in `measures`\nor by `count`. Empty means by the level's field, ascending, which is how a list of groups\nreads when nobody asked for anything else. It orders the GROUPS; `Criteria.order` orders\nthe rows, and with a page asked for it decides which rows each group shows first.",
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pagination"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How many groups of the FIRST level come back, and from where. `None`, the default, is\nevery group: a grouping is a set of counts and a client asked for all of them. When a page\nis asked, the deeper levels answer only for the groups that survived it.\n\nA page and not a keyset: ordering by an aggregate has no stable key to resume from, so\n`Offset` is the honest strategy here and a cursor is not minted."
+        },
+        "where_measures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A filter over what the groups measured, not over the rows: `count > 10`, `debit > 1000`.\n\nThe names it may use are the ones in `measures` plus `count`. `where` filters the rows that\nmake the groups; this filters the groups those rows made — which is why it is not called\n`where`: it reads measures, not fields.",
+          "title": "Where Measures"
+        }
+      },
+      "title": "Grouping",
+      "type": "object"
+    },
+    "GroupingLevel": {
+      "additionalProperties": false,
+      "description": "One level of grouping: the field it splits by, and how.\n\nin      \"produced_by\"           →  GroupingLevel(field='produced_by')\nin      \"registered_at:month\"   →  GroupingLevel(field='registered_at', grain=Grain.MONTH)\nin      {\"field\": \"registered_at\", \"part\": \"month\"}   →  every March, whatever the year\n\nA **grain** cuts a date into ranges of time (`2026-03`); a **part** extracts a number from it\n(`3`). One level takes one or the other, never both.\n\n`fill` lists every value the level can take, including the ones with no rows, as groups with\na count of 0: all the choices of an enum, both values of a boolean, every number a part can\nbe, every grain of a date range that `where` bounds. An axis that is complete is what a chart\nneeds, and what a group that happened to be empty would otherwise silently leave out.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "fill": {
+          "default": false,
+          "title": "Fill",
+          "type": "boolean"
+        },
+        "grain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "part": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Part"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "GroupingLevel",
+      "type": "object"
+    },
+    "Item": {
+      "oneOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "context": "#/$defs/FromContext",
+              "field": "#/$defs/FromField",
+              "now": "#/$defs/Now",
+              "param": "#/$defs/Param",
+              "period": "#/$defs/Period",
+              "today": "#/$defs/Today"
+            },
+            "propertyName": "$"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Today"
+            },
+            {
+              "$ref": "#/$defs/Now"
+            },
+            {
+              "$ref": "#/$defs/FromContext"
+            },
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "$ref": "#/$defs/Period"
+            },
+            {
+              "$ref": "#/$defs/FromField"
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    "JsonValue": {},
+    "Language": {
+      "description": "The language the agent works and reports in.",
+      "enum": [
+        "es",
+        "en"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "Measure": {
+      "additionalProperties": false,
+      "description": "One number a group answers: a function over a field, under a name the caller chose.\n\n    in      {\"function\": \"sum\", \"field\": \"row_count\"}\n    out     Measure(function='sum', field='row_count')       → sum(row_count) AS <name>\n\n**Named parts and not `\"sum:row_count\"`**, so nobody has to split a string in whatever\nlanguage is reading this — the same reason a condition travels as `{field, operator,\nvalue}`. The pair `[\"sum\", \"row_count\"]` is read as well, because writing one by hand in\nPython is a pair; what a caller sends over a wire is the object.\n\nIt is called a measure and not an aggregate on purpose: in this codebase an *aggregate* is\nthe DDD root — what `Meta.aggregate` names — and two meanings for one word in the same\nsentence is how a reader loses an afternoon.",
+      "properties": {
+        "argument": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the function needs besides a column, when it needs anything.\n\nOnly `percentile` does: the fraction it cuts at, `0.95` for a P95. `median` is the 0.5 one\nand takes none. Every other measure refuses one rather than ignoring it, because a number\nthat is quietly dropped is a report that is quietly wrong.",
+          "title": "Argument"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "function": {
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "count_distinct",
+            "percentile",
+            "median",
+            "bool_and",
+            "bool_or"
+          ],
+          "title": "Function",
+          "type": "string"
+        }
+      },
+      "required": [
+        "function",
+        "field"
+      ],
+      "title": "Measure",
+      "type": "object"
+    },
+    "Not": {
+      "additionalProperties": false,
+      "properties": {
+        "negate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Negate"
+        }
+      },
+      "required": [
+        "negate"
+      ],
+      "title": "Not",
+      "type": "object"
+    },
+    "Now": {
+      "additionalProperties": false,
+      "description": "The current instant, in UTC.",
+      "properties": {
+        "$": {
+          "const": "now",
+          "default": "now",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Now",
+      "type": "object"
+    },
+    "Offset": {
+      "additionalProperties": false,
+      "description": "Locating a page by counting rows from the start. **What everybody else does.**\n\n    in      Offset(rows=160)                    the third page of eighty\n    out     the rows after skipping 160\n\nHere because an integration eventually counts pages, and because a strategy that exists is\nbetter than one that gets bolted on. Honest about its cost: the database still walks the\nskipped rows, and a row inserted mid-walk shifts everything after it — which is the bug\n`Cursor` does not have.",
+      "properties": {
+        "rows": {
+          "default": 0,
+          "title": "Rows",
+          "type": "integer"
+        }
+      },
+      "title": "Offset",
+      "type": "object"
+    },
+    "Operator": {
+      "description": "How a question is asked. **The enum's value is how it is written outside**, so the\ndefinition publishes these same symbols in `ops` and no translation table exists anywhere.",
+      "enum": [
+        "=",
+        "!=",
+        "in",
+        "not in",
+        "like",
+        "starts with",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "is null",
+        "contains",
+        "not contains",
+        "between"
+      ],
+      "title": "Operator",
+      "type": "string"
+    },
+    "Origin": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "default": "",
+          "description": "The channel that answers there (``webhook``, ``github``…); empty: no answer.",
+          "title": "Channel",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/OriginKind",
+          "default": "api"
+        },
+        "reference": {
+          "default": "",
+          "description": "Its id or URL outside: the GitHub issue, the ticket, the GlitchTip event.",
+          "title": "Reference",
+          "type": "string"
+        },
+        "thread": {
+          "default": "",
+          "title": "Thread",
+          "type": "string"
+        }
+      },
+      "title": "Origin",
+      "type": "object"
+    },
+    "OriginKind": {
+      "enum": [
+        "cli",
+        "mcp",
+        "discord",
+        "github",
+        "helpdesk",
+        "notion",
+        "signal",
+        "n8n",
+        "api"
+      ],
+      "title": "OriginKind",
+      "type": "string"
+    },
+    "Pagination": {
+      "additionalProperties": false,
+      "description": "How many, and from where.\n\n    in      Pagination(limit=80)                              the first eighty\n    in      Pagination(limit=80, strategy=Cursor(token=\"eyJ…\"))   the next eighty\n    in      Pagination(limit=80, strategy=Offset(rows=160))     the third page of eighty\n\nTwo separate things, and that is the point: **how many belongs to the page, from where is a\nSTRATEGY.** Cursor is one strategy and not the object — a caller that switches to counting\nrows changes the strategy, not the way it asks for a page.\n\n`limit` has a default and no ceiling. A framework says what happens when nobody chooses;\nit does not decide for the application how much it may ask for.",
+      "properties": {
+        "limit": {
+          "default": 50,
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cursor"
+            },
+            {
+              "$ref": "#/$defs/Offset"
+            }
+          ],
+          "title": "Strategy"
+        }
+      },
+      "title": "Pagination",
+      "type": "object"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A value the caller supplied for this call: a typed text, a step's result.",
+      "properties": {
+        "$": {
+          "const": "param",
+          "default": "param",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The parameter, or a path into it with dots: `steps.order.total`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Param",
+      "type": "object"
+    },
+    "Part": {
+      "description": "A number extracted from a date: the month of the year, whatever the year.\n\nA grain **cuts** (a bucket is a range of time) and a part **extracts** (a bucket is a number\nthat many dates share), so they answer different questions: sales by month `2026-03` is a\ngrain, sales by «March, in any year» is a part. Weekdays count from Monday as 1, as ISO does.",
+      "enum": [
+        "year",
+        "quarter",
+        "month",
+        "iso_week",
+        "day_of_week",
+        "day_of_month",
+        "hour"
+      ],
+      "title": "Part",
+      "type": "string"
+    },
+    "Period": {
+      "additionalProperties": false,
+      "description": "A span of the calendar as a range `[start, end)`: only with the operator `between`.\n\nEither a named one, or a window of whole units counted from the current one:\n\n    {\"$\": \"period\", \"name\": \"this_month\"}\n    {\"$\": \"period\", \"unit\": \"day\", \"last\": 30}                      the 30 days before today\n    {\"$\": \"period\", \"unit\": \"week\", \"next\": 2, \"include_current\": true}\n\n`last` and `next` leave the current unit out unless `include_current` is set.",
+      "properties": {
+        "$": {
+          "const": "period",
+          "default": "period",
+          "title": "$",
+          "type": "string"
+        },
+        "include_current": {
+          "default": false,
+          "title": "Include Current",
+          "type": "boolean"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Periods"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Period",
+      "type": "object"
+    },
+    "Periods": {
+      "description": "A calendar span, as a closed range `[start, end)`. Only with the operator `between`.",
+      "enum": [
+        "today",
+        "yesterday",
+        "tomorrow",
+        "this_week",
+        "last_week",
+        "next_week",
+        "this_month",
+        "last_month",
+        "next_month",
+        "this_quarter",
+        "last_quarter",
+        "next_quarter",
+        "this_year",
+        "last_year",
+        "next_year"
+      ],
+      "title": "Periods",
+      "type": "string"
+    },
+    "ProjectChannelSpec": {
+      "properties": {
+        "channel": {
+          "title": "Channel",
+          "type": "string"
+        },
+        "thread": {
+          "title": "Thread",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "thread"
+      ],
+      "title": "ProjectChannelSpec",
+      "type": "object"
+    },
+    "ProjectComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "code_repository": {
+          "minLength": 1,
+          "title": "Code Repository",
+          "type": "string"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/ComponentKind"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "code_repository"
+      ],
+      "title": "ProjectComponent",
+      "type": "object"
+    },
+    "ProjectInventory": {
+      "additionalProperties": false,
+      "properties": {
+        "components": {
+          "items": {
+            "$ref": "#/$defs/ProjectComponent"
+          },
+          "title": "Components",
+          "type": "array"
+        }
+      },
+      "title": "ProjectInventory",
+      "type": "object"
+    },
+    "ProjectPreparation": {
+      "additionalProperties": false,
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ArtifactTransfer"
+          },
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "health_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Health Checks",
+          "type": "array"
+        },
+        "health_timeout_seconds": {
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "title": "Health Timeout Seconds",
+          "type": "number"
+        },
+        "probes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Probes",
+          "type": "array"
+        }
+      },
+      "title": "ProjectPreparation",
+      "type": "object"
+    },
+    "ProjectRepositorySpec": {
+      "properties": {
+        "base_branch": {
+          "default": "main",
+          "title": "Base Branch",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "writable": {
+          "default": true,
+          "title": "Writable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "ProjectRepositorySpec",
+      "type": "object"
+    },
+    "ProjectSpecification": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_binary": {
+          "default": "claude",
+          "title": "Agent Binary",
+          "type": "string"
+        },
+        "agent_model": {
+          "default": "",
+          "title": "Agent Model",
+          "type": "string"
+        },
+        "engineer_review": {
+          "default": false,
+          "title": "Engineer Review",
+          "type": "boolean"
+        },
+        "host": {
+          "default": "local",
+          "title": "Host",
+          "type": "string"
+        },
+        "language": {
+          "$ref": "#/$defs/Language",
+          "default": "es"
+        },
+        "preparation": {
+          "$ref": "#/$defs/ProjectPreparation"
+        },
+        "review_cli": {
+          "default": "gh",
+          "title": "Review Cli",
+          "type": "string"
+        },
+        "review_host": {
+          "$ref": "#/$defs/ReviewHost",
+          "default": ""
+        },
+        "verification_checks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Checks",
+          "type": "array"
+        }
+      },
+      "title": "ProjectSpecification",
+      "type": "object"
+    },
+    "ReviewHost": {
+      "description": "Where a delivered branch is proposed for review — none: the branch alone.",
+      "enum": [
+        "",
+        "github"
+      ],
+      "title": "ReviewHost",
+      "type": "string"
+    },
+    "Sort": {
+      "additionalProperties": false,
+      "properties": {
+        "descending": {
+          "default": false,
+          "title": "Descending",
+          "type": "boolean"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Sort",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "description": "A signed amount of time, by unit. Only the units asked for travel.\n\n{\"days\": -30}                       thirty days back\n{\"months\": 1, \"days\": -1}           a month ahead, a day back",
+      "properties": {
+        "days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Days"
+        },
+        "hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hours"
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minutes"
+        },
+        "months": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Months"
+        },
+        "weeks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weeks"
+        },
+        "years": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Years"
+        }
+      },
+      "title": "Span",
+      "type": "object"
+    },
+    "Specification": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Criteria"
+      },
+      "default": {},
+      "description": "Field name → the criteria that says how to bring it.\n\n    in      {\"name\": {}, \"lines\": {\"pagination\": {\"limit\": 20}}}\n    out     Specification with two fields, the second carrying its own page\n\n**One type and no union**: every value is a `Criteria`, the same one as outside, so a\nconsumer deserialises `dict[str, Criteria]` in any language and never has to tell a string\nfrom an object. A scalar's is empty, because there is nothing to say about how to bring a\nnumber. A relation's carries selection, order, pagination and its own specification, so the\nvocabulary inside a node is the vocabulary outside it, at any depth.\n\nA `RootModel` and not an object with one field inside: in JSON it is the bare mapping,\nwithout a key that means nothing, and in here it has the methods that belong to it.",
+      "title": "Specification",
+      "type": "object"
+    },
+    "Through": {
+      "additionalProperties": false,
+      "properties": {
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Selection"
+        },
+        "through": {
+          "title": "Through",
+          "type": "string"
+        }
+      },
+      "required": [
+        "through",
+        "selection"
+      ],
+      "title": "Through",
+      "type": "object"
+    },
+    "Today": {
+      "additionalProperties": false,
+      "description": "The current date, in the context's timezone.",
+      "properties": {
+        "$": {
+          "const": "today",
+          "default": "today",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Today",
+      "type": "object"
+    },
+    "Value": {
+      "oneOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Item"
+        }
+      ]
+    }
+  },
+  "alias": "project",
+  "bindings": {
+    "mcp": {
+      "sincpro-forge-project.CommandAssignIssueSandbox": {
+        "tool": "assign_issue_sandbox"
+      },
+      "sincpro-forge-project.CommandCancelIssue": {
+        "tool": "cancel_issue"
+      },
+      "sincpro-forge-project.CommandDeliverIssue": {
+        "tool": "deliver_issue"
+      },
+      "sincpro-forge-project.CommandGetIssue": {
+        "tool": "get_issue"
+      },
+      "sincpro-forge-project.CommandGetProject": {
+        "tool": "get_project"
+      },
+      "sincpro-forge-project.CommandGetRun": {
+        "tool": "get_run"
+      },
+      "sincpro-forge-project.CommandListIssues": {
+        "tool": "list_issues"
+      },
+      "sincpro-forge-project.CommandListProjects": {
+        "tool": "list_projects"
+      },
+      "sincpro-forge-project.CommandOpenIssue": {
+        "tool": "open_issue"
+      },
+      "sincpro-forge-project.CommandQueueIssueRun": {
+        "tool": "queue_issue_run"
+      },
+      "sincpro-forge-project.CommandSendIssue": {
+        "tool": "send_issue"
+      },
+      "sincpro-forge-project.CommandStopIssue": {
+        "tool": "stop_issue"
+      }
+    },
+    "rest": {
+      "sincpro-forge-project.CommandAssignIssueSandbox": {
+        "method": "PUT",
+        "path": "/v1/issues/{issue_id}/sandbox",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandCancelIssue": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/cancel",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandDeliverIssue": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/delivery",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandEditProject": {
+        "method": "PUT",
+        "path": "/v1/projects/{id}/edit",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-project.CommandGetIssue": {
+        "method": "GET",
+        "path": "/v1/issues/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-project.CommandGetIssueSandboxReady": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/sandbox/prepare",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandGetProject": {
+        "method": "GET",
+        "path": "/v1/projects/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-project.CommandGetRun": {
+        "method": "GET",
+        "path": "/v1/runs/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-project.CommandListIssues": {
+        "method": "GET",
+        "path": "/v1/issues",
+        "path_fields": []
+      },
+      "sincpro-forge-project.CommandListProjectEvents": {
+        "method": "GET",
+        "path": "/v1/project-events",
+        "path_fields": []
+      },
+      "sincpro-forge-project.CommandListProjects": {
+        "method": "GET",
+        "path": "/v1/projects",
+        "path_fields": []
+      },
+      "sincpro-forge-project.CommandOpenIssue": {
+        "method": "POST",
+        "path": "/v1/issues",
+        "path_fields": []
+      },
+      "sincpro-forge-project.CommandQueueIssueRun": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/runs",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandRegisterProject": {
+        "method": "POST",
+        "path": "/v1/projects",
+        "path_fields": []
+      },
+      "sincpro-forge-project.CommandResetIssueSandbox": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/sandbox/reset",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandSendIssue": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/messages",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandSetProjectTenant": {
+        "method": "PUT",
+        "path": "/v1/projects/{project_id}/tenant",
+        "path_fields": [
+          "project_id"
+        ]
+      },
+      "sincpro-forge-project.CommandShareProject": {
+        "method": "POST",
+        "path": "/v1/projects/{project_id}/shares",
+        "path_fields": [
+          "project_id"
+        ]
+      },
+      "sincpro-forge-project.CommandStopIssue": {
+        "method": "POST",
+        "path": "/v1/issues/{issue_id}/stop",
+        "path_fields": [
+          "issue_id"
+        ]
+      },
+      "sincpro-forge-project.CommandUnshareProject": {
+        "method": "POST",
+        "path": "/v1/projects/{project_id}/shares/{tenant_id}/revoke",
+        "path_fields": [
+          "project_id",
+          "tenant_id"
+        ]
+      }
+    }
+  },
+  "bounded_context": "sincpro-forge-project",
+  "format": "sincpro.client-contract/1",
+  "models": {
+    "Actor": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "kind": {
+          "enum": [
+            "person",
+            "engineer",
+            "system",
+            "agent"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "agent": {
+                "default": "Agent",
+                "es": "Agente"
+              },
+              "engineer": {
+                "default": "Engineer",
+                "es": "Ingeniero"
+              },
+              "person": {
+                "default": "Person",
+                "es": "Persona"
+              },
+              "system": {
+                "default": "System",
+                "es": "Sistema"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "on_behalf_of": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "role": {
+          "enum": [
+            "",
+            "admin",
+            "member"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "": {
+                "default": "None",
+                "es": "Ninguno"
+              },
+              "admin": {
+                "default": "Administrator",
+                "es": "Administrador"
+              },
+              "member": {
+                "default": "Member",
+                "es": "Miembro"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "tenant_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "Actor",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "Actor",
+        "title": {
+          "default": "Actor"
+        }
+      }
+    },
+    "ArtifactLocation": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "path": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "ArtifactLocation",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ArtifactLocation",
+        "title": {
+          "default": "ArtifactLocation"
+        }
+      }
+    },
+    "ArtifactTransfer": {
+      "properties": {
+        "destination": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "source": {
+          "$ref": "#/models/ArtifactLocation",
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        }
+      },
+      "required": [],
+      "title": "ArtifactTransfer",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ArtifactTransfer",
+        "title": {
+          "default": "ArtifactTransfer"
+        }
+      }
+    },
+    "ExecutionFailure": {
+      "properties": {
+        "message": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "type": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "ExecutionFailure",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ExecutionFailure",
+        "title": {
+          "default": "ExecutionFailure"
+        }
+      }
+    },
+    "Issue": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "failure": {
+          "title": "Failure",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Failure",
+              "es": "Falla"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "visible_when": {
+              "field": "status",
+              "operator": "=",
+              "value": "failed"
+            },
+            "widget": "textarea"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "messages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Messages",
+          "type": "array",
+          "x-sincpro": {
+            "label": {
+              "default": "Messages",
+              "es": "Mensajes"
+            },
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        },
+        "opened_by": {
+          "$ref": "#/models/Actor",
+          "title": "Opened by",
+          "x-sincpro": {
+            "label": {
+              "default": "Opened by",
+              "es": "Abierto por"
+            },
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "origin": {
+          "$ref": "#/models/Origin",
+          "title": "Origin",
+          "x-sincpro": {
+            "label": {
+              "default": "Origin",
+              "es": "Origen"
+            },
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "parent_id": {
+          "title": "Parent issue",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Parent issue",
+              "es": "Issue padre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "project_id": {
+          "title": "Project",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Project",
+              "es": "Proyecto"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "project_snapshot": {
+          "$ref": "#/models/ProjectSnapshot",
+          "title": "Project snapshot",
+          "x-sincpro": {
+            "label": {
+              "default": "Project snapshot",
+              "es": "Foto del proyecto"
+            },
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "request": {
+          "title": "Request",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Request",
+              "es": "Pedido"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly_when": {
+              "field": "resolution",
+              "operator": "!=",
+              "value": ""
+            },
+            "sortable": true,
+            "type": "text",
+            "widget": "textarea"
+          }
+        },
+        "requester": {
+          "title": "Requester",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Requester",
+              "es": "Solicitante"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "resolution": {
+          "title": "Resolution",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Resolution",
+              "es": "Resolución"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "visible_when": {
+              "field": "resolution",
+              "operator": "!=",
+              "value": ""
+            },
+            "widget": "text"
+          }
+        },
+        "runs": {
+          "items": {
+            "$ref": "#/models/Run"
+          },
+          "title": "Runs",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "issue_id",
+            "label": {
+              "default": "Runs",
+              "es": "Ejecuciones"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "issue_id",
+            "relation": "Run",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "runs_started": {
+          "title": "Runs started",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Runs started",
+              "es": "Ejecuciones"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "sandbox_id": {
+          "title": "Sandbox",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Sandbox",
+              "es": "Sandbox"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "status": {
+          "enum": [
+            "idle",
+            "running",
+            "stopped",
+            "finished",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "failed": {
+                "default": "Failed",
+                "es": "Fallido"
+              },
+              "finished": {
+                "default": "Finished",
+                "es": "Terminado"
+              },
+              "idle": {
+                "default": "Idle",
+                "es": "En espera"
+              },
+              "running": {
+                "default": "Running",
+                "es": "En curso"
+              },
+              "stopped": {
+                "default": "Stopped",
+                "es": "Detenido"
+              }
+            },
+            "default": "idle",
+            "groupable": true,
+            "label": {
+              "default": "Status",
+              "es": "Estado"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "tenant_id": {
+          "title": "Tenant",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Tenant",
+              "es": "Tenant"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "title": {
+          "title": "Title",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Title",
+              "es": "Título"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly_when": {
+              "field": "resolution",
+              "operator": "!=",
+              "value": ""
+            },
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "Issue",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "created_at": {},
+            "failure": {},
+            "id": {},
+            "messages": {},
+            "opened_by": {},
+            "origin": {},
+            "parent_id": {},
+            "project_id": {},
+            "project_snapshot": {},
+            "request": {},
+            "requester": {},
+            "resolution": {},
+            "runs": {
+              "specification": {
+                "created_at": {},
+                "heartbeat_at": {},
+                "id": {},
+                "issue_id": {},
+                "sandbox_id": {},
+                "status": {},
+                "steps": {},
+                "summary": {},
+                "updated_at": {},
+                "version": {},
+                "worker": {},
+                "workspace_id": {}
+              }
+            },
+            "runs_started": {},
+            "sandbox_id": {},
+            "status": {},
+            "tenant_id": {},
+            "title": {},
+            "updated_at": {},
+            "version": {}
+          }
+        },
+        "display": "title",
+        "entity": "Issue",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "title",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "Issue"
+        },
+        "version": "c14be10a9c98db88e308d3786240659d5eed986ead432480fd07c5b3921c110a"
+      }
+    },
+    "Origin": {
+      "properties": {
+        "channel": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "kind": {
+          "enum": [
+            "cli",
+            "mcp",
+            "discord",
+            "github",
+            "helpdesk",
+            "notion",
+            "signal",
+            "n8n",
+            "api"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "api": {
+                "default": "API",
+                "es": "API"
+              },
+              "cli": {
+                "default": "CLI",
+                "es": "CLI"
+              },
+              "discord": {
+                "default": "Discord",
+                "es": "Discord"
+              },
+              "github": {
+                "default": "GitHub",
+                "es": "GitHub"
+              },
+              "helpdesk": {
+                "default": "Helpdesk",
+                "es": "Mesa de ayuda"
+              },
+              "mcp": {
+                "default": "MCP",
+                "es": "MCP"
+              },
+              "n8n": {
+                "default": "n8n",
+                "es": "n8n"
+              },
+              "notion": {
+                "default": "Notion",
+                "es": "Notion"
+              },
+              "signal": {
+                "default": "Signal",
+                "es": "Signal"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "reference": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "thread": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "Origin",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "Origin",
+        "title": {
+          "default": "Origin"
+        }
+      }
+    },
+    "Project": {
+      "properties": {
+        "channels": {
+          "items": {
+            "$ref": "#/models/ProjectChannelSpec"
+          },
+          "title": "Channels",
+          "type": "array",
+          "x-sincpro": {
+            "label": {
+              "default": "Channels",
+              "es": "Canales"
+            },
+            "many": true,
+            "type": "embedded",
+            "widget": "lines"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "display_name": {
+          "title": "Name",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Name",
+              "es": "Nombre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "inventory": {
+          "$ref": "#/models/ProjectInventory",
+          "title": "Inventory",
+          "x-sincpro": {
+            "label": {
+              "default": "Inventory",
+              "es": "Inventario"
+            },
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/models/Issue"
+          },
+          "title": "Issues",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "project_id",
+            "label": {
+              "default": "Issues",
+              "es": "Issues"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "project_id",
+            "relation": "Issue",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "project_repositories": {
+          "items": {
+            "$ref": "#/models/ProjectRepository"
+          },
+          "title": "Repositories",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "project_ref",
+            "judged_by": [
+              "needs_a_writable_repository",
+              "each_repository_named_once"
+            ],
+            "label": {
+              "default": "Repositories",
+              "es": "Repositorios"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "project_ref",
+            "relation": "ProjectRepository",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "shared_with": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Shared with",
+          "type": "array",
+          "x-sincpro": {
+            "label": {
+              "default": "Shared with",
+              "es": "Compartido con"
+            },
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "readonly": true,
+            "type": "text[]",
+            "widget": "tags"
+          }
+        },
+        "specification": {
+          "$ref": "#/models/ProjectSpecification",
+          "title": "Specification",
+          "x-sincpro": {
+            "label": {
+              "default": "Specification",
+              "es": "Especificación"
+            },
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "tenant_id": {
+          "title": "Tenant",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Tenant",
+              "es": "Tenant"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "Project",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "channels": {},
+            "created_at": {},
+            "display_name": {},
+            "id": {},
+            "inventory": {},
+            "issues": {
+              "specification": {
+                "created_at": {},
+                "failure": {},
+                "id": {},
+                "messages": {},
+                "opened_by": {},
+                "origin": {},
+                "parent_id": {},
+                "project_id": {},
+                "project_snapshot": {},
+                "request": {},
+                "requester": {},
+                "resolution": {},
+                "runs": {
+                  "specification": {
+                    "created_at": {},
+                    "heartbeat_at": {},
+                    "id": {},
+                    "issue_id": {},
+                    "sandbox_id": {},
+                    "status": {},
+                    "steps": {},
+                    "summary": {},
+                    "updated_at": {},
+                    "version": {},
+                    "worker": {},
+                    "workspace_id": {}
+                  }
+                },
+                "runs_started": {},
+                "sandbox_id": {},
+                "status": {},
+                "tenant_id": {},
+                "title": {},
+                "updated_at": {},
+                "version": {}
+              }
+            },
+            "project_repositories": {},
+            "shared_with": {},
+            "specification": {},
+            "tenant_id": {},
+            "updated_at": {},
+            "version": {}
+          }
+        },
+        "display": "display_name",
+        "entity": "Project",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "display_name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "Project"
+        },
+        "version": "bce8800c5b97c34c4a52f19535a279eec7dc60cf5d035c9eeb99d95b6c9491ee"
+      }
+    },
+    "ProjectChannelSpec": {
+      "properties": {
+        "channel": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "thread": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectChannelSpec",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectChannelSpec",
+        "title": {
+          "default": "ProjectChannelSpec"
+        }
+      }
+    },
+    "ProjectComponent": {
+      "properties": {
+        "code_repository": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        },
+        "kind": {
+          "enum": [
+            "application",
+            "service",
+            "library",
+            "module",
+            "worker"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "application": {
+                "default": "Application",
+                "es": "Aplicación"
+              },
+              "library": {
+                "default": "Library",
+                "es": "Librería"
+              },
+              "module": {
+                "default": "Module",
+                "es": "Módulo"
+              },
+              "service": {
+                "default": "Service",
+                "es": "Servicio"
+              },
+              "worker": {
+                "default": "Worker",
+                "es": "Worker"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "path": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectComponent",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectComponent",
+        "title": {
+          "default": "ProjectComponent"
+        }
+      }
+    },
+    "ProjectEvent": {
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "entity_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_type": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "label": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-sincpro": {
+            "ops": [
+              "like"
+            ],
+            "readonly": true,
+            "type": "translated",
+            "widget": "translated"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "project_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectEvent",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-id",
+        "entity": "ProjectEvent",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "ProjectEvent"
+        },
+        "version": "cb23ff6f6ead613ad02689376f507d443b8cf72d699ca144091fd1268fd501b2"
+      }
+    },
+    "ProjectInventory": {
+      "properties": {
+        "components": {
+          "items": {
+            "$ref": "#/models/ProjectComponent"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "many": true,
+            "type": "embedded",
+            "widget": "lines"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectInventory",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectInventory",
+        "title": {
+          "default": "ProjectInventory"
+        }
+      }
+    },
+    "ProjectPreparation": {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/models/ArtifactTransfer"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "many": true,
+            "type": "embedded",
+            "widget": "lines"
+          }
+        },
+        "health_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        },
+        "health_timeout_seconds": {
+          "type": "number",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "sortable": true,
+            "type": "number",
+            "widget": "number"
+          }
+        },
+        "probes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectPreparation",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectPreparation",
+        "title": {
+          "default": "ProjectPreparation"
+        }
+      }
+    },
+    "ProjectRepository": {
+      "properties": {
+        "base_branch": {
+          "title": "Base branch",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "default": "main",
+            "groupable": true,
+            "label": {
+              "default": "Base branch",
+              "es": "Rama base"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "name": {
+          "title": "Name",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Name",
+              "es": "Nombre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "project_ref": {
+          "title": "Project",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Project",
+              "es": "Proyecto"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "url": {
+          "title": "URL",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "URL",
+              "es": "URL"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "writable": {
+          "title": "Writable",
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "default": true,
+            "groupable": true,
+            "label": {
+              "default": "Writable",
+              "es": "Escribe"
+            },
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectRepository",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "id",
+        "display": "name",
+        "entity": "ProjectRepository",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "ProjectRepository"
+        },
+        "version": "925b69640bd89fbc893c4fee7db538aa2ac093619544ad327fa594152c0f1674"
+      }
+    },
+    "ProjectSnapshot": {
+      "properties": {
+        "agent_binary": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "agent_model": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "channels": {
+          "items": {
+            "$ref": "#/models/SnapshotChannel"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "many": true,
+            "type": "embedded",
+            "widget": "lines"
+          }
+        },
+        "engineer_review": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        },
+        "host": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "inventory": {
+          "$ref": "#/models/ProjectInventory",
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "language": {
+          "enum": [
+            "es",
+            "en"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "en": {
+                "default": "English",
+                "es": "Inglés"
+              },
+              "es": {
+                "default": "Spanish",
+                "es": "Español"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "preparation": {
+          "$ref": "#/models/ProjectPreparation",
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "project_repositories": {
+          "items": {
+            "$ref": "#/models/SnapshotRepository"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "many": true,
+            "type": "embedded",
+            "widget": "lines"
+          }
+        },
+        "review_cli": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_host": {
+          "enum": [
+            "",
+            "github"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "": {
+                "default": "None",
+                "es": "Ninguna"
+              },
+              "github": {
+                "default": "GitHub",
+                "es": "GitHub"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "verification_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectSnapshot",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectSnapshot",
+        "title": {
+          "default": "ProjectSnapshot"
+        }
+      }
+    },
+    "ProjectSpecification": {
+      "properties": {
+        "agent_binary": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "agent_model": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "engineer_review": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        },
+        "host": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "language": {
+          "enum": [
+            "es",
+            "en"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "en": {
+                "default": "English",
+                "es": "Inglés"
+              },
+              "es": {
+                "default": "Spanish",
+                "es": "Español"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "preparation": {
+          "$ref": "#/models/ProjectPreparation",
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "review_cli": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_host": {
+          "enum": [
+            "",
+            "github"
+          ],
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "": {
+                "default": "None",
+                "es": "Ninguna"
+              },
+              "github": {
+                "default": "GitHub",
+                "es": "GitHub"
+              }
+            },
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "verification_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        }
+      },
+      "required": [],
+      "title": "ProjectSpecification",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "ProjectSpecification",
+        "title": {
+          "default": "ProjectSpecification"
+        }
+      }
+    },
+    "Run": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "heartbeat_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Last heartbeat",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Last heartbeat",
+              "es": "Último latido"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "issue_id": {
+          "title": "Issue",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Issue",
+              "es": "Issue"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "sandbox_id": {
+          "title": "Sandbox",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Sandbox",
+              "es": "Sandbox"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "cancelled": {
+                "default": "Cancelled",
+                "es": "Cancelada"
+              },
+              "failed": {
+                "default": "Failed",
+                "es": "Fallida"
+              },
+              "queued": {
+                "default": "Queued",
+                "es": "En cola"
+              },
+              "running": {
+                "default": "Running",
+                "es": "En curso"
+              },
+              "succeeded": {
+                "default": "Succeeded",
+                "es": "Exitosa"
+              }
+            },
+            "default": "running",
+            "groupable": true,
+            "label": {
+              "default": "Status",
+              "es": "Estado"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/models/RunStep"
+          },
+          "title": "Steps",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "run_ref",
+            "label": {
+              "default": "Steps",
+              "es": "Pasos"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "run_ref",
+            "relation": "RunStep",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Summary",
+              "es": "Resumen"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "worker": {
+          "title": "Worker",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Worker",
+              "es": "Worker"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "workspace_id": {
+          "title": "Workspace",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Workspace",
+              "es": "Workspace"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "Run",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "created_at",
+        "detail": {
+          "specification": {
+            "created_at": {},
+            "heartbeat_at": {},
+            "id": {},
+            "issue_id": {},
+            "sandbox_id": {},
+            "status": {},
+            "steps": {},
+            "summary": {},
+            "updated_at": {},
+            "version": {},
+            "worker": {},
+            "workspace_id": {}
+          }
+        },
+        "entity": "Run",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "Run"
+        },
+        "version": "7f53164f26d5f0055f4261521571fb182f9ce242255164d96c206864802c591b"
+      }
+    },
+    "RunStep": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "data": {
+          "x-sincpro": {
+            "sortable": true,
+            "type": "unknown",
+            "widget": "text"
+          }
+        },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/models/StepExecution"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "run_ref": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "status": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed"
+          ],
+          "title": "Step state",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "failed": {
+                "default": "Failed",
+                "es": "Fallido"
+              },
+              "running": {
+                "default": "Running",
+                "es": "En curso"
+              },
+              "succeeded": {
+                "default": "Succeeded",
+                "es": "Exitoso"
+              }
+            },
+            "default": "running",
+            "groupable": true,
+            "label": {
+              "default": "Step state",
+              "es": "Estado del paso"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "summary": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "RunStep",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "id",
+        "display": "name",
+        "entity": "RunStep",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "RunStep"
+        },
+        "version": "210cbfac077cd3972e51a94133642e7feacd54f4f9116d120c61bedda810f3b6"
+      }
+    },
+    "SnapshotChannel": {
+      "properties": {
+        "channel": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "thread": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "SnapshotChannel",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "SnapshotChannel",
+        "title": {
+          "default": "SnapshotChannel"
+        }
+      }
+    },
+    "SnapshotRepository": {
+      "properties": {
+        "base_branch": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "url": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "writable": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        }
+      },
+      "required": [],
+      "title": "SnapshotRepository",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "SnapshotRepository",
+        "title": {
+          "default": "SnapshotRepository"
+        }
+      }
+    },
+    "StepExecution": {
+      "properties": {
+        "command": {
+          "$ref": "#/models/UseCaseTrace",
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/models/ExecutionFailure"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/models/UseCaseTrace"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        }
+      },
+      "required": [],
+      "title": "StepExecution",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "StepExecution",
+        "title": {
+          "default": "StepExecution"
+        }
+      }
+    },
+    "UseCaseTrace": {
+      "properties": {
+        "payload": {
+          "x-sincpro": {
+            "sortable": true,
+            "type": "unknown",
+            "widget": "text"
+          }
+        },
+        "type": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "UseCaseTrace",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "UseCaseTrace",
+        "title": {
+          "default": "UseCaseTrace"
+        }
+      }
+    }
+  },
+  "operations": {
+    "sincpro-forge-project.CommandAssignIssueSandbox": {
+      "deprecated": false,
+      "description": "Make an issue's next runs work on an existing Sandbox of its project.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "sandbox_id"
+        ],
+        "title": "CommandAssignIssueSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "previous": {
+            "title": "Previous",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "sandbox_id",
+          "previous"
+        ],
+        "title": "ResponseAssignIssueSandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandCancelIssue": {
+      "deprecated": false,
+      "description": "Close an issue as cancelled, with any queued run.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandCancelIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "resolution"
+        ],
+        "title": "ResponseCancelIssue",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandDeliverIssue": {
+      "deprecated": false,
+      "description": "Verify the issue's change and publish its branch. Nothing is published if the checks fail.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandDeliverIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "ok",
+          "summary"
+        ],
+        "title": "ResponseRunStep",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandEditProject": {
+      "deprecated": false,
+      "description": "Change a project's definition: a draft, a save or a discard.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "action": {
+            "$ref": "#/$defs/EditAction",
+            "default": "save_draft"
+          },
+          "changed": {
+            "default": [],
+            "description": "The fields the form changed, so only the computations they reach run; none runs them all.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "id": {
+            "description": "The record's key (`DEFAULT_GET_ID`): a stored record's, or the one a new record is created\nunder — named by the caller (a UUID v7 a client mints), or minted here when it names none.",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The stored record's version the caller read, for a save with no draft: refused when the\nrecord moved past it. A draft remembers its own.",
+            "title": "Origin Version"
+          },
+          "values": {
+            "$ref": "#/models/Project",
+            "description": "The record as the form holds it, whole, as JSON: each field read as its type."
+          },
+          "version": {
+            "default": 0,
+            "description": "The draft version the caller read; `0` when it holds no draft.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "CommandEditProject",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/models/Project"
+          },
+          "states": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "default": {},
+            "title": "States",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FormWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "ResponseEditProject",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "edit",
+      "sunset": null,
+      "targets": {
+        "Project": "id"
+      }
+    },
+    "sincpro-forge-project.CommandGetIssue": {
+      "deprecated": false,
+      "description": "One issue, by its id.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "issue": {
+            "$ref": "#/models/Issue"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue"
+        ],
+        "title": "ResponseGetIssue",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Issue": "id"
+      }
+    },
+    "sincpro-forge-project.CommandGetIssueSandboxReady": {
+      "deprecated": false,
+      "description": "Get an issue's Sandbox ready before an agent works on it — or say why it is not.",
+      "dry_run": false,
+      "entities": [
+        "Run"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The run this is a step of. Empty: asked from the command line; nothing is recorded.",
+            "title": "Run Id"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandGetIssueSandboxReady",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "ok",
+          "summary"
+        ],
+        "title": "ResponseRunStep",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Run"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Run": "run_id"
+      }
+    },
+    "sincpro-forge-project.CommandGetProject": {
+      "deprecated": false,
+      "description": "One project, by its id.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetProject",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/models/Project"
+          }
+        },
+        "required": [
+          "project"
+        ],
+        "title": "ResponseGetProject",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Project": "id"
+      }
+    },
+    "sincpro-forge-project.CommandGetRun": {
+      "deprecated": false,
+      "description": "One run of an issue (``<issue id>.<n>``): its status, its steps with their summaries and\nthe result — what the agent did, what the checks said.",
+      "dry_run": false,
+      "entities": [
+        "Run"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetRun",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "run": {
+            "$ref": "#/models/Run"
+          }
+        },
+        "required": [
+          "run"
+        ],
+        "title": "ResponseGetRun",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Run"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Run": "id"
+      }
+    },
+    "sincpro-forge-project.CommandListIssues": {
+      "deprecated": false,
+      "description": "The issues of a project, newest first, each with its status: idle, running, finished,\ncancelled. Filter by ``parent_id`` for the issues one belongs to.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The issue the listed ones belong to — an epic's stories.",
+            "title": "Parent Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "CommandListIssues",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/models/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issues"
+        ],
+        "title": "ResponseListIssues",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-project.CommandListProjectEvents": {
+      "deprecated": false,
+      "description": "The facts of the project context — projects and issues — newest first.",
+      "dry_run": false,
+      "entities": [
+        "ProjectEvent"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListProjectEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/ProjectEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListProjectEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "ProjectEvent"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-project.CommandListProjects": {
+      "deprecated": false,
+      "description": "The projects of a tenant: its own and those shared with it. Use a project's id to open or\nlist its issues. A person reads only what their tenant works on: asking for another tenant\nanswers only what that tenant shares with theirs.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "default": "",
+            "description": "Empty lists the projects grouped with no tenant. A tenant lists its home and its shares.",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "title": "CommandListProjects",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/models/Project"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects"
+        ],
+        "title": "ResponseListProjects",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-project.CommandOpenIssue": {
+      "deprecated": false,
+      "description": "Open an issue: ask for work on a system of the requester's tenant. Give the project and\nthe request in their words. It does not start the harness: send a message, or queue it.",
+      "dry_run": false,
+      "entities": [
+        "Issue",
+        "Project"
+      ],
+      "input": {
+        "description": "Opened for whoever acts (the context's ``user_id``); with ``via``, an agent opens it on\nthat person's behalf.",
+        "properties": {
+          "origin": {
+            "$ref": "#/$defs/Origin",
+            "default": {
+              "channel": "",
+              "kind": "api",
+              "reference": "",
+              "thread": ""
+            }
+          },
+          "parent_id": {
+            "default": "",
+            "description": "The issue this one belongs to.",
+            "title": "Parent Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "request": {
+            "description": "What is asked, in the requester's words.",
+            "title": "Request",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Defaults to the first line of the request.",
+            "title": "Title"
+          }
+        },
+        "required": [
+          "project_id",
+          "request"
+        ],
+        "title": "CommandOpenIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "id": {
+            "description": "The new issue's identity, as the model publishes it (``identity``): a screen becomes it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "issue_id",
+          "tenant_id",
+          "project_id",
+          "title",
+          "status"
+        ],
+        "title": "ResponseOpenIssue",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue",
+        "Project"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Project": "project_id"
+      }
+    },
+    "sincpro-forge-project.CommandQueueIssueRun": {
+      "deprecated": false,
+      "description": "Ask forge to run the harness on an issue in the background. Returns at once.",
+      "dry_run": false,
+      "entities": [
+        "Issue",
+        "Run"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandQueueIssueRun",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "run_id",
+          "status"
+        ],
+        "title": "ResponseQueueIssueRun",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue",
+        "Run"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandRegisterProject": {
+      "deprecated": false,
+      "description": "Register a system forge works on: its repositories, where its sandboxes run, its agent and how a change is verified.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/$defs/ProjectChannelSpec"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "inventory": {
+            "$ref": "#/$defs/ProjectInventory"
+          },
+          "project_id": {
+            "description": "Short and stable, e.g. ``acme-sales``.",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_repositories": {
+            "items": {
+              "$ref": "#/$defs/ProjectRepositorySpec"
+            },
+            "title": "Project Repositories",
+            "type": "array"
+          },
+          "specification": {
+            "$ref": "#/$defs/ProjectSpecification"
+          },
+          "tenant_id": {
+            "default": "",
+            "description": "Empty: the project is grouped with no tenant yet.",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "display_name",
+          "project_repositories"
+        ],
+        "title": "CommandRegisterProject",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "id": {
+            "description": "The new record's identity, as the model publishes it (``identity``): a screen becomes it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_repositories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Project Repositories",
+            "type": "array"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "project_id",
+          "tenant_id",
+          "project_repositories"
+        ],
+        "title": "ResponseRegisterProject",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Project": "project_id"
+      }
+    },
+    "sincpro-forge-project.CommandResetIssueSandbox": {
+      "deprecated": false,
+      "description": "Apply the project's current base again over the issue's Sandbox.",
+      "dry_run": true,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "description": "Only say what would be done — the handler's `preview` answers, `execute` never runs.",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandResetIssueSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "base_ref": {
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "files": {
+            "title": "Files",
+            "type": "integer"
+          },
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "sandbox_id",
+          "base_ref",
+          "files"
+        ],
+        "title": "ResponseResetIssueSandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandSendIssue": {
+      "deprecated": false,
+      "description": "Save the message and queue one session. The subscriber starts the harness.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "message"
+        ],
+        "title": "CommandSendIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "run_id",
+          "status"
+        ],
+        "title": "ResponseSendIssue",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandSetProjectTenant": {
+      "deprecated": false,
+      "description": "Group a project under a tenant, or under none.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "description": "Empty: the project has no home tenant.",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "CommandSetProjectTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "tenant_id"
+        ],
+        "title": "ResponseSetProjectTenant",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Project": "project_id"
+      }
+    },
+    "sincpro-forge-project.CommandShareProject": {
+      "deprecated": false,
+      "description": "Share a project with another tenant: its users may open issues on it.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "tenant_id"
+        ],
+        "title": "CommandShareProject",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "tenant_id"
+        ],
+        "title": "ResponseShareProject",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Project": "project_id"
+      }
+    },
+    "sincpro-forge-project.CommandStopIssue": {
+      "deprecated": false,
+      "description": "Stop a running session. A later message resumes the same thread.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id"
+        ],
+        "title": "CommandStopIssue",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "issue_id": {
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "status"
+        ],
+        "title": "ResponseStopIssue",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Issue"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Issue": "issue_id"
+      }
+    },
+    "sincpro-forge-project.CommandUnshareProject": {
+      "deprecated": false,
+      "description": "Stop sharing a project with a tenant. Its home tenant is unchanged.",
+      "dry_run": false,
+      "entities": [
+        "Project"
+      ],
+      "input": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "tenant_id"
+        ],
+        "title": "CommandUnshareProject",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "tenant_id"
+        ],
+        "title": "ResponseUnshareProject",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Project"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Project": "project_id"
+      }
+    }
+  },
+  "version": "457cd1a4fbe9ac4a3cd319ba20931bc6666fbdab9ad1f4f512096170caef0efc"
+}

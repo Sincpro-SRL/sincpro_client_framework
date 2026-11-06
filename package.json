@@ -9,7 +9,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "default": "./dist/codegen/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
     }
+  },
+  "bin": {
+    "sincpro-client": "./dist/codegen/cli.js"
   },
   "files": [
     "dist",
@@ -47,8 +58,12 @@
   "prettier": {
     "printWidth": 94
   },
+  "peerDependencies": {
+    "@sincpro/criteria": "^1.1.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@sincpro/criteria": "^1.1.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",

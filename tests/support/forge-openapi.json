@@ -1,0 +1,584 @@
+{
+  "components": {
+    "CommandRegisterProject": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id",
+          "description": "Short and stable, e.g. ``acme-sales``."
+        },
+        "tenant_id": {
+          "type": "string",
+          "title": "Tenant Id",
+          "description": "Empty: the project is grouped with no tenant yet.",
+          "default": ""
+        },
+        "display_name": {
+          "type": "string",
+          "title": "Display Name"
+        },
+        "project_repositories": {
+          "items": {
+            "$ref": "#/components/schemas/ProjectRepositorySpec"
+          },
+          "type": "array",
+          "title": "Project Repositories"
+        },
+        "specification": {
+          "$ref": "#/components/schemas/ProjectSpecification"
+        },
+        "inventory": {
+          "$ref": "#/components/schemas/ProjectInventory"
+        },
+        "channels": {
+          "items": {
+            "$ref": "#/components/schemas/ProjectChannelSpec"
+          },
+          "type": "array",
+          "title": "Channels"
+        }
+      },
+      "type": "object",
+      "required": ["project_id", "display_name", "project_repositories"],
+      "title": "CommandRegisterProject"
+    },
+    "ProjectSpecification": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "title": "Host",
+          "default": "local"
+        },
+        "preparation": {
+          "$ref": "#/components/schemas/ProjectPreparation"
+        },
+        "review_host": {
+          "type": "string",
+          "enum": ["github", ""],
+          "title": "Review Host",
+          "default": ""
+        },
+        "review_cli": {
+          "type": "string",
+          "title": "Review Cli",
+          "default": "gh"
+        },
+        "agent_binary": {
+          "type": "string",
+          "title": "Agent Binary",
+          "default": "claude"
+        },
+        "agent_model": {
+          "type": "string",
+          "title": "Agent Model",
+          "default": ""
+        },
+        "language": {
+          "type": "string",
+          "enum": ["es", "en"],
+          "title": "Language",
+          "default": "es"
+        },
+        "verification_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Verification Checks",
+          "default": []
+        },
+        "engineer_review": {
+          "type": "boolean",
+          "title": "Engineer Review",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "ProjectSpecification"
+    },
+    "ProjectPreparation": {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/components/schemas/ArtifactTransfer"
+          },
+          "type": "array",
+          "title": "Artifacts",
+          "default": []
+        },
+        "probes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Probes",
+          "default": []
+        },
+        "health_checks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Health Checks",
+          "default": []
+        },
+        "health_timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "title": "Health Timeout Seconds",
+          "default": 60
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "ProjectPreparation"
+    },
+    "ProjectInventory": {
+      "properties": {
+        "components": {
+          "items": {
+            "$ref": "#/components/schemas/ProjectComponent"
+          },
+          "type": "array",
+          "title": "Components",
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "ProjectInventory"
+    },
+    "ProjectComponent": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Name"
+        },
+        "kind": {
+          "$ref": "#/components/schemas/ComponentKind"
+        },
+        "code_repository": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Code Repository"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path",
+          "default": ""
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Dependencies",
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["name", "kind", "code_repository"],
+      "title": "ProjectComponent"
+    },
+    "ComponentKind": {
+      "type": "string",
+      "enum": ["application", "service", "library", "module", "worker"],
+      "title": "ComponentKind"
+    },
+    "ProjectChannelSpec": {
+      "properties": {
+        "channel": {
+          "type": "string",
+          "title": "Channel"
+        },
+        "thread": {
+          "type": "string",
+          "title": "Thread"
+        }
+      },
+      "type": "object",
+      "required": ["channel", "thread"],
+      "title": "ProjectChannelSpec"
+    },
+    "ProjectRepositorySpec": {
+      "properties": {
+        "url": {
+          "type": "string",
+          "title": "Url"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "base_branch": {
+          "type": "string",
+          "title": "Base Branch",
+          "default": "main"
+        },
+        "writable": {
+          "type": "boolean",
+          "title": "Writable",
+          "default": true
+        }
+      },
+      "type": "object",
+      "required": ["url"],
+      "title": "ProjectRepositorySpec"
+    },
+    "ArtifactTransfer": {
+      "properties": {
+        "source": {
+          "$ref": "#/components/schemas/ArtifactLocation"
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 1,
+          "title": "Destination"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["source", "destination"],
+      "title": "ArtifactTransfer"
+    }
+  },
+  "specificationMeta": {
+    "aggregate": "ProjectSpecification",
+    "identity": "",
+    "default_order": "",
+    "get_id": "",
+    "display": "",
+    "search": null,
+    "detail": null,
+    "fields": {
+      "host": {
+        "type": "text",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": true,
+        "aggregates": ["min", "max", "count", "count_distinct"],
+        "computed": false,
+        "owner": null,
+        "ops": ["=", "!=", "like", "starts with", "in", "not in"],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "review_host": {
+        "type": "unknown",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": false,
+        "aggregates": [],
+        "computed": false,
+        "owner": null,
+        "ops": [],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "review_cli": {
+        "type": "text",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": true,
+        "aggregates": ["min", "max", "count", "count_distinct"],
+        "computed": false,
+        "owner": null,
+        "ops": ["=", "!=", "like", "starts with", "in", "not in"],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "agent_binary": {
+        "type": "text",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": true,
+        "aggregates": ["min", "max", "count", "count_distinct"],
+        "computed": false,
+        "owner": null,
+        "ops": ["=", "!=", "like", "starts with", "in", "not in"],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "agent_model": {
+        "type": "text",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": true,
+        "aggregates": ["min", "max", "count", "count_distinct"],
+        "computed": false,
+        "owner": null,
+        "ops": ["=", "!=", "like", "starts with", "in", "not in"],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "language": {
+        "type": "unknown",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": false,
+        "aggregates": [],
+        "computed": false,
+        "owner": null,
+        "ops": [],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "verification_checks": {
+        "type": "unknown",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": false,
+        "aggregates": [],
+        "computed": false,
+        "owner": null,
+        "ops": [],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      },
+      "engineer_review": {
+        "type": "boolean",
+        "nullable": false,
+        "choices": [],
+        "choice_labels": {},
+        "exact": false,
+        "label": {},
+        "help": {},
+        "readonly": false,
+        "required": false,
+        "default": null,
+        "readonly_when": null,
+        "required_when": null,
+        "visible_when": null,
+        "sortable": true,
+        "groupable": true,
+        "aggregates": ["bool_and", "bool_or", "count"],
+        "computed": false,
+        "owner": null,
+        "ops": ["="],
+        "many": false,
+        "relation": null,
+        "identified_by": null,
+        "parent_field": null,
+        "related_field": null,
+        "definition": null,
+        "kind": "scalar"
+      }
+    },
+    "name": {
+      "default": "ProjectSpecification"
+    },
+    "resolvers": [
+      {
+        "name": "today",
+        "returns": "date",
+        "params": {
+          "plus": "span",
+          "start_of": "grain"
+        },
+        "choices": {
+          "plus": ["minutes", "hours", "days", "weeks", "months", "years"],
+          "start_of": ["day", "week", "month", "quarter", "year"]
+        }
+      },
+      {
+        "name": "now",
+        "returns": "datetime",
+        "params": {
+          "plus": "span",
+          "start_of": "grain"
+        },
+        "choices": {
+          "plus": ["minutes", "hours", "days", "weeks", "months", "years"],
+          "start_of": ["day", "week", "month", "quarter", "year"]
+        }
+      },
+      {
+        "name": "period",
+        "returns": "range",
+        "params": {
+          "name": "period",
+          "unit": "grain",
+          "last": "integer",
+          "next": "integer",
+          "include_current": "boolean"
+        },
+        "choices": {
+          "name": [
+            "today",
+            "yesterday",
+            "tomorrow",
+            "this_week",
+            "last_week",
+            "next_week",
+            "this_month",
+            "last_month",
+            "next_month",
+            "this_quarter",
+            "last_quarter",
+            "next_quarter",
+            "this_year",
+            "last_year",
+            "next_year"
+          ],
+          "unit": ["day", "week", "month", "quarter", "year"]
+        }
+      },
+      {
+        "name": "context",
+        "returns": "any",
+        "params": {
+          "key": "text",
+          "plus": "span",
+          "start_of": "grain"
+        },
+        "choices": {
+          "plus": ["minutes", "hours", "days", "weeks", "months", "years"],
+          "start_of": ["day", "week", "month", "quarter", "year"]
+        }
+      },
+      {
+        "name": "param",
+        "returns": "any",
+        "params": {
+          "name": "text",
+          "plus": "span",
+          "start_of": "grain"
+        },
+        "choices": {
+          "plus": ["minutes", "hours", "days", "weeks", "months", "years"],
+          "start_of": ["day", "week", "month", "quarter", "year"]
+        }
+      },
+      {
+        "name": "field",
+        "returns": "field",
+        "params": {
+          "name": "text"
+        },
+        "choices": {}
+      }
+    ]
+  }
+}

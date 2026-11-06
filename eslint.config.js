@@ -4,7 +4,12 @@ import simpleImportSort from "eslint-plugin-simple-import-sort";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**"] },
+  {
+    // tests/support/forge-contract/ holds forge's client contracts as they came and what the
+    // generator wrote from them: compared byte for byte (tests/codegen.test.ts), never rewritten
+    // by a formatter.
+    ignores: ["**/dist/**", "**/node_modules/**", "tests/support/forge-contract/**"],
+  },
   js.configs.recommended,
   tseslint.configs.recommended,
   prettier,
