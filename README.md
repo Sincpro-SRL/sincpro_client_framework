@@ -72,6 +72,22 @@ case runs the same — nothing traces, nothing reports. In a test, `memoryTracer
 No React, no DOM, no platform: what a platform must provide — how a span is exported, where an
 error is reported — it plugs through a port.
 
+## On each platform
+
+The runtime asks the platform for little: `fetch`, `AbortSignal`, `URL` / `URLSearchParams`,
+`crypto.getRandomValues` (client-side ids, retry keys), `Proxy` / `WeakMap`. Browsers and Node 26
+have them all. **React Native** (Hermes) needs two polyfills, installed once where the app
+starts, before anything imports this package:
+
+```ts
+import "react-native-get-random-values"; // or expo-crypto's getRandomValues polyfill
+import "react-native-url-polyfill/auto"; // RN's own URL resolves relative paths poorly
+```
+
+`memoryTransport` copies with `structuredClone` where the engine has it and a JSON round trip
+where it does not. The OpenTelemetry adapter takes `@opentelemetry/api` from 1.9, the version
+`@sincpro/mobile` runs.
+
 ## Development
 
 Node 26 (`nvm use`).

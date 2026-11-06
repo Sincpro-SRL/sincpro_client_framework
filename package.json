@@ -67,7 +67,7 @@
     "printWidth": 94
   },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/api": "^1.9.0",
     "@sincpro/criteria": "^2.0.0"
   },
   "peerDependenciesMeta": {
