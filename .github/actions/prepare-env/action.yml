@@ -1,0 +1,32 @@
+---
+name: "Prepare environment"
+description: "Install the Node.js runtime and OS-level dependencies"
+
+inputs:
+  environment:
+    description: 'Node.js version to setup (e.g. "26")'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.environment }}
+        registry-url: "https://registry.npmjs.org"
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node-${{ inputs.environment }}-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-node-${{ inputs.environment }}-
+
+    - name: Log environment
+      shell: bash
+      run: |
+        echo "Environment: ${{ inputs.environment }}"
+        echo "Node version: $(node --version)"
+        echo "Yarn version: $(yarn --version)"
