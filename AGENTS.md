@@ -11,6 +11,9 @@ it says what this package is responsible for and what it is not. This file is ho
   the bounded context and its dependencies, `Feature`, `ApplicationService`, the context and its
   store, the process, the span per use case. When in doubt about a
   word or a behaviour, read how the backend does it, not memory.
+- **Use the shared words.** [`docs/UBIQUITOUS_LANGUAGE.md`](docs/UBIQUITOUS_LANGUAGE.md) is the
+  vocabulary of every Sincpro framework. A new word, or a word that changes, goes there in the
+  same pull request; a word in its «do not use» table never enters code or docs.
 - **Look at who uses it.** @sincpro/web-framework (`~/dev/sincpro_web_framework`) and
   @sincpro/mobile (`~/dev/mobile/sincpro_mobile`). A piece only one of them needs, and that
   needs a platform, belongs there.

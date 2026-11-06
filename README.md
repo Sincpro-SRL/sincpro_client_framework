@@ -5,18 +5,109 @@ every platform.** Write a use case once — a `Feature`, or an `ApplicationServi
 Features — and run it in a browser, on a phone, in a server-side render, in a script or in a test.
 Every use case is traced and every unexpected error reported, continuing the backend's trace,
 without its author writing either. A service's client contract becomes typed code for each of
-its domains.
+its bounded contexts.
 
 > **Status: 0.x.** The API may still change before 1.0. In: the client, the generator, the
 > bounded context with its `Feature` and `ApplicationService`, the process (tracing, error
 > reporting, the context) and its ports. Read the [manifesto](MANIFESTO.md) for what this package
-> is responsible for, what it is not and where it is going.
+> is responsible for, what it is not and where it is going, and the
+> [ubiquitous language](docs/UBIQUITOUS_LANGUAGE.md) every Sincpro framework shares.
+
+## What it gives, at a glance
+
+```mermaid
+classDiagram
+  direction LR
+  class UseBoundedContext {
+    +name
+    +context : Context
+    +addDependency(name, value)
+    +register(features, applicationServices) BoundedContext
+  }
+  class BoundedContext {
+    +Issues : the methods of Issues
+    +CloseAndNotify : the methods of CloseAndNotify
+    +context : Context
+    +with(dependencies) BoundedContext
+    +scoped(context) BoundedContext
+  }
+  class Feature {
+    #client, session : each dependency
+    #context : what this run executes with
+  }
+  class ApplicationService {
+    #feature : Issues, Notices
+  }
+  class Context {
+    +values
+    +get(name)
+    +set(values)
+    +clear(names)
+    +watch(listener)
+  }
+  class ContextStore {
+    <<port>>
+    +load(key)
+    +save(key, values)
+    +delete(key)
+    +version(key)
+    +watch(key, listener)
+  }
+  class Tracer {
+    <<port>>
+    +start(name, parent, attributes) Span
+  }
+  class ErrorReporter {
+    <<port>>
+    +report(error, about)
+  }
+  class Transport {
+    <<port>>
+    +list(route, criteria)
+    +one(route)
+    +send(method, route, body)
+  }
+  UseBoundedContext --> BoundedContext : register
+  BoundedContext o-- Feature : each by its name
+  Feature <|-- ApplicationService
+  BoundedContext --> Context : its level
+  Context --> ContextStore : kept in
+  BoundedContext ..> Tracer : a span per use case
+  BoundedContext ..> ErrorReporter : what nobody expected
+  Feature ..> Transport : through its generated client
+```
+
+`configureProcess({ tracer, reporter, context })` plugs the ports once; `processContext` is the
+process's level of the context. Beside them: the generated client (`sincpro-client generate`),
+`entity()`, model definitions (`defineMeta`, `metaFromSchema`) and client-side ids.
 
 ## A bounded context, set up like the backend's
 
 Each bounded context of an application has the layout sincpro_framework gives a service: what its
 services can count on, its bases, its services, and the one object the rest of the application
 uses it through.
+
+```mermaid
+flowchart LR
+  subgraph py["sincpro_framework · Python"]
+    direction TB
+    pd["infrastructure/dependencies.py<br/>DependencyContextType · add_dependency"]
+    pf["infrastructure/framework.py<br/>Feature · ApplicationService · UseFramework"]
+    ps["services/<br/>@bus.feature · @bus.app_service"]
+    pi["__init__.py<br/>the bounded context"]
+    pd --> pf --> ps --> pi
+  end
+  subgraph ts["@sincpro/client-framework · TypeScript"]
+    direction TB
+    td["infrastructure/dependencies.ts<br/>ProjectDependencies · addDependency"]
+    tf["infrastructure/bounded_context.ts<br/>Feature · ApplicationService · UseBoundedContext"]
+    tsv["services/<br/>features · applicationServices"]
+    ti["index.ts<br/>export const project"]
+    td --> tf --> tsv --> ti
+  end
+  ti --> users["a screen · another bounded context · a test<br/>project.Issues.close(input)"]
+  pi -. "the client contract" .-> td
+```
 
 ```ts
 // domains/project/infrastructure/dependencies.ts — what the services can count on
@@ -90,7 +181,29 @@ await project.CloseAndNotify.execute(input); // project/CloseAndNotify → its F
 
 Every public method is a use case: a span named as the backend names its own
 (`project/Issues.close`, identity `project.Issues.close`), and a report when it fails in a way
-nobody expected. `project` holds references only — each service is made once, the first time it is
+nobody expected. One gesture is one trace, from the click to the database:
+
+```mermaid
+sequenceDiagram
+  participant caller as Caller<br/>(a screen, a test)
+  participant app as project.CloseAndNotify<br/>(ApplicationService)
+  participant feature as this.feature.Issues<br/>(Feature)
+  participant client as this.client<br/>(generated, bound to the run)
+  participant process as Process<br/>(Tracer · ErrorReporter)
+  participant server as sincpro_framework
+
+  caller->>app: execute(input)
+  app->>process: span project/CloseAndNotify — the context read once
+  app->>feature: close(input)
+  feature->>process: child span project/Issues.close
+  feature->>client: closeIssue(input)
+  client->>server: POST /issues/{issue_id}/close · traceparent · sincpro-context
+  server-->>client: ResponseCloseIssue — or a Problem
+  client-->>caller: the answer, through each run
+  Note over process: each run ends ok · refused (shown, never reported) · aborted · failed (reported once, with its trace id)
+```
+
+`project` holds references only — each service is made once, the first time it is
 asked for — and it is never frozen: `project.with({ client: fake })` and
 `project.scoped({ company_id: 2 })` derive a variant that shares everything else.
 
@@ -115,6 +228,25 @@ A service reads it as `this.context` — the process's values, under them its bo
 under them a scope's, read once where the gesture started — and every request it sends carries
 it in `sincpro-context`. A screen hears it change with `processContext.watch(…)`.
 
+```mermaid
+flowchart LR
+  p["processContext<br/>tenant_id · company_id"]
+  b["project.context<br/>warehouse_id"]
+  s["project.scoped({ company_id: 2 })<br/>one window"]
+  e["this.context<br/>read once where the gesture starts"]
+  c["this.context of each Feature it runs<br/>the same values"]
+  h["sincpro-context<br/>on every request"]
+  store[("ContextStore<br/>the platform's")]
+  p --> e
+  b --> e
+  s --> e
+  e --> c
+  e --> h
+  c --> h
+  p -.-> store
+  b -.-> store
+```
+
 The context lives in a `ContextStore`, the port each platform implements with its own technology:
 memory by default, `sessionStorage` or the screens' own store in a browser, MMKV on a phone,
 `AsyncLocalStorage` in a server that renders. The services never know which.
@@ -137,12 +269,20 @@ case runs the same — nothing traces, nothing reports. In a test, `memoryTracer
 
 ## Where it sits
 
-```text
-@sincpro/criteria           the contract with the server
-        ▲
-@sincpro/client-framework   bounded contexts · services · process · context · ports · the client
-        ▲
-@sincpro/web-framework      the web          @sincpro/mobile      a phone
+```mermaid
+flowchart TB
+  backend["sincpro_framework<br/>the service: its bounded contexts, Commands, the client contract"]
+  criteria["@sincpro/criteria<br/>Criteria · Meta · Page · Problem"]
+  cf["@sincpro/client-framework<br/>bounded contexts · services · process · context · ports · the client · the generator"]
+  web["@sincpro/web-framework<br/>hooks · screens · the browser's tracer and reporter"]
+  mobile["@sincpro/mobile<br/>React Native · SQLite · its queue"]
+  rest["a script · a server-side render · a test"]
+  web --> cf
+  mobile --> cf
+  rest --> cf
+  cf --> criteria
+  backend -. "client contract → sincpro-client generate" .-> cf
+  cf -- "HTTP · traceparent · sincpro-context" --> backend
 ```
 
 No React, no DOM, no platform: what a platform must provide — how a span is exported, where an
