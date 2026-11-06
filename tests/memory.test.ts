@@ -19,7 +19,7 @@ test("a page comes back the size asked, with the total and the definition", asyn
 test("filters and orders with the server's semantics", async () => {
   const page = await transport.list(
     "/facturas",
-    plain(criteria().where(["state", "=", "paid"]).order("-amount_total").limit(100)),
+    plain(criteria().selection(["state", "=", "paid"]).order("-amount_total").limit(100)),
   );
   assert.ok(page.rows.length > 0);
   assert.ok(page.rows.every((row) => row["state"] === "paid"));
@@ -31,7 +31,10 @@ test("filters and orders with the server's semantics", async () => {
 });
 
 test("a condition the model cannot answer is dropped and reported, never thrown", async () => {
-  const page = await transport.list("/facturas", plain(criteria().where(["nope", "=", 1])));
+  const page = await transport.list(
+    "/facturas",
+    plain(criteria().selection(["nope", "=", 1])),
+  );
   assert.deepEqual(
     page.dropped.map((d) => d.field),
     ["nope"],
