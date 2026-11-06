@@ -1,0 +1,63 @@
+{
+  "name": "@sincpro/client-framework",
+  "version": "0.0.0",
+  "description": "The client side of sincpro_framework, for every platform: Feature and ApplicationService traced and reported by default, applications made of domains, and the typed client generated from a service's contract. No React, no DOM.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "MANIFESTO.md",
+    "AGENTS.md",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "sincpro",
+    "sincpro-framework",
+    "ddd",
+    "use-case",
+    "feature",
+    "application-service",
+    "opentelemetry",
+    "codegen"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sincpro-SRL/sincpro_client_framework.git"
+  },
+  "homepage": "https://github.com/Sincpro-SRL/sincpro_client_framework#readme",
+  "bugs": {
+    "url": "https://github.com/Sincpro-SRL/sincpro_client_framework/issues"
+  },
+  "author": "Gutierrez, Andres <andres.gutierrez@sincpro.com.bo>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=26"
+  },
+  "prettier": {
+    "printWidth": 94
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "prettier": "^3.9.10",
+    "tsc-alias": "^1.9.9",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}

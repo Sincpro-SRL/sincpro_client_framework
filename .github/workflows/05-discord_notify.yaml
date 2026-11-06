@@ -1,0 +1,19 @@
+---
+name: Discord Notification
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - release/**
+  release:
+    types: [published]
+
+env:
+  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+jobs:
+  discord:
+    uses: Sincpro-SRL/.github/.github/workflows/05-discord_notify.yaml@main
+    secrets: inherit
