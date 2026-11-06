@@ -14,6 +14,18 @@ it says what this package is responsible for and what it is not. This file is ho
   @sincpro/mobile (`~/dev/mobile/sincpro_mobile`). A piece only one of them needs, and that
   needs a platform, belongs there.
 
+## Where things go
+
+| Folder               | What                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract, ids |
+| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones            |
+| `src/services/`      | `Feature`, `ApplicationService`, the runtime, the execution and what binds to it        |
+| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                   |
+| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed  |
+| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                       |
+| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts      |
+
 ## Hard rules (the build enforces them — `make doctor`)
 
 - **Platform-neutral.** No React, no `react-native`, no web-ui, no composer, no @sincpro/mobile;
@@ -32,6 +44,27 @@ it says what this package is responsible for and what it is not. This file is ho
 - A change ships with a test in `tests/` that fails without it, run in Node.
 - Public means exported from `src/index.ts`. No side effects at import (`sideEffects: false`).
 - A port (an `interface`) only where there are two implementations; a class or a type otherwise.
+
+## Known traps
+
+- **A run sees the instance through a view of its own.** Inside a method, `this.deps`,
+  `this.context` and `this.features` are that run's — bound to its execution. So a Feature keeps
+  nothing of a request on `this`, and declares no `#private` fields (they refuse the view); use
+  TypeScript's `private`.
+- **A span is named by the key, not the class** (`bindServices(runtime, "project", { sendIssue })`
+  → `project/sendIssue`; an ApplicationService's Features by their keys too): a production build
+  renames classes. Only an unbound Feature falls back to its class name.
+- **The trace reaches the wire through `deps`.** A dependency is bound to the run when it is a
+  `Transport` or carries `BIND` (every generated client does, through `bindable`); anything else
+  is handed as it is. A client built outside `deps` and closed over sends no trace.
+- **What the generator writes is compared byte for byte** (`tests/support/forge-contract/`, out
+  of prettier and eslint). After changing the generator on purpose, run `make codegen-fixtures`
+  and read the diff.
+- **A module name the generator writes is built in parts** (`codegen/names.ts`, `FRAMEWORK`): the
+  build's `tsc-alias` rewrites this package's specifiers inside strings too.
+- **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
+  an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
+  `RuntimeOptions.outcomeOf`, never by catching in a Feature.
 
 ## Before you hand it back
 

@@ -1,0 +1,4225 @@
+{
+  "$defs": {
+    "All": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "All",
+      "type": "object"
+    },
+    "Any_": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "Any_",
+      "type": "object"
+    },
+    "ChangeStatus": {
+      "properties": {
+        "branch": {
+          "title": "Branch",
+          "type": "string"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/CheckState"
+          },
+          "title": "Checks",
+          "type": "array"
+        },
+        "code_repository": {
+          "title": "Code Repository",
+          "type": "string"
+        },
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        },
+        "draft": {
+          "title": "Draft",
+          "type": "boolean"
+        },
+        "review_state": {
+          "description": "``none`` when the repository has no review request.",
+          "title": "Review State",
+          "type": "string"
+        },
+        "review_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Url"
+        },
+        "verdict": {
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code_repository",
+        "branch",
+        "commit",
+        "review_state",
+        "review_url",
+        "draft",
+        "verdict",
+        "checks"
+      ],
+      "title": "ChangeStatus",
+      "type": "object"
+    },
+    "CheckState": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "description": "As the review host says it: ``SUCCESS``, ``FAILURE``, ``IN_PROGRESS``…",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "CheckState",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "One question about one field.\n\n`value` is required: a condition without a value is not a condition, and a `None` default\nlet `Condition(field=\"name\")` build happily, meaning \"name equals nothing\".\n\nIt is `JsonValue` and not `Any`: what a condition compares is a value that travelled in a\nJSON — a number, a text, a boolean, a list of them — and `Any` let any Python object\nthrough until the SQL translator tripped over it, far from here.\n\n`operator` does have a default, and that is a different case: omitting it means equality.\n\nBeside JSON it takes `datetime`, `date` and `Decimal`, because a Feature also builds\nconditions from Python and forcing it to serialise a date to text for the model to read\nback was a detour. In `model_dump(mode=\"json\")` they come out as text all the same.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "operator": {
+          "$ref": "#/$defs/Operator",
+          "default": "="
+        },
+        "value": {
+          "$ref": "#/$defs/Value"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Count": {
+      "description": "How many exist in total.\n\n`exact=False` means *at least* `value`: counting stops at a ceiling so its cost does not\ngrow with the table. A client renders that as `10000+`, and a collection reads it as\n\"you are holding a fragment\".",
+      "properties": {
+        "exact": {
+          "title": "Exact",
+          "type": "boolean"
+        },
+        "value": {
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
+    "CountMode": {
+      "enum": [
+        "none",
+        "capped",
+        "exact"
+      ],
+      "title": "CountMode",
+      "type": "string"
+    },
+    "Criteria": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/CountMode",
+          "default": "capped"
+        },
+        "grouping": {
+          "$ref": "#/$defs/Grouping",
+          "description": "How to split the result set, when it is being counted rather than listed. Ignored by a\nplain search: a page of records has no buckets."
+        },
+        "order": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "$ref": "#/$defs/Pagination",
+          "description": "How many, and from where. Always the object: `{\"limit\": 80, \"strategy\": {\"token\": \"eyJ…\"}}`."
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The filter: a `Condition`, or an `All`/`Any`/`Not` grouping more of them.\n\n**The declared type is exactly what is accepted.** No abbreviated spelling and no\nconversion, so pydantic and the type checker see the same thing and `criteria.selection` reads\nwith an exhaustive `match`. All the validator does is build the nodes when the tree\narrives serialised from JSON — which is the same tree, not another form.",
+          "title": "Selection"
+        },
+        "specification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Specification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What to bring back of each record: field name → how to bring it, the value being a\ncriteria exactly like this one. `None` and `{}` are NOT the same thing:\n\n    None    nothing was asked          →  every scalar, no relation expanded\n    {}      asked, nothing survived    →  the identity alone\n\nRead as one, a mask whose every field was dropped hands back the whole record, which is\nexactly what it existed to prevent."
+        }
+      },
+      "title": "Criteria",
+      "type": "object"
+    },
+    "Cursor": {
+      "additionalProperties": false,
+      "description": "Locating a page by where the previous one ended. **The strategy this engine implements.**\n\n    in      Cursor()                          the first page; nothing came before it\n    in      Cursor(token=\"eyJrIjo…\")          the next one, resumed from that row\n    out     the rows past that row, in the criteria's own order\n\nA row inserted or deleted mid-walk changes nothing, because the cursor names a ROW and not\na position. The token is minted from the last row of the page before; `keys_for` turns it\nback into the keys it holds, checked against the ordering in play.",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        }
+      },
+      "title": "Cursor",
+      "type": "object"
+    },
+    "DeliveredChange": {
+      "properties": {
+        "base_branch": {
+          "title": "Base Branch",
+          "type": "string"
+        },
+        "branch": {
+          "title": "Branch",
+          "type": "string"
+        },
+        "code_repository": {
+          "title": "Code Repository",
+          "type": "string"
+        },
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        },
+        "remote": {
+          "title": "Remote",
+          "type": "string"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReviewRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "``None`` when the project has no review host: the delivery is the pushed branch."
+        }
+      },
+      "required": [
+        "code_repository",
+        "remote",
+        "branch",
+        "base_branch",
+        "commit",
+        "review"
+      ],
+      "title": "DeliveredChange",
+      "type": "object"
+    },
+    "DraftState": {
+      "description": "The record was answered from its owner's draft — what a form saved as a draft and\nnobody stored yet.\n\n`version` is what the next edit names as `version`; `stale` says the stored record moved on\nsince the draft started, so saving it would be refused.",
+      "properties": {
+        "kept_at": {
+          "format": "date-time",
+          "title": "Kept At",
+          "type": "string"
+        },
+        "origin_version": {
+          "title": "Origin Version",
+          "type": "integer"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "origin_version",
+        "kept_at"
+      ],
+      "title": "DraftState",
+      "type": "object"
+    },
+    "Dropped": {
+      "description": "A condition that was asked for and could not be honoured.\n\nReported rather than raised: a shared link outlives the schema it was written against, and\na dropped filter always *widens* the result — so it is dropped and said out loud.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "reason"
+      ],
+      "title": "Dropped",
+      "type": "object"
+    },
+    "FromContext": {
+      "additionalProperties": false,
+      "description": "A value of the server's own context — the user, the tenant, a date it holds — never one the\nclient sends.",
+      "properties": {
+        "$": {
+          "const": "context",
+          "default": "context",
+          "title": "$",
+          "type": "string"
+        },
+        "key": {
+          "description": "The key it reads, as the context holds it.",
+          "title": "Key",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "FromContext",
+      "type": "object"
+    },
+    "FromField": {
+      "additionalProperties": false,
+      "description": "Another field of the same row: a column compared with a column.\n\n    {\"field\": \"total\", \"operator\": \">\", \"value\": {\"$\": \"field\", \"name\": \"credit_limit\"}}\n\nIt is not read before the row: it is the other side of the comparison, and it takes only the\noperators that compare (`=`, `!=`, `<`, `<=`, `>`, `>=`) and a field of the same type.",
+      "properties": {
+        "$": {
+          "const": "field",
+          "default": "field",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The field it reads, of the same entity.",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FromField",
+      "type": "object"
+    },
+    "Grain": {
+      "description": "A calendar unit a date snaps to the start of.",
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "Grain",
+      "type": "string"
+    },
+    "Grouping": {
+      "additionalProperties": false,
+      "description": "How a result set is split: the levels, and the numbers folded out of every group.\n\n    in      {\"by\": [\"produced_by\", \"registered_at:month\"], \"measures\": {\"filas\": [\"sum\", \"row_count\"]}}\n    out     every level `by` names, each group counted and folded, carrying how to open it\n\nAll the levels named are answered, one statement each: grouping by three fields is three\nstatements whatever the number of rows. A screen that drills down one click at a time asks\nfor one level and, on the click, reads `bucket.criteria` with a grouping of its own; it never\nhas to know how deep the whole tree is.",
+      "properties": {
+        "group_by": {
+          "default": [],
+          "description": "The levels the set is split by, one statement each.",
+          "items": {
+            "$ref": "#/$defs/GroupingLevel"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "measures": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Measure"
+          },
+          "default": {},
+          "description": "The numbers every group answers, each under a name the caller chose.",
+          "title": "Measures",
+          "type": "object"
+        },
+        "order": {
+          "default": [],
+          "description": "How the groups of each level come back: by the level's own field, by a name in `measures`\nor by `count`. Empty means by the level's field, ascending, which is how a list of groups\nreads when nobody asked for anything else. It orders the GROUPS; `Criteria.order` orders\nthe rows, and with a page asked for it decides which rows each group shows first.",
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pagination"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How many groups of the FIRST level come back, and from where. `None`, the default, is\nevery group: a grouping is a set of counts and a client asked for all of them. When a page\nis asked, the deeper levels answer only for the groups that survived it.\n\nA page and not a keyset: ordering by an aggregate has no stable key to resume from, so\n`Offset` is the honest strategy here and a cursor is not minted."
+        },
+        "where_measures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A filter over what the groups measured, not over the rows: `count > 10`, `debit > 1000`.\n\nThe names it may use are the ones in `measures` plus `count`. `where` filters the rows that\nmake the groups; this filters the groups those rows made — which is why it is not called\n`where`: it reads measures, not fields.",
+          "title": "Where Measures"
+        }
+      },
+      "title": "Grouping",
+      "type": "object"
+    },
+    "GroupingLevel": {
+      "additionalProperties": false,
+      "description": "One level of grouping: the field it splits by, and how.\n\nin      \"produced_by\"           →  GroupingLevel(field='produced_by')\nin      \"registered_at:month\"   →  GroupingLevel(field='registered_at', grain=Grain.MONTH)\nin      {\"field\": \"registered_at\", \"part\": \"month\"}   →  every March, whatever the year\n\nA **grain** cuts a date into ranges of time (`2026-03`); a **part** extracts a number from it\n(`3`). One level takes one or the other, never both.\n\n`fill` lists every value the level can take, including the ones with no rows, as groups with\na count of 0: all the choices of an enum, both values of a boolean, every number a part can\nbe, every grain of a date range that `where` bounds. An axis that is complete is what a chart\nneeds, and what a group that happened to be empty would otherwise silently leave out.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "fill": {
+          "default": false,
+          "title": "Fill",
+          "type": "boolean"
+        },
+        "grain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "part": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Part"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "GroupingLevel",
+      "type": "object"
+    },
+    "InstrumentationState": {
+      "enum": [
+        "pending",
+        "running",
+        "complete",
+        "failed"
+      ],
+      "title": "InstrumentationState",
+      "type": "string"
+    },
+    "Item": {
+      "oneOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "context": "#/$defs/FromContext",
+              "field": "#/$defs/FromField",
+              "now": "#/$defs/Now",
+              "param": "#/$defs/Param",
+              "period": "#/$defs/Period",
+              "today": "#/$defs/Today"
+            },
+            "propertyName": "$"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Today"
+            },
+            {
+              "$ref": "#/$defs/Now"
+            },
+            {
+              "$ref": "#/$defs/FromContext"
+            },
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "$ref": "#/$defs/Period"
+            },
+            {
+              "$ref": "#/$defs/FromField"
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    "JsonValue": {},
+    "Measure": {
+      "additionalProperties": false,
+      "description": "One number a group answers: a function over a field, under a name the caller chose.\n\n    in      {\"function\": \"sum\", \"field\": \"row_count\"}\n    out     Measure(function='sum', field='row_count')       → sum(row_count) AS <name>\n\n**Named parts and not `\"sum:row_count\"`**, so nobody has to split a string in whatever\nlanguage is reading this — the same reason a condition travels as `{field, operator,\nvalue}`. The pair `[\"sum\", \"row_count\"]` is read as well, because writing one by hand in\nPython is a pair; what a caller sends over a wire is the object.\n\nIt is called a measure and not an aggregate on purpose: in this codebase an *aggregate* is\nthe DDD root — what `Meta.aggregate` names — and two meanings for one word in the same\nsentence is how a reader loses an afternoon.",
+      "properties": {
+        "argument": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the function needs besides a column, when it needs anything.\n\nOnly `percentile` does: the fraction it cuts at, `0.95` for a P95. `median` is the 0.5 one\nand takes none. Every other measure refuses one rather than ignoring it, because a number\nthat is quietly dropped is a report that is quietly wrong.",
+          "title": "Argument"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "function": {
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "count_distinct",
+            "percentile",
+            "median",
+            "bool_and",
+            "bool_or"
+          ],
+          "title": "Function",
+          "type": "string"
+        }
+      },
+      "required": [
+        "function",
+        "field"
+      ],
+      "title": "Measure",
+      "type": "object"
+    },
+    "Not": {
+      "additionalProperties": false,
+      "properties": {
+        "negate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Negate"
+        }
+      },
+      "required": [
+        "negate"
+      ],
+      "title": "Not",
+      "type": "object"
+    },
+    "Now": {
+      "additionalProperties": false,
+      "description": "The current instant, in UTC.",
+      "properties": {
+        "$": {
+          "const": "now",
+          "default": "now",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Now",
+      "type": "object"
+    },
+    "OccupiedSandbox": {
+      "properties": {
+        "holder": {
+          "title": "Holder",
+          "type": "string"
+        },
+        "occupancy": {
+          "title": "Occupancy",
+          "type": "string"
+        },
+        "renewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Renewed At"
+        },
+        "sandbox_id": {
+          "title": "Sandbox Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sandbox_id",
+        "occupancy",
+        "holder",
+        "renewed_at"
+      ],
+      "title": "OccupiedSandbox",
+      "type": "object"
+    },
+    "Offset": {
+      "additionalProperties": false,
+      "description": "Locating a page by counting rows from the start. **What everybody else does.**\n\n    in      Offset(rows=160)                    the third page of eighty\n    out     the rows after skipping 160\n\nHere because an integration eventually counts pages, and because a strategy that exists is\nbetter than one that gets bolted on. Honest about its cost: the database still walks the\nskipped rows, and a row inserted mid-walk shifts everything after it — which is the bug\n`Cursor` does not have.",
+      "properties": {
+        "rows": {
+          "default": 0,
+          "title": "Rows",
+          "type": "integer"
+        }
+      },
+      "title": "Offset",
+      "type": "object"
+    },
+    "Operator": {
+      "description": "How a question is asked. **The enum's value is how it is written outside**, so the\ndefinition publishes these same symbols in `ops` and no translation table exists anywhere.",
+      "enum": [
+        "=",
+        "!=",
+        "in",
+        "not in",
+        "like",
+        "starts with",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "is null",
+        "contains",
+        "not contains",
+        "between"
+      ],
+      "title": "Operator",
+      "type": "string"
+    },
+    "Pagination": {
+      "additionalProperties": false,
+      "description": "How many, and from where.\n\n    in      Pagination(limit=80)                              the first eighty\n    in      Pagination(limit=80, strategy=Cursor(token=\"eyJ…\"))   the next eighty\n    in      Pagination(limit=80, strategy=Offset(rows=160))     the third page of eighty\n\nTwo separate things, and that is the point: **how many belongs to the page, from where is a\nSTRATEGY.** Cursor is one strategy and not the object — a caller that switches to counting\nrows changes the strategy, not the way it asks for a page.\n\n`limit` has a default and no ceiling. A framework says what happens when nobody chooses;\nit does not decide for the application how much it may ask for.",
+      "properties": {
+        "limit": {
+          "default": 50,
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cursor"
+            },
+            {
+              "$ref": "#/$defs/Offset"
+            }
+          ],
+          "title": "Strategy"
+        }
+      },
+      "title": "Pagination",
+      "type": "object"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A value the caller supplied for this call: a typed text, a step's result.",
+      "properties": {
+        "$": {
+          "const": "param",
+          "default": "param",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The parameter, or a path into it with dots: `steps.order.total`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Param",
+      "type": "object"
+    },
+    "Part": {
+      "description": "A number extracted from a date: the month of the year, whatever the year.\n\nA grain **cuts** (a bucket is a range of time) and a part **extracts** (a bucket is a number\nthat many dates share), so they answer different questions: sales by month `2026-03` is a\ngrain, sales by «March, in any year» is a part. Weekdays count from Monday as 1, as ISO does.",
+      "enum": [
+        "year",
+        "quarter",
+        "month",
+        "iso_week",
+        "day_of_week",
+        "day_of_month",
+        "hour"
+      ],
+      "title": "Part",
+      "type": "string"
+    },
+    "Period": {
+      "additionalProperties": false,
+      "description": "A span of the calendar as a range `[start, end)`: only with the operator `between`.\n\nEither a named one, or a window of whole units counted from the current one:\n\n    {\"$\": \"period\", \"name\": \"this_month\"}\n    {\"$\": \"period\", \"unit\": \"day\", \"last\": 30}                      the 30 days before today\n    {\"$\": \"period\", \"unit\": \"week\", \"next\": 2, \"include_current\": true}\n\n`last` and `next` leave the current unit out unless `include_current` is set.",
+      "properties": {
+        "$": {
+          "const": "period",
+          "default": "period",
+          "title": "$",
+          "type": "string"
+        },
+        "include_current": {
+          "default": false,
+          "title": "Include Current",
+          "type": "boolean"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Periods"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Period",
+      "type": "object"
+    },
+    "Periods": {
+      "description": "A calendar span, as a closed range `[start, end)`. Only with the operator `between`.",
+      "enum": [
+        "today",
+        "yesterday",
+        "tomorrow",
+        "this_week",
+        "last_week",
+        "next_week",
+        "this_month",
+        "last_month",
+        "next_month",
+        "this_quarter",
+        "last_quarter",
+        "next_quarter",
+        "this_year",
+        "last_year",
+        "next_year"
+      ],
+      "title": "Periods",
+      "type": "string"
+    },
+    "ReviewRequest": {
+      "properties": {
+        "draft": {
+          "title": "Draft",
+          "type": "boolean"
+        },
+        "number": {
+          "title": "Number",
+          "type": "integer"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "url",
+        "draft"
+      ],
+      "title": "ReviewRequest",
+      "type": "object"
+    },
+    "ReviewTarget": {
+      "description": "Where a delivery asks for review, for a given project. Passed with every delivery — two\nclients never share one.",
+      "properties": {
+        "cli": {
+          "default": "gh",
+          "description": "The review host's CLI on the host, logged in with the account reviews are opened as.",
+          "title": "Cli",
+          "type": "string"
+        },
+        "host": {
+          "const": "github",
+          "title": "Host",
+          "type": "string"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "title": "ReviewTarget",
+      "type": "object"
+    },
+    "SandboxProvision": {
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "reference": {
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "preparing",
+            "ready",
+            "failed",
+            "destroyed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        },
+        "variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Variables",
+          "type": "object"
+        }
+      },
+      "required": [
+        "reference",
+        "state"
+      ],
+      "title": "SandboxProvision",
+      "type": "object"
+    },
+    "Sort": {
+      "additionalProperties": false,
+      "properties": {
+        "descending": {
+          "default": false,
+          "title": "Descending",
+          "type": "boolean"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Sort",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "description": "A signed amount of time, by unit. Only the units asked for travel.\n\n{\"days\": -30}                       thirty days back\n{\"months\": 1, \"days\": -1}           a month ahead, a day back",
+      "properties": {
+        "days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Days"
+        },
+        "hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hours"
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minutes"
+        },
+        "months": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Months"
+        },
+        "weeks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weeks"
+        },
+        "years": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Years"
+        }
+      },
+      "title": "Span",
+      "type": "object"
+    },
+    "Specification": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Criteria"
+      },
+      "default": {},
+      "description": "Field name → the criteria that says how to bring it.\n\n    in      {\"name\": {}, \"lines\": {\"pagination\": {\"limit\": 20}}}\n    out     Specification with two fields, the second carrying its own page\n\n**One type and no union**: every value is a `Criteria`, the same one as outside, so a\nconsumer deserialises `dict[str, Criteria]` in any language and never has to tell a string\nfrom an object. A scalar's is empty, because there is nothing to say about how to bring a\nnumber. A relation's carries selection, order, pagination and its own specification, so the\nvocabulary inside a node is the vocabulary outside it, at any depth.\n\nA `RootModel` and not an object with one field inside: in JSON it is the bare mapping,\nwithout a key that means nothing, and in here it has the methods that belong to it.",
+      "title": "Specification",
+      "type": "object"
+    },
+    "Through": {
+      "additionalProperties": false,
+      "properties": {
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Selection"
+        },
+        "through": {
+          "title": "Through",
+          "type": "string"
+        }
+      },
+      "required": [
+        "through",
+        "selection"
+      ],
+      "title": "Through",
+      "type": "object"
+    },
+    "Today": {
+      "additionalProperties": false,
+      "description": "The current date, in the context's timezone.",
+      "properties": {
+        "$": {
+          "const": "today",
+          "default": "today",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Today",
+      "type": "object"
+    },
+    "Value": {
+      "oneOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Item"
+        }
+      ]
+    }
+  },
+  "alias": "sandbox",
+  "bindings": {
+    "rest": {
+      "sincpro-forge-sandbox.CommandCreateSandbox": {
+        "method": "POST",
+        "path": "/v1/sandboxes",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandDeliver": {
+        "method": "POST",
+        "path": "/v1/deliveries",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandDeploySandbox": {
+        "method": "POST",
+        "path": "/v1/sandboxes/{sandbox_id}/deploy",
+        "path_fields": [
+          "sandbox_id"
+        ]
+      },
+      "sincpro-forge-sandbox.CommandDestroySandbox": {
+        "method": "POST",
+        "path": "/v1/sandboxes/{sandbox_id}/destroy",
+        "path_fields": [
+          "sandbox_id"
+        ]
+      },
+      "sincpro-forge-sandbox.CommandGetDeliveryStatus": {
+        "method": "GET",
+        "path": "/v1/deliveries",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandGetSandbox": {
+        "method": "GET",
+        "path": "/v1/sandboxes/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-sandbox.CommandListOccupiedSandboxes": {
+        "method": "GET",
+        "path": "/v1/occupied-sandboxes",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandListReservations": {
+        "method": "GET",
+        "path": "/v1/reservations",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandListSandboxEvents": {
+        "method": "GET",
+        "path": "/v1/sandbox-events",
+        "path_fields": []
+      },
+      "sincpro-forge-sandbox.CommandReconcileSandbox": {
+        "method": "POST",
+        "path": "/v1/sandboxes/{sandbox_id}/reconcile",
+        "path_fields": [
+          "sandbox_id"
+        ]
+      },
+      "sincpro-forge-sandbox.CommandRecordInstrumentation": {
+        "method": "POST",
+        "path": "/v1/sandboxes/{sandbox_id}/instrumentation",
+        "path_fields": [
+          "sandbox_id"
+        ]
+      },
+      "sincpro-forge-sandbox.CommandRefreshSandbox": {
+        "method": "POST",
+        "path": "/v1/sandboxes/{sandbox_id}/refresh",
+        "path_fields": [
+          "sandbox_id"
+        ]
+      }
+    }
+  },
+  "bounded_context": "sincpro-forge-sandbox",
+  "format": "sincpro.client-contract/1",
+  "models": {
+    "Delivery": {
+      "properties": {
+        "branch": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "changes": {
+          "items": {
+            "$ref": "#/models/RepositoryChange"
+          },
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "delivery_ref",
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "delivery_ref",
+            "relation": "RepositoryChange",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "evidence_ref": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_cli": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_host": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "title": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "workspace_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "Delivery",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "branch": {},
+            "changes": {},
+            "created_at": {},
+            "evidence_ref": {},
+            "id": {},
+            "review_cli": {},
+            "review_host": {},
+            "title": {},
+            "updated_at": {},
+            "version": {},
+            "workspace_id": {}
+          }
+        },
+        "display": "title",
+        "entity": "Delivery",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "title",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "Delivery"
+        },
+        "version": "04cf556062ed101c202e5d5d81a4c70dd6b90860cfb8903d546a03de0421c49b"
+      }
+    },
+    "RepositoryChange": {
+      "properties": {
+        "base_branch": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "branch": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "commit": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "delivery_ref": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "draft": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "default": true,
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "remote": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "repository": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_number": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "review_state": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "default": "none",
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "review_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "verdict": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "default": "none",
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "RepositoryChange",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "id",
+        "entity": "RepositoryChange",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "RepositoryChange"
+        },
+        "version": "e18b0de5eb5ea624456cb8fb7ad446f0d4c77e1967183eb7623eb9fe9663f47b"
+      }
+    },
+    "Reservation": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "holder": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "occupancy": {
+          "enum": [
+            "available",
+            "reserved",
+            "uncertain"
+          ],
+          "title": "Occupancy",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "available": {
+                "default": "Available",
+                "es": "Disponible"
+              },
+              "reserved": {
+                "default": "Reserved",
+                "es": "Reservado"
+              },
+              "uncertain": {
+                "default": "Uncertain",
+                "es": "Incierto"
+              }
+            },
+            "default": "available",
+            "groupable": true,
+            "label": {
+              "default": "Occupancy",
+              "es": "Ocupación"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "renewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "sandbox_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "Reservation",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-id",
+        "entity": "Reservation",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "Reservation"
+        },
+        "version": "9ef93b2bd662ec27d7a8b93b17a34ff64daeeece4ba06c42ca2b50e6a07d0dd5"
+      }
+    },
+    "Sandbox": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "deployment": {
+          "enum": [
+            "new",
+            "deploying",
+            "deployed",
+            "failed",
+            "destroyed"
+          ],
+          "title": "Deployment",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "deployed": {
+                "default": "Deployed",
+                "es": "Desplegado"
+              },
+              "deploying": {
+                "default": "Deploying",
+                "es": "Desplegando"
+              },
+              "destroyed": {
+                "default": "Destroyed",
+                "es": "Destruido"
+              },
+              "failed": {
+                "default": "Failed",
+                "es": "Fallido"
+              },
+              "new": {
+                "default": "New",
+                "es": "Nuevo"
+              }
+            },
+            "default": "new",
+            "groupable": true,
+            "label": {
+              "default": "Deployment",
+              "es": "Despliegue"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "instrumentation": {
+          "enum": [
+            "pending",
+            "running",
+            "complete",
+            "failed"
+          ],
+          "title": "Instrumentation",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "complete": {
+                "default": "Complete",
+                "es": "Completa"
+              },
+              "failed": {
+                "default": "Failed",
+                "es": "Fallida"
+              },
+              "pending": {
+                "default": "Pending",
+                "es": "Pendiente"
+              },
+              "running": {
+                "default": "Running",
+                "es": "En curso"
+              }
+            },
+            "default": "pending",
+            "groupable": true,
+            "label": {
+              "default": "Instrumentation",
+              "es": "Instrumentación"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "instrumentation_metadata": {
+          "x-sincpro": {
+            "sortable": true,
+            "type": "unknown",
+            "widget": "text"
+          }
+        },
+        "metadata": {
+          "x-sincpro": {
+            "sortable": true,
+            "type": "unknown",
+            "widget": "text"
+          }
+        },
+        "provider": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "$ref": "#/models/SandboxProvision"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "type": "embedded",
+            "widget": "embedded"
+          }
+        },
+        "source": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "workspace_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        }
+      },
+      "required": [],
+      "title": "Sandbox",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "entity": "Sandbox",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "Sandbox"
+        },
+        "version": "4e33491a59f1ccefee3093e6a0bb803a153ff5e57664a9a1804b3589f047edb7"
+      }
+    },
+    "SandboxEvent": {
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "entity_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_type": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "label": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-sincpro": {
+            "ops": [
+              "like"
+            ],
+            "readonly": true,
+            "type": "translated",
+            "widget": "translated"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "sandbox_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "SandboxEvent",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-id",
+        "entity": "SandboxEvent",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "SandboxEvent"
+        },
+        "version": "af361e0df799c57b9916ed530538c09646e104defdc2eae6504d89328be8baf5"
+      }
+    },
+    "SandboxProvision": {
+      "properties": {
+        "detail": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "reference": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "state": {
+          "x-sincpro": {
+            "sortable": true,
+            "type": "unknown",
+            "widget": "text"
+          }
+        },
+        "url": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-sincpro": {
+            "ops": [
+              "like"
+            ],
+            "type": "translated",
+            "widget": "translated"
+          }
+        }
+      },
+      "required": [],
+      "title": "SandboxProvision",
+      "type": "object",
+      "x-sincpro": {
+        "entity": "SandboxProvision",
+        "title": {
+          "default": "SandboxProvision"
+        }
+      }
+    }
+  },
+  "operations": {
+    "sincpro-forge-sandbox.CommandCreateSandbox": {
+      "deprecated": false,
+      "description": "Create a Sandbox on an existing Workspace nobody else holds.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "workspace_id"
+        ],
+        "title": "CommandCreateSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "workspace_id"
+        ],
+        "title": "ResponseCreateSandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandDeliver": {
+      "deprecated": false,
+      "description": "Publish a workspace's verified change: one branch per repository and, with a review\nhost, one review request each. Only the revisions the verification passed go out.",
+      "dry_run": true,
+      "entities": [
+        "Delivery"
+      ],
+      "input": {
+        "properties": {
+          "draft": {
+            "default": true,
+            "description": "Open the review requests as drafts: a person validates before anyone merges.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Only say what would be done — the handler's `preview` answers, `execute` never runs.",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "evidence_ref": {
+            "description": "The verification that authorizes these revisions, as its owner names it. Kept on the\ndelivery, so what was published always says which verdict allowed it.",
+            "minLength": 1,
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ReviewTarget"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where to ask for review. Empty: no review requests — the delivery is the pushed\nbranches, which works with any git server."
+          },
+          "revisions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "``repository → commit`` that was verified, for every writable repository. Exactly these\nare published: nothing pending is committed, and a repository that moved refuses the\ndelivery (doc 14, G3). There is no delivery without them.",
+            "minProperties": 1,
+            "title": "Revisions",
+            "type": "object"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Title of the review requests. Empty: the first heading of the agent's summary.",
+            "title": "Title"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "revisions",
+          "evidence_ref"
+        ],
+        "title": "CommandDeliver",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "changes": {
+            "description": "One per repository in the delivery.",
+            "items": {
+              "$ref": "#/$defs/DeliveredChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "complete": {
+            "default": true,
+            "description": "``False`` when a repository is published without the review request it should have: a\npartial delivery, never a success (doc 14, G4). A retry completes it.",
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "created": {
+            "description": "``False`` when an existing delivery was updated with the new commits.",
+            "title": "Created",
+            "type": "boolean"
+          },
+          "failures": {
+            "default": [],
+            "description": "``<repository>: <why>`` for each review request refused in this call.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "created",
+          "title",
+          "changes"
+        ],
+        "title": "ResponseDeliver",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Delivery"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-sandbox.CommandDeploySandbox": {
+      "deprecated": false,
+      "description": "Deploy a Sandbox with its provider, from a source and parameters.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "parameters": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Parameters",
+            "type": "object"
+          },
+          "provider": {
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          },
+          "source": {
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "provider",
+          "source"
+        ],
+        "title": "CommandDeploySandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "provision": {
+            "$ref": "#/$defs/SandboxProvision"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "provision"
+        ],
+        "title": "ResponseDeploySandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandDestroySandbox": {
+      "deprecated": false,
+      "description": "Destroy a Sandbox nobody holds; with ``dry_run``, say what would go.",
+      "dry_run": true,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "description": "Only say what would be done — the handler's `preview` answers, `execute` never runs.",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id"
+        ],
+        "title": "CommandDestroySandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "reference"
+        ],
+        "title": "ResponseDestroySandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandGetDeliveryStatus": {
+      "deprecated": false,
+      "description": "What a workspace's change branch delivered: its branches and their review requests.",
+      "dry_run": false,
+      "entities": [
+        "Delivery"
+      ],
+      "input": {
+        "properties": {
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The change branch whose delivery is followed. Empty: the workspace's latest delivery.",
+            "title": "Branch"
+          },
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "CommandGetDeliveryStatus",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/$defs/ChangeStatus"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "review_state": {
+            "description": "Of the change set: ``MERGED`` once every review request is merged, ``CLOSED`` if any was\nclosed, ``OPEN`` otherwise; ``none`` without review requests.",
+            "title": "Review State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "Of the change set: ``failed`` if any repository failed, ``passed`` only if all passed.",
+            "title": "Verdict",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "title",
+          "review_state",
+          "verdict",
+          "changes"
+        ],
+        "title": "ResponseGetDeliveryStatus",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Delivery"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-sandbox.CommandGetSandbox": {
+      "deprecated": false,
+      "description": "One Sandbox: its lifecycle, its Workspace and its deployment.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "sandbox": {
+            "$ref": "#/models/Sandbox"
+          }
+        },
+        "required": [
+          "sandbox"
+        ],
+        "title": "ResponseGetSandbox",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandListOccupiedSandboxes": {
+      "deprecated": false,
+      "description": "The Sandboxes no run may take now: reserved, or uncertain.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox",
+        "Reservation"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          }
+        },
+        "title": "CommandListOccupiedSandboxes",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "sandboxes": {
+            "items": {
+              "$ref": "#/$defs/OccupiedSandbox"
+            },
+            "title": "Sandboxes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sandboxes"
+        ],
+        "title": "ResponseListOccupiedSandboxes",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Reservation",
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-sandbox.CommandListReservations": {
+      "deprecated": false,
+      "description": "Who holds each Sandbox, or held it last.",
+      "dry_run": false,
+      "entities": [
+        "Reservation"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListReservations",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "reservations": {
+            "items": {
+              "$ref": "#/models/Reservation"
+            },
+            "title": "Reservations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reservations"
+        ],
+        "title": "ResponseListReservations",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Reservation"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-sandbox.CommandListSandboxEvents": {
+      "deprecated": false,
+      "description": "The facts of the sandbox context — sandboxes, workspaces, deliveries — newest first.",
+      "dry_run": false,
+      "entities": [
+        "SandboxEvent"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListSandboxEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/SandboxEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListSandboxEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "SandboxEvent"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-sandbox.CommandReconcileSandbox": {
+      "deprecated": false,
+      "description": "Free a Sandbox left uncertain, once a person confirmed nothing is still writing in it.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "note": {
+            "description": "How the last holder was confirmed stopped.",
+            "title": "Note",
+            "type": "string"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "note"
+        ],
+        "title": "CommandReconcileSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id"
+        ],
+        "title": "ResponseReconcileSandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandRecordInstrumentation": {
+      "deprecated": false,
+      "description": "Record the state of a Sandbox's instrumentation (logs, traces) as its provider reports it.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/InstrumentationState"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "state"
+        ],
+        "title": "CommandRecordInstrumentation",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/InstrumentationState"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "state",
+          "ready"
+        ],
+        "title": "ResponseRecordInstrumentation",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    },
+    "sincpro-forge-sandbox.CommandRefreshSandbox": {
+      "deprecated": false,
+      "description": "Ask the Sandbox's provider for its current state.",
+      "dry_run": false,
+      "entities": [
+        "Sandbox"
+      ],
+      "input": {
+        "properties": {
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id"
+        ],
+        "title": "CommandRefreshSandbox",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "provision": {
+            "$ref": "#/$defs/SandboxProvision"
+          },
+          "sandbox_id": {
+            "title": "Sandbox Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sandbox_id",
+          "provision"
+        ],
+        "title": "ResponseRefreshSandbox",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Sandbox"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Sandbox": "sandbox_id"
+      }
+    }
+  },
+  "version": "e8726340e160b36073b426d9dad6e4107f590ccf548984491ea1a2f81bb59742"
+}

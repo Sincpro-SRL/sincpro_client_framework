@@ -1,0 +1,4611 @@
+{
+  "$defs": {
+    "All": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "All",
+      "type": "object"
+    },
+    "Any_": {
+      "additionalProperties": false,
+      "properties": {
+        "any": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Condition"
+              },
+              {
+                "$ref": "#/$defs/All"
+              },
+              {
+                "$ref": "#/$defs/Any_"
+              },
+              {
+                "$ref": "#/$defs/Not"
+              },
+              {
+                "$ref": "#/$defs/Through"
+              }
+            ]
+          },
+          "title": "Any",
+          "type": "array"
+        }
+      },
+      "required": [
+        "any"
+      ],
+      "title": "Any_",
+      "type": "object"
+    },
+    "CallerKind": {
+      "description": "Who calls: the admin of the deployment, or a user of a tenant.",
+      "enum": [
+        "admin",
+        "user"
+      ],
+      "title": "CallerKind",
+      "type": "string"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "One question about one field.\n\n`value` is required: a condition without a value is not a condition, and a `None` default\nlet `Condition(field=\"name\")` build happily, meaning \"name equals nothing\".\n\nIt is `JsonValue` and not `Any`: what a condition compares is a value that travelled in a\nJSON — a number, a text, a boolean, a list of them — and `Any` let any Python object\nthrough until the SQL translator tripped over it, far from here.\n\n`operator` does have a default, and that is a different case: omitting it means equality.\n\nBeside JSON it takes `datetime`, `date` and `Decimal`, because a Feature also builds\nconditions from Python and forcing it to serialise a date to text for the model to read\nback was a detour. In `model_dump(mode=\"json\")` they come out as text all the same.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "operator": {
+          "$ref": "#/$defs/Operator",
+          "default": "="
+        },
+        "value": {
+          "$ref": "#/$defs/Value"
+        }
+      },
+      "required": [
+        "field",
+        "value"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Count": {
+      "description": "How many exist in total.\n\n`exact=False` means *at least* `value`: counting stops at a ceiling so its cost does not\ngrow with the table. A client renders that as `10000+`, and a collection reads it as\n\"you are holding a fragment\".",
+      "properties": {
+        "exact": {
+          "title": "Exact",
+          "type": "boolean"
+        },
+        "value": {
+          "title": "Value",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
+    "CountMode": {
+      "enum": [
+        "none",
+        "capped",
+        "exact"
+      ],
+      "title": "CountMode",
+      "type": "string"
+    },
+    "Criteria": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "$ref": "#/$defs/CountMode",
+          "default": "capped"
+        },
+        "grouping": {
+          "$ref": "#/$defs/Grouping",
+          "description": "How to split the result set, when it is being counted rather than listed. Ignored by a\nplain search: a page of records has no buckets."
+        },
+        "order": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "$ref": "#/$defs/Pagination",
+          "description": "How many, and from where. Always the object: `{\"limit\": 80, \"strategy\": {\"token\": \"eyJ…\"}}`."
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The filter: a `Condition`, or an `All`/`Any`/`Not` grouping more of them.\n\n**The declared type is exactly what is accepted.** No abbreviated spelling and no\nconversion, so pydantic and the type checker see the same thing and `criteria.selection` reads\nwith an exhaustive `match`. All the validator does is build the nodes when the tree\narrives serialised from JSON — which is the same tree, not another form.",
+          "title": "Selection"
+        },
+        "specification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Specification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What to bring back of each record: field name → how to bring it, the value being a\ncriteria exactly like this one. `None` and `{}` are NOT the same thing:\n\n    None    nothing was asked          →  every scalar, no relation expanded\n    {}      asked, nothing survived    →  the identity alone\n\nRead as one, a mask whose every field was dropped hands back the whole record, which is\nexactly what it existed to prevent."
+        }
+      },
+      "title": "Criteria",
+      "type": "object"
+    },
+    "Cursor": {
+      "additionalProperties": false,
+      "description": "Locating a page by where the previous one ended. **The strategy this engine implements.**\n\n    in      Cursor()                          the first page; nothing came before it\n    in      Cursor(token=\"eyJrIjo…\")          the next one, resumed from that row\n    out     the rows past that row, in the criteria's own order\n\nA row inserted or deleted mid-walk changes nothing, because the cursor names a ROW and not\na position. The token is minted from the last row of the page before; `keys_for` turns it\nback into the keys it holds, checked against the ordering in play.",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Token"
+        }
+      },
+      "title": "Cursor",
+      "type": "object"
+    },
+    "DraftState": {
+      "description": "The record was answered from its owner's draft — what a form saved as a draft and\nnobody stored yet.\n\n`version` is what the next edit names as `version`; `stale` says the stored record moved on\nsince the draft started, so saving it would be refused.",
+      "properties": {
+        "kept_at": {
+          "format": "date-time",
+          "title": "Kept At",
+          "type": "string"
+        },
+        "origin_version": {
+          "title": "Origin Version",
+          "type": "integer"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "origin_version",
+        "kept_at"
+      ],
+      "title": "DraftState",
+      "type": "object"
+    },
+    "Dropped": {
+      "description": "A condition that was asked for and could not be honoured.\n\nReported rather than raised: a shared link outlives the schema it was written against, and\na dropped filter always *widens* the result — so it is dropped and said out loud.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "reason"
+      ],
+      "title": "Dropped",
+      "type": "object"
+    },
+    "EditAction": {
+      "description": "What an `Edit` does with the record the form holds — save it as a draft, store it, or\ndrop it.",
+      "enum": [
+        "save_draft",
+        "save",
+        "discard"
+      ],
+      "title": "EditAction",
+      "type": "string"
+    },
+    "FieldState": {
+      "description": "How a form shows one field for the record a preview built: its hints, evaluated.",
+      "properties": {
+        "items": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "type": "object"
+          },
+          "default": {},
+          "description": "For a list of records — an invoice's lines —, how a form shows each one's fields, by the\nrecord: its identity, or its position for a record that has none (`\"2\"`). Empty for any\nother field, for a relation nobody read and for the records a many-to-many references.",
+          "title": "Items",
+          "type": "object"
+        },
+        "readonly": {
+          "default": false,
+          "title": "Readonly",
+          "type": "boolean"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "title": "FieldState",
+      "type": "object"
+    },
+    "FormWarning": {
+      "description": "A warning to a form about the values it holds; it refuses nothing.\n\nFormWarning(message=\"a discount above 10% needs approval\", field=\"discount\", path=(\"discount\",))\nFormWarning(message=\"price below cost\", field=\"lines\", path=(\"lines\", 2, \"price\"))\n\n`path` is where it points inside the record — a line's cell included, by its position in the\nlist the form sent — and `field` the record's own field it is under (`path[0]`); both empty\nwhen the warning is about the record as a whole.",
+      "properties": {
+        "blocks_save": {
+          "default": false,
+          "description": "Whether saving the record as it is would be refused: an `@check` that fails here fails the\nsave; `warn_form` only advises.",
+          "title": "Blocks Save",
+          "type": "boolean"
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "path": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "title": "Path",
+          "type": "array"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The rule that warned (`Sale.delivery_when_confirmed`), when an `@check` did; `None` for\nadvice the domain gave with `warn_form`.",
+          "title": "Rule"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "FormWarning",
+      "type": "object"
+    },
+    "FromContext": {
+      "additionalProperties": false,
+      "description": "A value of the server's own context — the user, the tenant, a date it holds — never one the\nclient sends.",
+      "properties": {
+        "$": {
+          "const": "context",
+          "default": "context",
+          "title": "$",
+          "type": "string"
+        },
+        "key": {
+          "description": "The key it reads, as the context holds it.",
+          "title": "Key",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "FromContext",
+      "type": "object"
+    },
+    "FromField": {
+      "additionalProperties": false,
+      "description": "Another field of the same row: a column compared with a column.\n\n    {\"field\": \"total\", \"operator\": \">\", \"value\": {\"$\": \"field\", \"name\": \"credit_limit\"}}\n\nIt is not read before the row: it is the other side of the comparison, and it takes only the\noperators that compare (`=`, `!=`, `<`, `<=`, `>`, `>=`) and a field of the same type.",
+      "properties": {
+        "$": {
+          "const": "field",
+          "default": "field",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The field it reads, of the same entity.",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "FromField",
+      "type": "object"
+    },
+    "Grain": {
+      "description": "A calendar unit a date snaps to the start of.",
+      "enum": [
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ],
+      "title": "Grain",
+      "type": "string"
+    },
+    "Grouping": {
+      "additionalProperties": false,
+      "description": "How a result set is split: the levels, and the numbers folded out of every group.\n\n    in      {\"by\": [\"produced_by\", \"registered_at:month\"], \"measures\": {\"filas\": [\"sum\", \"row_count\"]}}\n    out     every level `by` names, each group counted and folded, carrying how to open it\n\nAll the levels named are answered, one statement each: grouping by three fields is three\nstatements whatever the number of rows. A screen that drills down one click at a time asks\nfor one level and, on the click, reads `bucket.criteria` with a grouping of its own; it never\nhas to know how deep the whole tree is.",
+      "properties": {
+        "group_by": {
+          "default": [],
+          "description": "The levels the set is split by, one statement each.",
+          "items": {
+            "$ref": "#/$defs/GroupingLevel"
+          },
+          "title": "Group By",
+          "type": "array"
+        },
+        "measures": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Measure"
+          },
+          "default": {},
+          "description": "The numbers every group answers, each under a name the caller chose.",
+          "title": "Measures",
+          "type": "object"
+        },
+        "order": {
+          "default": [],
+          "description": "How the groups of each level come back: by the level's own field, by a name in `measures`\nor by `count`. Empty means by the level's field, ascending, which is how a list of groups\nreads when nobody asked for anything else. It orders the GROUPS; `Criteria.order` orders\nthe rows, and with a page asked for it decides which rows each group shows first.",
+          "items": {
+            "$ref": "#/$defs/Sort"
+          },
+          "title": "Order",
+          "type": "array"
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pagination"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How many groups of the FIRST level come back, and from where. `None`, the default, is\nevery group: a grouping is a set of counts and a client asked for all of them. When a page\nis asked, the deeper levels answer only for the groups that survived it.\n\nA page and not a keyset: ordering by an aggregate has no stable key to resume from, so\n`Offset` is the honest strategy here and a cursor is not minted."
+        },
+        "where_measures": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A filter over what the groups measured, not over the rows: `count > 10`, `debit > 1000`.\n\nThe names it may use are the ones in `measures` plus `count`. `where` filters the rows that\nmake the groups; this filters the groups those rows made — which is why it is not called\n`where`: it reads measures, not fields.",
+          "title": "Where Measures"
+        }
+      },
+      "title": "Grouping",
+      "type": "object"
+    },
+    "GroupingLevel": {
+      "additionalProperties": false,
+      "description": "One level of grouping: the field it splits by, and how.\n\nin      \"produced_by\"           →  GroupingLevel(field='produced_by')\nin      \"registered_at:month\"   →  GroupingLevel(field='registered_at', grain=Grain.MONTH)\nin      {\"field\": \"registered_at\", \"part\": \"month\"}   →  every March, whatever the year\n\nA **grain** cuts a date into ranges of time (`2026-03`); a **part** extracts a number from it\n(`3`). One level takes one or the other, never both.\n\n`fill` lists every value the level can take, including the ones with no rows, as groups with\na count of 0: all the choices of an enum, both values of a boolean, every number a part can\nbe, every grain of a date range that `where` bounds. An axis that is complete is what a chart\nneeds, and what a group that happened to be empty would otherwise silently leave out.",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "fill": {
+          "default": false,
+          "title": "Fill",
+          "type": "boolean"
+        },
+        "grain": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "part": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Part"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "GroupingLevel",
+      "type": "object"
+    },
+    "Item": {
+      "oneOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "context": "#/$defs/FromContext",
+              "field": "#/$defs/FromField",
+              "now": "#/$defs/Now",
+              "param": "#/$defs/Param",
+              "period": "#/$defs/Period",
+              "today": "#/$defs/Today"
+            },
+            "propertyName": "$"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Today"
+            },
+            {
+              "$ref": "#/$defs/Now"
+            },
+            {
+              "$ref": "#/$defs/FromContext"
+            },
+            {
+              "$ref": "#/$defs/Param"
+            },
+            {
+              "$ref": "#/$defs/Period"
+            },
+            {
+              "$ref": "#/$defs/FromField"
+            }
+          ]
+        },
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    },
+    "JsonValue": {},
+    "Measure": {
+      "additionalProperties": false,
+      "description": "One number a group answers: a function over a field, under a name the caller chose.\n\n    in      {\"function\": \"sum\", \"field\": \"row_count\"}\n    out     Measure(function='sum', field='row_count')       → sum(row_count) AS <name>\n\n**Named parts and not `\"sum:row_count\"`**, so nobody has to split a string in whatever\nlanguage is reading this — the same reason a condition travels as `{field, operator,\nvalue}`. The pair `[\"sum\", \"row_count\"]` is read as well, because writing one by hand in\nPython is a pair; what a caller sends over a wire is the object.\n\nIt is called a measure and not an aggregate on purpose: in this codebase an *aggregate* is\nthe DDD root — what `Meta.aggregate` names — and two meanings for one word in the same\nsentence is how a reader loses an afternoon.",
+      "properties": {
+        "argument": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the function needs besides a column, when it needs anything.\n\nOnly `percentile` does: the fraction it cuts at, `0.95` for a P95. `median` is the 0.5 one\nand takes none. Every other measure refuses one rather than ignoring it, because a number\nthat is quietly dropped is a report that is quietly wrong.",
+          "title": "Argument"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "function": {
+          "enum": [
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "count",
+            "count_distinct",
+            "percentile",
+            "median",
+            "bool_and",
+            "bool_or"
+          ],
+          "title": "Function",
+          "type": "string"
+        }
+      },
+      "required": [
+        "function",
+        "field"
+      ],
+      "title": "Measure",
+      "type": "object"
+    },
+    "Not": {
+      "additionalProperties": false,
+      "properties": {
+        "negate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Negate"
+        }
+      },
+      "required": [
+        "negate"
+      ],
+      "title": "Not",
+      "type": "object"
+    },
+    "Now": {
+      "additionalProperties": false,
+      "description": "The current instant, in UTC.",
+      "properties": {
+        "$": {
+          "const": "now",
+          "default": "now",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Now",
+      "type": "object"
+    },
+    "Offset": {
+      "additionalProperties": false,
+      "description": "Locating a page by counting rows from the start. **What everybody else does.**\n\n    in      Offset(rows=160)                    the third page of eighty\n    out     the rows after skipping 160\n\nHere because an integration eventually counts pages, and because a strategy that exists is\nbetter than one that gets bolted on. Honest about its cost: the database still walks the\nskipped rows, and a row inserted mid-walk shifts everything after it — which is the bug\n`Cursor` does not have.",
+      "properties": {
+        "rows": {
+          "default": 0,
+          "title": "Rows",
+          "type": "integer"
+        }
+      },
+      "title": "Offset",
+      "type": "object"
+    },
+    "Operator": {
+      "description": "How a question is asked. **The enum's value is how it is written outside**, so the\ndefinition publishes these same symbols in `ops` and no translation table exists anywhere.",
+      "enum": [
+        "=",
+        "!=",
+        "in",
+        "not in",
+        "like",
+        "starts with",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "is null",
+        "contains",
+        "not contains",
+        "between"
+      ],
+      "title": "Operator",
+      "type": "string"
+    },
+    "Pagination": {
+      "additionalProperties": false,
+      "description": "How many, and from where.\n\n    in      Pagination(limit=80)                              the first eighty\n    in      Pagination(limit=80, strategy=Cursor(token=\"eyJ…\"))   the next eighty\n    in      Pagination(limit=80, strategy=Offset(rows=160))     the third page of eighty\n\nTwo separate things, and that is the point: **how many belongs to the page, from where is a\nSTRATEGY.** Cursor is one strategy and not the object — a caller that switches to counting\nrows changes the strategy, not the way it asks for a page.\n\n`limit` has a default and no ceiling. A framework says what happens when nobody chooses;\nit does not decide for the application how much it may ask for.",
+      "properties": {
+        "limit": {
+          "default": 50,
+          "minimum": 0,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "strategy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Cursor"
+            },
+            {
+              "$ref": "#/$defs/Offset"
+            }
+          ],
+          "title": "Strategy"
+        }
+      },
+      "title": "Pagination",
+      "type": "object"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "description": "A value the caller supplied for this call: a typed text, a step's result.",
+      "properties": {
+        "$": {
+          "const": "param",
+          "default": "param",
+          "title": "$",
+          "type": "string"
+        },
+        "name": {
+          "description": "The parameter, or a path into it with dots: `steps.order.total`.",
+          "title": "Name",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Param",
+      "type": "object"
+    },
+    "Part": {
+      "description": "A number extracted from a date: the month of the year, whatever the year.\n\nA grain **cuts** (a bucket is a range of time) and a part **extracts** (a bucket is a number\nthat many dates share), so they answer different questions: sales by month `2026-03` is a\ngrain, sales by «March, in any year» is a part. Weekdays count from Monday as 1, as ISO does.",
+      "enum": [
+        "year",
+        "quarter",
+        "month",
+        "iso_week",
+        "day_of_week",
+        "day_of_month",
+        "hour"
+      ],
+      "title": "Part",
+      "type": "string"
+    },
+    "Period": {
+      "additionalProperties": false,
+      "description": "A span of the calendar as a range `[start, end)`: only with the operator `between`.\n\nEither a named one, or a window of whole units counted from the current one:\n\n    {\"$\": \"period\", \"name\": \"this_month\"}\n    {\"$\": \"period\", \"unit\": \"day\", \"last\": 30}                      the 30 days before today\n    {\"$\": \"period\", \"unit\": \"week\", \"next\": 2, \"include_current\": true}\n\n`last` and `next` leave the current unit out unless `include_current` is set.",
+      "properties": {
+        "$": {
+          "const": "period",
+          "default": "period",
+          "title": "$",
+          "type": "string"
+        },
+        "include_current": {
+          "default": false,
+          "title": "Include Current",
+          "type": "boolean"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Periods"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "next": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Period",
+      "type": "object"
+    },
+    "Periods": {
+      "description": "A calendar span, as a closed range `[start, end)`. Only with the operator `between`.",
+      "enum": [
+        "today",
+        "yesterday",
+        "tomorrow",
+        "this_week",
+        "last_week",
+        "next_week",
+        "this_month",
+        "last_month",
+        "next_month",
+        "this_quarter",
+        "last_quarter",
+        "next_quarter",
+        "this_year",
+        "last_year",
+        "next_year"
+      ],
+      "title": "Periods",
+      "type": "string"
+    },
+    "Role": {
+      "description": "``admin`` manages the tenant and approves; ``member`` asks for work.",
+      "enum": [
+        "admin",
+        "member"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "Sort": {
+      "additionalProperties": false,
+      "properties": {
+        "descending": {
+          "default": false,
+          "title": "Descending",
+          "type": "boolean"
+        },
+        "field": {
+          "title": "Field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Sort",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "description": "A signed amount of time, by unit. Only the units asked for travel.\n\n{\"days\": -30}                       thirty days back\n{\"months\": 1, \"days\": -1}           a month ahead, a day back",
+      "properties": {
+        "days": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Days"
+        },
+        "hours": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hours"
+        },
+        "minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minutes"
+        },
+        "months": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Months"
+        },
+        "weeks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weeks"
+        },
+        "years": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Years"
+        }
+      },
+      "title": "Span",
+      "type": "object"
+    },
+    "Specification": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Criteria"
+      },
+      "default": {},
+      "description": "Field name → the criteria that says how to bring it.\n\n    in      {\"name\": {}, \"lines\": {\"pagination\": {\"limit\": 20}}}\n    out     Specification with two fields, the second carrying its own page\n\n**One type and no union**: every value is a `Criteria`, the same one as outside, so a\nconsumer deserialises `dict[str, Criteria]` in any language and never has to tell a string\nfrom an object. A scalar's is empty, because there is nothing to say about how to bring a\nnumber. A relation's carries selection, order, pagination and its own specification, so the\nvocabulary inside a node is the vocabulary outside it, at any depth.\n\nA `RootModel` and not an object with one field inside: in JSON it is the bare mapping,\nwithout a key that means nothing, and in here it has the methods that belong to it.",
+      "title": "Specification",
+      "type": "object"
+    },
+    "TheCaller": {
+      "description": "Who calls, and what the guard lets them do.",
+      "properties": {
+        "display_name": {
+          "default": "",
+          "title": "Display Name",
+          "type": "string"
+        },
+        "email": {
+          "default": "",
+          "description": "The user's email; empty for the admin.",
+          "title": "Email",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CallerKind"
+        },
+        "permissions": {
+          "description": "What the guard lets them do, as ``FORGE_ACCESS`` declares it on each use case.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Permissions",
+          "type": "array"
+        },
+        "role": {
+          "default": "",
+          "description": "Their role in ``tenant_id``.",
+          "title": "Role",
+          "type": "string"
+        },
+        "tenant_id": {
+          "default": "",
+          "description": "The tenant this call acts in; empty for the admin, or a user of no tenant.",
+          "title": "Tenant Id",
+          "type": "string"
+        },
+        "tenant_ids": {
+          "description": "Every tenant they could act in (``X-Forge-Tenant``).",
+          "items": {
+            "type": "string"
+          },
+          "title": "Tenant Ids",
+          "type": "array"
+        },
+        "tenant_name": {
+          "default": "",
+          "title": "Tenant Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "TheCaller",
+      "type": "object"
+    },
+    "Through": {
+      "additionalProperties": false,
+      "properties": {
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "$ref": "#/$defs/All"
+            },
+            {
+              "$ref": "#/$defs/Any_"
+            },
+            {
+              "$ref": "#/$defs/Not"
+            },
+            {
+              "$ref": "#/$defs/Through"
+            }
+          ],
+          "title": "Selection"
+        },
+        "through": {
+          "title": "Through",
+          "type": "string"
+        }
+      },
+      "required": [
+        "through",
+        "selection"
+      ],
+      "title": "Through",
+      "type": "object"
+    },
+    "Today": {
+      "additionalProperties": false,
+      "description": "The current date, in the context's timezone.",
+      "properties": {
+        "$": {
+          "const": "today",
+          "default": "today",
+          "title": "$",
+          "type": "string"
+        },
+        "plus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How far to move it, signed: `{\"days\": -30}` is thirty days ago."
+        },
+        "start_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Grain"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The start of the calendar unit it falls in once moved: `month` is the first of the month."
+        }
+      },
+      "title": "Today",
+      "type": "object"
+    },
+    "Value": {
+      "oneOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/Item"
+          },
+          "type": "array"
+        },
+        {
+          "$ref": "#/$defs/Item"
+        }
+      ]
+    }
+  },
+  "alias": "auth",
+  "bindings": {
+    "rest": {
+      "sincpro-forge-auth.CommandAddMember": {
+        "method": "POST",
+        "path": "/v1/groups/{group_id}/members",
+        "path_fields": [
+          "group_id"
+        ]
+      },
+      "sincpro-forge-auth.CommandAddUser": {
+        "method": "POST",
+        "path": "/v1/users",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandCreateGroup": {
+        "method": "POST",
+        "path": "/v1/groups",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandCreateTenant": {
+        "method": "POST",
+        "path": "/v1/tenants",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandEditGroup": {
+        "method": "PUT",
+        "path": "/v1/groups/{id}/edit",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandEditTenant": {
+        "method": "PUT",
+        "path": "/v1/tenants/{id}/edit",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandEditUser": {
+        "method": "PUT",
+        "path": "/v1/users/{id}/edit",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandGetCaller": {
+        "method": "GET",
+        "path": "/v1/me",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandGetGroup": {
+        "method": "GET",
+        "path": "/v1/groups/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandGetTenant": {
+        "method": "GET",
+        "path": "/v1/tenants/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandGetUser": {
+        "method": "GET",
+        "path": "/v1/users/{id}",
+        "path_fields": [
+          "id"
+        ]
+      },
+      "sincpro-forge-auth.CommandIssueToken": {
+        "method": "POST",
+        "path": "/v1/tokens",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandJoinTenant": {
+        "method": "POST",
+        "path": "/v1/users/{email}/tenants",
+        "path_fields": [
+          "email"
+        ]
+      },
+      "sincpro-forge-auth.CommandLeaveTenant": {
+        "method": "POST",
+        "path": "/v1/users/{email}/tenants/{tenant_id}/leave",
+        "path_fields": [
+          "email",
+          "tenant_id"
+        ]
+      },
+      "sincpro-forge-auth.CommandListAuthEvents": {
+        "method": "GET",
+        "path": "/v1/auth-events",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandListGroups": {
+        "method": "GET",
+        "path": "/v1/groups",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandListTenantMembers": {
+        "method": "GET",
+        "path": "/v1/tenants/{tenant_id}/members",
+        "path_fields": [
+          "tenant_id"
+        ]
+      },
+      "sincpro-forge-auth.CommandListTenants": {
+        "method": "GET",
+        "path": "/v1/tenants",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandListUsers": {
+        "method": "GET",
+        "path": "/v1/users",
+        "path_fields": []
+      },
+      "sincpro-forge-auth.CommandRemoveMember": {
+        "method": "POST",
+        "path": "/v1/groups/{group_id}/members/{email}/remove",
+        "path_fields": [
+          "group_id",
+          "email"
+        ]
+      }
+    }
+  },
+  "bounded_context": "sincpro-forge-auth",
+  "format": "sincpro.client-contract/1",
+  "models": {
+    "AuthEvent": {
+      "properties": {
+        "causation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "entity_id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_type": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "entity_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        },
+        "id": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "label": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "x-sincpro": {
+            "ops": [
+              "like"
+            ],
+            "readonly": true,
+            "type": "translated",
+            "widget": "translated"
+          }
+        },
+        "name": {
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "AuthEvent",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-id",
+        "entity": "AuthEvent",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "AuthEvent"
+        },
+        "version": "f2619d67c089c98cc7d6e36448f0e4f7fed13689b2e2e919e30b52ecab375083"
+      }
+    },
+    "Group": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "display_name": {
+          "title": "Name",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Name",
+              "es": "Nombre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "member_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Member emails",
+          "type": "array",
+          "x-sincpro": {
+            "label": {
+              "default": "Member emails",
+              "es": "Emails de los miembros"
+            },
+            "ops": [
+              "contains",
+              "not contains",
+              "=",
+              "!="
+            ],
+            "type": "text[]",
+            "widget": "tags"
+          }
+        },
+        "members": {
+          "items": {
+            "$ref": "#/models/User"
+          },
+          "title": "Members",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "member_ids",
+            "label": {
+              "default": "Members",
+              "es": "Miembros"
+            },
+            "many": true,
+            "parent_field": "id",
+            "related_field": "member_ids",
+            "relation": "User",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "tenant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tenant",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Tenant",
+              "es": "Tenant"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [
+        "display_name"
+      ],
+      "title": "Group",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "created_at": {},
+            "display_name": {},
+            "id": {},
+            "member_ids": {},
+            "members": {},
+            "tenant_id": {},
+            "updated_at": {},
+            "version": {}
+          }
+        },
+        "display": "display_name",
+        "entity": "Group",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "display_name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "Group"
+        },
+        "version": "9b5f49ac8804fc7e86917d5f934e8e2b8e3f8d6a2deb58c61a72c9e9cbc42b4b"
+      }
+    },
+    "Membership": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "role": {
+          "enum": [
+            "admin",
+            "member"
+          ],
+          "title": "Role",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "choice_labels": {
+              "admin": {
+                "default": "Administrator",
+                "es": "Administrador"
+              },
+              "member": {
+                "default": "Member",
+                "es": "Miembro"
+              }
+            },
+            "default": "member",
+            "groupable": true,
+            "label": {
+              "default": "Role",
+              "es": "Rol"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "select"
+          }
+        },
+        "tenant_id": {
+          "title": "Tenant",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Tenant",
+              "es": "Tenant"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "user_ref": {
+          "title": "User",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "User",
+              "es": "Usuario"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "Membership",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "created_at",
+        "entity": "Membership",
+        "get_id": "id",
+        "identity": "id",
+        "title": {
+          "default": "Membership"
+        },
+        "version": "eb5df2b15fea360e73a9388abb9182a3b72182981db7a77dea7a8b0c44624395"
+      }
+    },
+    "Tenant": {
+      "properties": {
+        "active": {
+          "title": "Active",
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "default": true,
+            "groupable": true,
+            "label": {
+              "default": "Active",
+              "es": "Activo"
+            },
+            "ops": [
+              "="
+            ],
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "display_name": {
+          "title": "Name",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Name",
+              "es": "Nombre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "groups": {
+          "items": {
+            "$ref": "#/models/Group"
+          },
+          "title": "Groups",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "tenant_id",
+            "label": {
+              "default": "Groups",
+              "es": "Grupos"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "tenant_id",
+            "relation": "Group",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "members": {
+          "items": {
+            "$ref": "#/models/Membership"
+          },
+          "title": "Members",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "tenant_id",
+            "label": {
+              "default": "Members",
+              "es": "Miembros"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "tenant_id",
+            "relation": "Membership",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [
+        "display_name"
+      ],
+      "title": "Tenant",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "active": {},
+            "created_at": {},
+            "display_name": {},
+            "groups": {
+              "specification": {
+                "created_at": {},
+                "display_name": {},
+                "id": {},
+                "member_ids": {},
+                "members": {},
+                "tenant_id": {},
+                "updated_at": {},
+                "version": {}
+              }
+            },
+            "id": {},
+            "members": {},
+            "updated_at": {},
+            "version": {}
+          }
+        },
+        "display": "display_name",
+        "entity": "Tenant",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "display_name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "Tenant"
+        },
+        "version": "b89e13c7eb008233cb14f5a23cb0aa9a893c87d952f7657e27f984cd75cc144c"
+      }
+    },
+    "User": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created at",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Created at",
+              "es": "Creado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "display_name": {
+          "title": "Name",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Name",
+              "es": "Nombre"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "id": {
+          "title": "ID",
+          "type": "string",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "ID",
+              "es": "ID"
+            },
+            "ops": [
+              "=",
+              "!=",
+              "like",
+              "starts with",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "text",
+            "widget": "text"
+          }
+        },
+        "memberships": {
+          "items": {
+            "$ref": "#/models/Membership"
+          },
+          "title": "Tenants",
+          "type": "array",
+          "x-sincpro": {
+            "identified_by": "user_ref",
+            "label": {
+              "default": "Tenants",
+              "es": "Tenants"
+            },
+            "many": true,
+            "navigable": true,
+            "parent_field": "id",
+            "related_field": "user_ref",
+            "relation": "Membership",
+            "type": "one2many",
+            "widget": "lines"
+          }
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated at",
+          "x-sincpro": {
+            "aggregates": [
+              "min",
+              "max",
+              "count",
+              "count_distinct"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Updated at",
+              "es": "Actualizado el"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "is null"
+            ],
+            "readonly": true,
+            "type": "datetime",
+            "widget": "datetime"
+          }
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer",
+          "x-sincpro": {
+            "aggregates": [
+              "sum",
+              "avg",
+              "min",
+              "max",
+              "count",
+              "count_distinct",
+              "percentile",
+              "median"
+            ],
+            "groupable": true,
+            "label": {
+              "default": "Version",
+              "es": "Versión"
+            },
+            "ops": [
+              "=",
+              "!=",
+              ">",
+              ">=",
+              "<",
+              "<=",
+              "between",
+              "in",
+              "not in"
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "integer",
+            "widget": "number"
+          }
+        }
+      },
+      "required": [],
+      "title": "User",
+      "type": "object",
+      "x-sincpro": {
+        "default_order": "-created_at",
+        "detail": {
+          "specification": {
+            "created_at": {},
+            "display_name": {},
+            "id": {},
+            "memberships": {},
+            "updated_at": {},
+            "version": {}
+          }
+        },
+        "display": "display_name",
+        "entity": "User",
+        "get_id": "id",
+        "identity": "id",
+        "search": {
+          "selection": {
+            "field": "display_name",
+            "operator": "like",
+            "value": {
+              "$": "param",
+              "name": "text"
+            }
+          }
+        },
+        "title": {
+          "default": "User"
+        },
+        "version": "cb9a7153e32de217af91b288e707bbcd34f9bac45662bccd8b7a2e3eb67746b1"
+      }
+    }
+  },
+  "operations": {
+    "sincpro-forge-auth.CommandAddMember": {
+      "deprecated": false,
+      "description": "Put a user in a group.",
+      "dry_run": false,
+      "entities": [
+        "Group",
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "email"
+        ],
+        "title": "CommandAddMember",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "email"
+        ],
+        "title": "ResponseAddMember",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Group",
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Group": "group_id"
+      }
+    },
+    "sincpro-forge-auth.CommandAddUser": {
+      "deprecated": false,
+      "description": "Add a person who uses forge, in a first tenant or in none yet. More tenants:\n``POST /v1/users/{email}/tenants``.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/$defs/Role",
+            "default": "member"
+          },
+          "tenant_id": {
+            "default": "",
+            "description": "Empty: the user belongs to no tenant yet.",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "CommandAddUser",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "description": "The new record's identity, as the model publishes it (``identity``): a screen becomes it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "email",
+          "tenant_id",
+          "role"
+        ],
+        "title": "ResponseAddUser",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandCreateGroup": {
+      "deprecated": false,
+      "description": "Create a group of users, in a tenant or across tenants.",
+      "dry_run": false,
+      "entities": [
+        "Group"
+      ],
+      "input": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "default": "",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "display_name"
+        ],
+        "title": "CommandCreateGroup",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "description": "The new record's identity, as the model publishes it (``identity``): a screen becomes it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "group_id",
+          "display_name",
+          "tenant_id"
+        ],
+        "title": "ResponseCreateGroup",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Group"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Group": "group_id"
+      }
+    },
+    "sincpro-forge-auth.CommandCreateTenant": {
+      "deprecated": false,
+      "description": "Register a client of Sincpro as a tenant of forge.",
+      "dry_run": false,
+      "entities": [
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "tenant_id": {
+            "description": "Short and stable, e.g. ``acme``: lowercase letters, digits and '-'.",
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "display_name"
+        ],
+        "title": "CommandCreateTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "description": "The new record's identity, as the model publishes it (``identity``): a screen becomes it.",
+            "title": "Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "tenant_id",
+          "display_name",
+          "active"
+        ],
+        "title": "ResponseCreateTenant",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Tenant"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Tenant": "tenant_id"
+      }
+    },
+    "sincpro-forge-auth.CommandEditGroup": {
+      "deprecated": false,
+      "description": "Change a group's name: a draft, a save or a discard.",
+      "dry_run": false,
+      "entities": [
+        "Group"
+      ],
+      "input": {
+        "properties": {
+          "action": {
+            "$ref": "#/$defs/EditAction",
+            "default": "save_draft"
+          },
+          "changed": {
+            "default": [],
+            "description": "The fields the form changed, so only the computations they reach run; none runs them all.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "id": {
+            "description": "The record's key (`DEFAULT_GET_ID`): a stored record's, or the one a new record is created\nunder — named by the caller (a UUID v7 a client mints), or minted here when it names none.",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The stored record's version the caller read, for a save with no draft: refused when the\nrecord moved past it. A draft remembers its own.",
+            "title": "Origin Version"
+          },
+          "values": {
+            "$ref": "#/models/Group",
+            "description": "The record as the form holds it, whole, as JSON: each field read as its type."
+          },
+          "version": {
+            "default": 0,
+            "description": "The draft version the caller read; `0` when it holds no draft.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "CommandEditGroup",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "group": {
+            "$ref": "#/models/Group"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "states": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "default": {},
+            "title": "States",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FormWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group"
+        ],
+        "title": "ResponseEditGroup",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Group"
+      ],
+      "replacement": null,
+      "role": "edit",
+      "sunset": null,
+      "targets": {
+        "Group": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandEditTenant": {
+      "deprecated": false,
+      "description": "Change a tenant's name or whether it is active: a draft, a save or a discard.",
+      "dry_run": false,
+      "entities": [
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "action": {
+            "$ref": "#/$defs/EditAction",
+            "default": "save_draft"
+          },
+          "changed": {
+            "default": [],
+            "description": "The fields the form changed, so only the computations they reach run; none runs them all.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "id": {
+            "description": "The record's key (`DEFAULT_GET_ID`): a stored record's, or the one a new record is created\nunder — named by the caller (a UUID v7 a client mints), or minted here when it names none.",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The stored record's version the caller read, for a save with no draft: refused when the\nrecord moved past it. A draft remembers its own.",
+            "title": "Origin Version"
+          },
+          "values": {
+            "$ref": "#/models/Tenant",
+            "description": "The record as the form holds it, whole, as JSON: each field read as its type."
+          },
+          "version": {
+            "default": 0,
+            "description": "The draft version the caller read; `0` when it holds no draft.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "CommandEditTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "states": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "default": {},
+            "title": "States",
+            "type": "object"
+          },
+          "tenant": {
+            "$ref": "#/models/Tenant"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FormWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenant"
+        ],
+        "title": "ResponseEditTenant",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Tenant"
+      ],
+      "replacement": null,
+      "role": "edit",
+      "sunset": null,
+      "targets": {
+        "Tenant": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandEditUser": {
+      "deprecated": false,
+      "description": "Change a user's name: a draft, a save or a discard.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "action": {
+            "$ref": "#/$defs/EditAction",
+            "default": "save_draft"
+          },
+          "changed": {
+            "default": [],
+            "description": "The fields the form changed, so only the computations they reach run; none runs them all.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "id": {
+            "description": "The record's key (`DEFAULT_GET_ID`): a stored record's, or the one a new record is created\nunder — named by the caller (a UUID v7 a client mints), or minted here when it names none.",
+            "title": "Id",
+            "type": "string"
+          },
+          "origin_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The stored record's version the caller read, for a save with no draft: refused when the\nrecord moved past it. A draft remembers its own.",
+            "title": "Origin Version"
+          },
+          "values": {
+            "$ref": "#/models/User",
+            "description": "The record as the form holds it, whole, as JSON: each field read as its type."
+          },
+          "version": {
+            "default": 0,
+            "description": "The draft version the caller read; `0` when it holds no draft.",
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "title": "CommandEditUser",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "states": {
+            "additionalProperties": {
+              "$ref": "#/$defs/FieldState"
+            },
+            "default": {},
+            "title": "States",
+            "type": "object"
+          },
+          "user": {
+            "$ref": "#/models/User"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FormWarning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "ResponseEditUser",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "edit",
+      "sunset": null,
+      "targets": {
+        "User": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandGetCaller": {
+      "deprecated": false,
+      "description": "Who calls and what they may do: the admin, or a user and the tenant they act in.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "description": "Nothing to ask: the caller is whoever the bearer token names. A ``Query`` because the\nREST wire serves a ``GET`` only for one; its criteria reads nothing here.",
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          }
+        },
+        "title": "CommandGetCaller",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "caller": {
+            "$ref": "#/$defs/TheCaller"
+          }
+        },
+        "required": [
+          "caller"
+        ],
+        "title": "ResponseGetCaller",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandGetGroup": {
+      "deprecated": false,
+      "description": "One group, by its id.",
+      "dry_run": false,
+      "entities": [
+        "Group"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetGroup",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "group": {
+            "$ref": "#/models/Group"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group"
+        ],
+        "title": "ResponseGetGroup",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Group"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Group": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandGetTenant": {
+      "deprecated": false,
+      "description": "One tenant: whether it exists and whether it may use forge (``active``).",
+      "dry_run": false,
+      "entities": [
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "tenant": {
+            "$ref": "#/models/Tenant"
+          }
+        },
+        "required": [
+          "tenant"
+        ],
+        "title": "ResponseGetTenant",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Tenant"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "Tenant": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandGetUser": {
+      "deprecated": false,
+      "description": "One user, by their email, with the tenants they belong to.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Over the entity's `DEFAULT_READING`: every part it names replaces the default."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "draft": {
+            "default": false,
+            "description": "The caller's own draft of the record when there is one (`ResponseRecord.draft` says so),\nthe stored record otherwise — a record only drafted so far is found too. Never someone\nelse's: whose a draft is, the context says.",
+            "title": "Draft",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandGetUser",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DraftState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`\n(`Get`) or answered by an edit (`Edit`)."
+          },
+          "dropped": {
+            "default": [],
+            "description": "What the specification named and the model could not answer.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the record, as a page answers it.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/models/User"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "ResponseGetUser",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "get",
+      "sunset": null,
+      "targets": {
+        "User": "id"
+      }
+    },
+    "sincpro-forge-auth.CommandIssueToken": {
+      "deprecated": false,
+      "description": "A bearer token for a user: the admin issues anyone's, a user renews their own.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How long it lasts; empty: the deployment's ``token_days``.",
+            "title": "Days"
+          },
+          "email": {
+            "description": "Whose token: it acts as this user.",
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "CommandIssueToken",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "token",
+          "expires_at"
+        ],
+        "title": "ResponseIssueToken",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandJoinTenant": {
+      "deprecated": false,
+      "description": "Add a user to a tenant with a role; they keep the tenants they already had.",
+      "dry_run": false,
+      "entities": [
+        "User",
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/$defs/Role",
+            "default": "member"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "tenant_id"
+        ],
+        "title": "CommandJoinTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "tenants": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Every tenant the user belongs to now, with their role in it.",
+            "title": "Tenants",
+            "type": "object"
+          }
+        },
+        "required": [
+          "email",
+          "tenants"
+        ],
+        "title": "ResponseJoinTenant",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Tenant",
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Tenant": "tenant_id"
+      }
+    },
+    "sincpro-forge-auth.CommandLeaveTenant": {
+      "deprecated": false,
+      "description": "Take a user out of a tenant; they keep the others.",
+      "dry_run": false,
+      "entities": [
+        "User",
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "tenant_id"
+        ],
+        "title": "CommandLeaveTenant",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "tenants": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Every tenant the user belongs to now, with their role in it.",
+            "title": "Tenants",
+            "type": "object"
+          }
+        },
+        "required": [
+          "email",
+          "tenants"
+        ],
+        "title": "ResponseLeaveTenant",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Tenant",
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Tenant": "tenant_id"
+      }
+    },
+    "sincpro-forge-auth.CommandListAuthEvents": {
+      "deprecated": false,
+      "description": "The facts of the auth context — tenants, users and groups — newest first.",
+      "dry_run": false,
+      "entities": [
+        "AuthEvent"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListAuthEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/AuthEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListAuthEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "AuthEvent"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandListGroups": {
+      "deprecated": false,
+      "description": "The groups of one tenant, or the groups across tenants.",
+      "dry_run": false,
+      "entities": [
+        "Group"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "``None`` lists every group. Empty lists the groups that belong to no tenant.",
+            "title": "Tenant Id"
+          }
+        },
+        "title": "CommandListGroups",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/models/Group"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "title": "ResponseListGroups",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Group"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandListTenantMembers": {
+      "deprecated": false,
+      "description": "Who belongs to one tenant, with their role there.",
+      "dry_run": false,
+      "entities": [
+        "Membership"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id"
+        ],
+        "title": "CommandListTenantMembers",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/models/Membership"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "ResponseListTenantMembers",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Membership"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandListTenants": {
+      "deprecated": false,
+      "description": "Every tenant forge knows, newest first.",
+      "dry_run": false,
+      "entities": [
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListTenants",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "tenants": {
+            "items": {
+              "$ref": "#/models/Tenant"
+            },
+            "title": "Tenants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tenants"
+        ],
+        "title": "ResponseListTenants",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Tenant"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandListUsers": {
+      "deprecated": false,
+      "description": "Every user forge knows, newest first.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "drafts": {
+            "default": false,
+            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
+            "title": "Drafts",
+            "type": "boolean"
+          }
+        },
+        "title": "CommandListUsers",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/models/User"
+            },
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
+        ],
+        "title": "ResponseListUsers",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "User"
+      ],
+      "replacement": null,
+      "role": "search",
+      "sunset": null,
+      "targets": {}
+    },
+    "sincpro-forge-auth.CommandRemoveMember": {
+      "deprecated": false,
+      "description": "Take a user out of a group.",
+      "dry_run": false,
+      "entities": [
+        "Group",
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "email"
+        ],
+        "title": "CommandRemoveMember",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "email"
+        ],
+        "title": "ResponseRemoveMember",
+        "type": "object"
+      },
+      "query": false,
+      "reaches": [
+        "Group",
+        "User"
+      ],
+      "replacement": null,
+      "role": "command",
+      "sunset": null,
+      "targets": {
+        "Group": "group_id"
+      }
+    }
+  },
+  "version": "3e8928c6507301da2ff31e1e4afaf5d592160e28adfbb7340421f1192d5213fc"
+}

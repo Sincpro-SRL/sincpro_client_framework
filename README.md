@@ -7,9 +7,45 @@ Every use case is traced and every unexpected error reported, continuing the bac
 without its author writing either. A service's client contract becomes typed code for each of
 its domains.
 
-> **Status: in construction.** The repository is founded; the first cut is under way. Read the
-> [manifesto](MANIFESTO.md) for what this package is responsible for, what it is not and where it
-> is going.
+> **Status: 0.x, the first cut.** The API may still change before 1.0. In: the client, the
+> generator, `Feature` and `ApplicationService` with their interceptors, and the ports for tracing
+> and error reporting. Read the [manifesto](MANIFESTO.md) for what this package is responsible
+> for, what it is not and where it is going.
+
+## A use case, traced and reported by default
+
+```ts
+import {
+  ApplicationService,
+  bindServices,
+  createRuntime,
+  Feature,
+} from "@sincpro/client-framework";
+
+class SendIssue extends Feature<{ project: ProjectClient }> {
+  execute(input: dto.CommandSendIssue) {
+    return this.deps.project.sendIssue(input); // carries this run's traceparent
+  }
+}
+
+class CloseIssue extends ApplicationService<{ preview: PreviewClose; send: SendIssue }> {
+  async execute(input: CloseIssueInput) {
+    const preview = await this.features.preview.execute(input); // a child span
+    if (preview.warnings.length > 0) return { blocked: preview };
+    return this.features.send.execute({ ...input, message: "closed" }); // another child
+  }
+}
+
+const runtime = createRuntime({ tracer, reporter, context: () => ({ tenant_id: "acme" }) });
+const project = bindServices(runtime, "project", {
+  closeIssue: new CloseIssue({ preview: new PreviewClose(deps), send: new SendIssue(deps) }),
+});
+await project.closeIssue.execute(input); // project/closeIssue → project/preview, project/send
+```
+
+`tracer` and `reporter` are the platform's: OpenTelemetry and GlitchTip in a browser, a queue on
+a phone, `memoryTracer()` and `memoryReporter()` (`@sincpro/client-framework/testing`) in a test.
+A use case that was never bound runs too, with nothing tracing.
 
 ## Where it sits
 

@@ -15,6 +15,7 @@ help:
 	@echo "  test            vitest, in Node"
 	@echo "  verify-format   format + lint + doctor, then fail if the tree is dirty (CI)"
 	@echo "  build           compile into dist/"
+	@echo "  codegen-fixtures  regenerate tests/support/forge-contract/ (after changing the generator)"
 	@echo "  update-version  VERSION=x.y.z — release pipeline only, never by hand"
 	@echo "  publish         build + publish to NPM (release pipeline)"
 	@echo "  clean           remove dist/ and node_modules/"
@@ -95,6 +96,20 @@ build:
 	@npx tsc-alias -p tsconfig.build.json
 	@echo "✓ Build ready in ./dist (JS + .d.ts, $(PACKAGE) resolved to relative)"
 
+# What tests/codegen.test.ts compares the generator with: forge's client contracts
+# (tests/support/forge-contract/<context>.contract.json, copied from a real
+# `export-client-contract`) through the built `sincpro-client`, as forge's console runs it
+# (`--domain <context> --base /v1`). Run it after changing the generator ON PURPOSE, and read
+# the diff.
+FORGE_CONTRACT := tests/support/forge-contract
+codegen-fixtures: build
+	@for one in project auth sandbox; do \
+		node dist/codegen/cli.js generate $(FORGE_CONTRACT)/$$one.contract.json \
+			--out $(FORGE_CONTRACT)/$$one --domain $$one --base /v1 >/dev/null && \
+		rm $(FORGE_CONTRACT)/$$one/contract.json; \
+	done
+	@echo "✓ $(FORGE_CONTRACT)/ written from the contracts"
+
 # `--package-lock=false`: npm (unlike yarn, which manages this repo's installs) doesn't read
 # yarn.lock, so without it `npm version` rebuilds a dependency tree against the real registry
 # and writes a package-lock.json this repo doesn't keep.
@@ -130,4 +145,4 @@ clean:
 	@echo "✓ Cleaned"
 
 .PHONY: help prepare-environment install init typecheck format lint doctor test verify-format build \
-	update-version publish deploy clean
+	codegen-fixtures update-version publish deploy clean
