@@ -49,6 +49,15 @@ export type MemoryOptions = {
   refuse?: (route: string) => (Problem & { status?: number }) | undefined;
 };
 
+/**
+ * A deep copy, as over a wire: `structuredClone` where the platform has it, a JSON round trip
+ * where it does not (some React Native engines) — the rows a fake server holds are plain JSON.
+ */
+const copyOf: <T>(value: T) => T =
+  typeof globalThis.structuredClone === "function"
+    ? (value) => globalThis.structuredClone(value)
+    : (value) => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
+
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((done, failed) => {
@@ -101,7 +110,7 @@ export function memoryTransport(
         ? answerGroups(table.rows, criteria as never, table.meta)
         : answer(table.rows, criteria as never, table.meta);
       // A copy, as over a wire: a screen holding a row must not see the server change it.
-      return { ...page, rows: structuredClone(page.rows) } as never;
+      return { ...page, rows: copyOf(page.rows) } as never;
     },
 
     async one<T>(route: string, signal?: AbortSignal): Promise<One<T>> {
@@ -122,7 +131,7 @@ export function memoryTransport(
           detail: `${table.meta.aggregate} ${id} does not exist.`,
         });
       return {
-        record: structuredClone(record) as T,
+        record: copyOf(record) as T,
         meta: table.meta,
         dropped: [],
         draft: options.draft?.(route) ?? null,
@@ -140,8 +149,7 @@ export function memoryTransport(
       // A key already answered is answered again, without running the Command twice — what
       // sincpro_framework's `@idempotency` does with a repeated `Idempotency-Key`.
       const key = sending?.idempotencyKey;
-      if (key !== undefined && answered.has(key))
-        return structuredClone(answered.get(key)) as T;
+      if (key !== undefined && answered.has(key)) return copyOf(answered.get(key)) as T;
       if (options.handle === undefined)
         throw new TransportError(route, 404, {
           kind: "not_found",
@@ -153,8 +161,8 @@ export function memoryTransport(
           detail: `Nothing answers ${method} ${route}.`,
         });
       // A deep copy: what the caller sent is not what the server keeps.
-      const answer = await options.handle(method, route, structuredClone(body));
-      if (key !== undefined) answered.set(key, structuredClone(answer));
+      const answer = await options.handle(method, route, copyOf(body));
+      if (key !== undefined) answered.set(key, copyOf(answer));
       return answer as T;
     },
 
@@ -164,7 +172,7 @@ export function memoryTransport(
           async read<T>(route: string, signal?: AbortSignal): Promise<T> {
             await check(route, signal);
             // A copy, as every answer: over a wire nobody holds the server's object.
-            return structuredClone(await options.read!(route)) as T;
+            return copyOf(await options.read!(route)) as T;
           },
         }),
   };
