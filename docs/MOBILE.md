@@ -17,12 +17,13 @@ flowchart LR
     direction TB
     kernel["Kernel · DomainModule<br/>migrations · subscribers · crons"]
     sqlite["SQLite: the offline Transport, repositories"]
-    telemetry["its OTLP queue and exporter, Loki logs"]
+    telemetry["its OpenTelemetry provider,<br/>span queue and exporter"]
+    logs["Loki: its logs — not a Tracer"]
     store["MMKV: the ContextStore"]
     ui["screens, formatting, pickers"]
   end
   kernel -->|"each module holds a bounded context"| bc
-  telemetry -->|"wrapped as a Tracer"| process
+  telemetry -->|"handed in as a Tracer"| process
   store -->|"implements"| process
   sqlite -->|"implements"| wire
   ui -->|"runs use cases"| bc
@@ -30,25 +31,43 @@ flowchart LR
 
 ## What maps to what
 
-| mobile today                                                               | from client-framework                                                                                          | why it moves                                                                                                                                            |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Feature<Deps>` with `this.deps`, spans named `ClassName.method`           | `class Feature extends BaseFeature<Dependencies>`, `this.client`, spans `<bounded context>/<Service>.<method>` | A release build minifies class names: `new.target.name` becomes `a.b`. The registered name never changes.                                               |
-| `ApplicationService<TFeatures>` with `this.features.x`                     | `this.feature.Issues.close(…)`                                                                                 | The same rule — it composes the Features of its own bounded context — with the services registered once.                                                |
-| `ContextManager`, `StackContextManager`, `WithContext`, `PropagateContext` | `processContext`, `project.context`, `project.scoped({…})`, `this.context`                                     | A global stack mixes the parents of two calls running at once; here each call carries its execution. The levels are sincpro_framework's.                |
-| `DomainModule` (`key`, `repositories()`)                                   | `new UseBoundedContext<Dependencies>(key)` with `addDependency` for each repository                            | A module's services and what they need become the bounded context; `migrations()`, `subscribers()`, `crons()` and `persistOnReset()` stay the module's. |
-| `Kernel`, `createApp(AppConfig)`                                           | `configureProcess({ tracer, reporter, context })`, once, before the first screen                               | What every use case runs with is the process's; the Kernel keeps the database, the migrations and the workers.                                          |
-| `init_telemetry` (OTLP client, SQLite span queue, sampler)                 | the `Tracer` port: `openTelemetryTracer(provider.getTracer("app"))` from `./opentelemetry`                     | The span per use case, its parent and the `traceparent` on every request are the same on the web; the queue and the exporter are the phone's.           |
-| error reporting                                                            | the `ErrorReporter` port: `sentryReporter({ captureException: Sentry.captureException })` from `./sentry`      | Only what nobody expected is reported, once, with its trace id — a 4xx the server explained is the business answering.                                  |
-| `generateUUID()` — `uuid` v7 with hyphens                                  | `newEntityId()`, `isEntityId()`, `momentOf()`                                                                  | The backend writes 32 hex; an id minted on the phone must be one the server accepts as a new record's key.                                              |
-| `monetary.ts` — `Number(new Big(…))`                                       | `Decimal`, `Money` (`{ amount, currency }`)                                                                    | It turns a decimal into a float, the thing the backend sends text to avoid. Keep `formatTwoDecimals` for showing, fed with text.                        |
-| `date.ts` with `dayjs`                                                     | `isDay`, `dayOf`, `wallTimeOf`, `instantOf`, `installTimeZone`                                                 | A day is never an instant; «today» is the company's, not the device's. `dayjs` stays for formatting.                                                    |
-| `JsonSerializerAdapter.cleanData` (every `Date` → ISO)                     | `valuesOf` / `readValues` / `pack` / `unpack`                                                                  | One set of wire rules: decimals as text, bytes tagged, a day kept a day. `canonicalize` and its SHA-256 stay mobile's, written over `valuesOf`.         |
-| its HTTP calls                                                             | `restTransport` and the generated `clientOf(transport)` (`sincpro-client generate`)                            | The routes, the bodies and the answers are typed from the service's contract, and each request carries its use case's trace.                            |
-| SQLite reads and writes offline                                            | implement the `Transport` port over SQLite                                                                     | A use case does not know whether it is online: the same `this.client` over another transport.                                                           |
+| mobile today                                                                                     | from client-framework                                                                                          | why it moves                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Feature<Deps>` with `this.deps`, spans named `ClassName.method`                                 | `class Feature extends BaseFeature<Dependencies>`, `this.client`, spans `<bounded context>/<Service>.<method>` | A release build minifies class names: `new.target.name` becomes `a.b`. The registered name never changes.                                                                                                                      |
+| `ApplicationService<TFeatures>` with `this.features.x`                                           | `this.feature.Issues.close(…)`                                                                                 | The same rule — it composes the Features of its own bounded context — with the services registered once.                                                                                                                       |
+| `ContextManager`, `StackContextManager`, `WithContext`, `PropagateContext`                       | `processContext`, `project.context`, `project.scoped({…})`, `this.context`                                     | A global stack mixes the parents of two calls running at once; here each call carries its execution. The levels are sincpro_framework's.                                                                                       |
+| `DomainModule` (`key`, `repositories()`)                                                         | `new UseBoundedContext<Dependencies>(key)` with `addDependency` for each repository                            | A module's services and what they need become the bounded context; `migrations()`, `subscribers()`, `crons()` and `persistOnReset()` stay the module's.                                                                        |
+| `Kernel`, `createApp(AppConfig)`                                                                 | `configureProcess({ tracer, reporter, context })`, once, before the first screen                               | What every use case runs with is the process's; the Kernel keeps the database, the migrations and the workers.                                                                                                                 |
+| `init_telemetry` (OTLP client, SQLite span queue, sampler)                                       | the `Tracer` port: `openTelemetryTracer(provider.getTracer("app"))` from `./opentelemetry`                     | The span per use case, its parent and the `traceparent` on every request are the same on the web; the provider, the queue and the exporter are the phone's. Loki takes logs, not spans: it is no `Tracer`, and stays mobile's. |
+| error reporting                                                                                  | the `ErrorReporter` port: `sentryReporter({ captureException: Sentry.captureException })` from `./sentry`      | Only what nobody expected is reported, once, with its trace id — a 4xx the server explained is the business answering.                                                                                                         |
+| `generateUUID()` — over `newEntityId()` since mobile#23                                          | `newEntityId()`, `isEntityId()`, `momentOf()`                                                                  | Done. The backend writes 32 hex; an id minted on the phone is one the server accepts as a new record's key.                                                                                                                    |
+| `monetary.ts` — computes with `Decimal`, answers a `number`                                      | `Decimal`, `Money` (`{ amount, currency }`)                                                                    | An amount answered as a `number` is a float again, the thing the backend sends text to avoid. Keep the `Decimal` until it is shown; `formatTwoDecimals` fed with text.                                                         |
+| `date.ts` — `isDay`, `dayOf` since mobile#23; `dayjs`                                            | `isDay`, `dayOf`, `wallTimeOf`, `instantOf`, `installTimeZone`                                                 | Done for telling a day and the company's «today». A day is held as text, never in a `Date`; `dayjs` stays for formatting.                                                                                                      |
+| `serializer.ts` over `valuesOf` since mobile#23; `JsonSerializerAdapter.cleanData` still its own | `valuesOf` / `readValues` / `pack` / `unpack`                                                                  | One set of wire rules: decimals as text, bytes tagged, a day kept a day. `canonicalize` and its SHA-256 stay mobile's, written over `valuesOf` — `cleanData` is what is left.                                                  |
+| its HTTP calls                                                                                   | `restTransport` and the generated `clientOf(transport)` (`sincpro-client generate`)                            | The routes, the bodies and the answers are typed from the service's contract, and each request carries its use case's trace.                                                                                                   |
+| SQLite reads and writes offline                                                                  | implement the `Transport` port over SQLite                                                                     | A use case does not know whether it is online: the same `this.client` over another transport.                                                                                                                                  |
 
 What stays mobile's and does not come here: SQLite and its repositories, migrations, the dead
 letter queue, crons and the flush worker, Loki logs, `event_driven` subscribers, screens and the
-design of the phone.
+design of the phone — and the SQLite `Transport`: nothing here speaks SQLite, mobile writes it.
+
+## Which version
+
+Below 1.0 a caret never crosses the minor: `^0.4.0` installs 0.4.x, never 0.5 — moving to a new
+minor is a change to `package.json`, made on purpose. What 0.5 adds, asked for with `^0.5.0`:
+
+- `screensTransport(transport)` — what a screen reads and writes, traced as a use case;
+- `reportError(error, where)` — what fails outside a use case (a subscriber, a worker, a screen)
+  reaches the process's reporter once, only when it failed;
+- `this.span` inside a use case, and `CONTEXT_HEADER`;
+- a stricter `isDay` (a day the calendar does not have, `2026-02-30`, is no longer a day) and a
+  bare day never read as an instant by `wallTimeOf` / `dayOf`.
+
+`Decimal`, `Money`, `valuesOf` and the ids are there since 0.4.
+
+`sincpro-client check` (the layers of an application, in its `make doctor`) is for an application
+built on mobile — Distribution, Tickets —, whose `src/domains/` keeps the layers; @sincpro/mobile
+itself is the platform, not an application.
 
 ## The setup, on a phone
 
@@ -141,6 +160,21 @@ export function mmkvContexts(storage = new MMKV({ id: "sincpro-context" })): Con
 AsyncStorage is asynchronous: hold the context in memory (`memoryContexts()`), load it from
 AsyncStorage before the first screen, and write it through on each change.
 
+When the context changes — another company chosen —, a screen reads again and keeps what is on
+it. On the web `FrameworkProvider` does it; on a phone it is a hook of mobile's over
+`processContext.watch`:
+
+```ts
+import { processContext } from "@sincpro/client-framework";
+import { useSyncExternalStore } from "react";
+
+/** The context's values — one object per change: a reading lists it as a dependency and re-reads. */
+export function useProcessContext() {
+  const values = () => processContext.values;
+  return useSyncExternalStore(processContext.watch, values, values);
+}
+```
+
 ## What the phone must give
 
 | Asked of the platform                      | Hermes (React Native)                                                                                                                                       |
@@ -155,14 +189,15 @@ AsyncStorage before the first screen, and write it through on each change.
 ## The order to move in
 
 1. **The wire values** — `newEntityId`, `Decimal`/`Money`, `valuesOf`, the day and the instant.
-   They fix real bugs today (a float amount, a day that moves, ids the backend does not accept)
-   and touch no architecture. Rows already stored with hyphenated ids are read in either form.
+   They fix real bugs (a float amount, a day that moves, ids the backend does not accept) and
+   touch no architecture. Mostly done (mobile#23): ids, `serializer.ts`, `isDay` and `dayOf` are this
+   package's; an amount answered as a `number` and `cleanData` are what is left.
 2. **The process** — `configureProcess` with mobile's tracer and reporter, and `mmkvContexts`.
 3. **One bounded context at a time** — its Features on `BaseFeature<Dependencies>`, registered,
    used as `sales.Orders.place(…)`; the old `Feature` and the context stack go when the last one
    moved.
 4. **The generated client** for each service with a contract, over `restTransport` online and the
-   SQLite transport offline.
+   SQLite transport offline — mobile's to write, over the `Transport` port.
 
 The words are the shared ones ([`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md)): a module that
 holds a bounded context is still called a bounded context in code and docs.
