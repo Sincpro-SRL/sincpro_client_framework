@@ -16,7 +16,7 @@ import type { Outcome, Span, Tracer } from "@sincpro/client-framework/observabil
  *
  *     // a browser (@sincpro/web-framework/telemetry does this), Node, React Native…
  *     const tracer = openTelemetryTracer(provider.getTracer("forge-web"));
- *     const runtime = createRuntime({ tracer });
+ *     configureProcess({ tracer });
  *
  * Context: only `@opentelemetry/api`, which runs the same on every platform — the provider, its
  * exporter and where it sends are the platform's (the browser's OTLP over fetch, a phone's

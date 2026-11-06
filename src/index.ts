@@ -9,7 +9,9 @@
  *   client/   the seam with a server: the transport and its REST and in-memory implementations,
  *             entities with typed commands, the service's client contract, client-side ids
  *   model/    model definitions: written by hand, read from a JSON Schema, kept once known
- *   services/ Feature and ApplicationService, the runtime they run in, what each run carries
+ *   services/ the bounded context (`UseBoundedContext`), its `Feature` and `ApplicationService`,
+ *             the process they run in (`configureProcess`), what each run carries
+ *   context/  the context: one door (`Context`) over the store each platform plugs
  *   observability/  the ports a platform plugs: a tracer and an error reporter
  *
  * The generator is `@sincpro/client-framework/codegen`, and the in-memory tracer and reporter
@@ -73,6 +75,12 @@ export {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/transport";
+export { type Context } from "@sincpro/client-framework/context/context";
+export {
+  type ContextStore,
+  type ContextValues,
+  memoryContexts,
+} from "@sincpro/client-framework/context/store";
 export {
   defineMeta,
   field,
@@ -97,6 +105,10 @@ export {
   type Tracer,
 } from "@sincpro/client-framework/observability/ports";
 export {
+  type BoundedContext,
+  UseBoundedContext,
+} from "@sincpro/client-framework/services/bounded-context";
+export {
   BIND,
   type Bindable,
   bindable,
@@ -107,13 +119,14 @@ export {
 } from "@sincpro/client-framework/services/execution";
 export {
   ApplicationService,
-  bindServices,
   Feature,
+  type ServiceClasses,
+  type ServiceMethods,
+  type Services,
 } from "@sincpro/client-framework/services/feature";
 export {
-  createRuntime,
-  DETACHED,
+  configureProcess,
   outcomeOf,
-  type Runtime,
-  type RuntimeOptions,
-} from "@sincpro/client-framework/services/runtime";
+  processContext,
+  type ProcessOptions,
+} from "@sincpro/client-framework/services/process";

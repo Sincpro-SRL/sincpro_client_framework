@@ -1,128 +1,137 @@
-import { newEntityId } from "@sincpro/client-framework/client/ids";
-import type { Attributes, Span } from "@sincpro/client-framework/observability/ports";
-import { bindDependency, type Execution } from "@sincpro/client-framework/services/execution";
-import { DETACHED, type Runtime } from "@sincpro/client-framework/services/runtime";
+import type { ContextValues } from "@sincpro/client-framework/context/store";
 
 /**
- * One use case. What it needs from outside — the generated client of its domain, another
- * adapter — comes in `deps`, typed by the subclass.
+ * `Feature` and `ApplicationService`: the two kinds of service a bounded context holds, as in
+ * sincpro_framework. Each bounded context gives them its dependencies once, in its own base:
  *
- *     export class SendIssue extends Feature<{ project: ProjectClient }> {
- *       execute(input: dto.CommandSendIssue) {
- *         return this.deps.project.sendIssue(input);
+ *     // domains/project/infrastructure/bounded_context.ts
+ *     export class Feature extends BaseFeature<ProjectDependencies> {}
+ *     export class ApplicationService extends BaseApplicationService<ProjectDependencies, ProjectFeatures> {}
+ *
+ *     // domains/project/services/issues.ts
+ *     export class Issues extends Feature {
+ *       close(input: dto.CommandCloseIssue) {
+ *         this.session.require();                 // each dependency is a property — typed
+ *         return this.client.closeIssue(input);
  *       }
  *     }
  *
- * Context: all of a client's logic lives in Features and ApplicationServices, as in
- * sincpro_framework and @sincpro/mobile, and none of them writes a span or catches an error to
- * report it: `new` answers the instance behind interceptors, and every public method runs
- * inside its own execution — a span named `<domain>/<name>`, the context it runs with, its
- * report if nobody expected how it failed. `execute` is a use case's entry; another public
- * method is traced as `<name>.<method>`, and a name that starts with `_` is not traced at all.
- *
- * Inside a method, `this.deps` and `this.context` are this run's own: each dependency that can
- * be (the transport, a generated client) is bound to the execution, so its requests carry this
- * run's trace. So a Feature keeps nothing of a request on `this`, and declares no `#private`
- * fields — the run sees the instance through a view of its own, and `#private` refuses views;
- * TypeScript's `private` is the same promise without that.
- */
-export class Feature<Deps extends object = Record<string, never>> {
-  protected readonly deps: Deps;
-  /** What this run executes with (`RuntimeOptions.context`): empty outside a run. */
-  protected readonly context: Readonly<Record<string, unknown>> = NO_CONTEXT;
-
-  constructor(deps?: Deps) {
-    this.deps = deps ?? ({} as Deps);
-    // A class constructor that answers another object hands THAT to `new` and to every subclass
-    // constructor after it: their fields land on the instance through the proxy.
-    return intercepted(this, { runtime: DETACHED, domain: undefined, name: undefined });
-  }
-}
-
-/**
- * A use case that composes the Features of its own domain — the only difference with a
- * Feature. Each call to one of them is a child of this run: its span under this span, the same
- * context, the same trace on the wire.
- *
- *     export class CloseIssue extends ApplicationService<{ preview: PreviewClose; send: SendIssue }> {
- *       async execute(input: CloseIssueInput) {
- *         const preview = await this.features.preview.execute(input);
- *         if (preview.warnings.length > 0) return { blocked: preview };
- *         return this.features.send.execute({ ...input, message: "cerrado" });
+ *     // domains/project/services/close_and_notify.ts
+ *     export class CloseAndNotify extends ApplicationService {
+ *       async execute(input: dto.CommandCloseIssue) {
+ *         await this.feature.Issues.close(input);   // a child of this run, on the same trace
+ *         return this.feature.Notices.tell(input);
  *       }
  *     }
  *
- * Context: it never executes another ApplicationService — sincpro_framework's rule, refused here
- * when it is constructed rather than found in a trace later.
- */
-export class ApplicationService<
-  Features extends Readonly<Record<string, Feature<object>>>,
-  Deps extends object = Record<string, never>,
-> extends Feature<Deps> {
-  protected readonly features: Features;
-
-  constructor(features: Features, deps?: Deps) {
-    super(deps);
-    for (const [name, feature] of Object.entries(features))
-      if (targetOf(feature) instanceof ApplicationService)
-        throw new Error(
-          `${this.constructor.name}: "${name}" is an ApplicationService — an ApplicationService executes Features, never another ApplicationService`,
-        );
-    this.features = features;
-  }
-}
-
-/**
- * The services of a bounded context, each running in this runtime under that domain: traced as
- * `<domain>/<key>`, reported by its reporter, with its context.
+ * Context: a Feature is a facade — the operations of one part of the domain, each a public
+ * method; an ApplicationService composes the Features of its own bounded context and never
+ * another ApplicationService (sincpro_framework's rule). Neither writes a span nor catches an
+ * error to report it: the bounded context runs every public method inside its own execution
+ * (`UseBoundedContext`).
  *
- *     const project = bindServices(runtime, "project", { sendIssue, closeIssue });
- *
- * Context: a span is named by the key it is bound with, not by the class — a production build
- * renames classes, never the keys of an object.
+ * The dependencies are typed, not declared: `BaseFeature<ProjectDependencies>` types
+ * `this.client` and `this.session` from the bounded context's dependency type — sincpro_framework's
+ * `DependencyContextType` — and the bounded context hands them in on each run. So a service
+ * constructs with nothing, keeps no dependency on `this`, and declares no `#private` field: a run
+ * sees the instance through a view of its own (its dependencies bound to its trace), and
+ * `#private` refuses views. TypeScript's `private` is the same promise without that.
  */
-export function bindServices<Services extends Readonly<Record<string, Feature<object>>>>(
-  runtime: Runtime,
-  domain: string,
-  services: Services,
-): Services {
-  return Object.fromEntries(
-    Object.entries(services).map(([name, service]) => [
-      name,
-      intercepted(targetOf(service), { runtime, domain, name }),
-    ]),
-  ) as unknown as Services;
-}
+class FeatureCore {}
 
-const NO_CONTEXT: Readonly<Record<string, unknown>> = Object.freeze({});
+class ApplicationServiceCore extends FeatureCore {}
 
-/** Where a use case runs, and as what: what its executions are made of. */
-type Binding = {
-  runtime: Runtime;
-  domain: string | undefined;
-  /** The key it was bound or composed under; the class's name when it was neither. */
-  name: string | undefined;
-  /** The run that executes it: an ApplicationService's, for its Features. */
-  parent?: Execution;
+/** What every service sees on `this` inside a method. */
+type Within<D extends object, C extends object> = Readonly<D> & {
+  /**
+   * What this run executes with: the process's context, its bounded context's, its scope's —
+   * read once where the gesture started and the same for every Feature it runs.
+   */
+  readonly context: Readonly<Partial<C>>;
 };
 
-const TARGETS = new WeakMap<object, object>();
+/** Service classes by the name a bounded context gives them: `{ Issues, Notices }`. */
+export type ServiceClasses = Readonly<Record<string, new () => object>>;
 
-function targetOf<T extends object>(feature: T): T {
-  return (TARGETS.get(feature) as T | undefined) ?? feature;
+/**
+ * What a service offers to whoever holds it — `project.Issues`, `this.feature.Issues`: its public
+ * methods, without its dependencies, its context or its `_` helpers.
+ */
+export type ServiceMethods<I, D> = {
+  readonly [
+    M in keyof I as M extends keyof D | "context" | "feature" | `_${string}`
+      ? never
+      : I[M] extends (...args: never[]) => unknown
+        ? M
+        : never
+  ]: I[M];
+};
+
+/** The services of a set of classes, by their names. */
+export type Services<S extends ServiceClasses, D> = {
+  readonly [K in keyof S]: ServiceMethods<InstanceType<S[K]>, D>;
+};
+
+type FeatureClass = abstract new <
+  D extends object = Record<never, never>,
+  C extends object = ContextValues,
+>() => FeatureCore & Within<D, C>;
+
+type ApplicationServiceClass = abstract new <
+  D extends object = Record<never, never>,
+  F extends ServiceClasses = Record<never, never>,
+  C extends object = ContextValues,
+>() => ApplicationServiceCore &
+  Within<D, C> & {
+    /** The Features of this bounded context, each run a child of this one. */
+    readonly feature: Services<F, D>;
+  };
+
+/** The base of a bounded context's Features: `class Feature extends BaseFeature<Deps> {}`. */
+export const Feature = FeatureCore as unknown as FeatureClass;
+
+/**
+ * The base of a bounded context's ApplicationServices:
+ * `class ApplicationService extends BaseApplicationService<Deps, typeof features> {}`.
+ */
+export const ApplicationService =
+  ApplicationServiceCore as unknown as ApplicationServiceClass;
+
+/** Whether a class is a Feature — and not an ApplicationService. */
+export function isFeatureClass(service: new () => object): boolean {
+  return (
+    service.prototype instanceof FeatureCore &&
+    !(service.prototype instanceof ApplicationServiceCore)
+  );
 }
 
-/** The methods a class adds over Feature — what is traced — read once per class. */
+export function isApplicationServiceClass(service: new () => object): boolean {
+  return service.prototype instanceof ApplicationServiceCore;
+}
+
+/** Whether a service composes Features — an ApplicationService. */
+export function composes(service: object): boolean {
+  return service instanceof ApplicationServiceCore;
+}
+
+/**
+ * The methods a class adds over its base — what is traced — read once per class: every public
+ * method of the class and its parents up to `Feature`, but `constructor` and a name that starts
+ * with `_`.
+ */
 const METHODS = new WeakMap<object, ReadonlySet<string>>();
 
-function methodsOf(target: object): ReadonlySet<string> {
-  const prototype = Object.getPrototypeOf(target) as object;
+export function methodsOf(service: object): ReadonlySet<string> {
+  const prototype = Object.getPrototypeOf(service) as object;
   const known = METHODS.get(prototype);
   if (known !== undefined) return known;
   const names = new Set<string>();
   for (
     let level: object | null = prototype;
-    level !== null && level !== Feature.prototype && level !== Object.prototype;
+    level !== null &&
+    level !== ApplicationServiceCore.prototype &&
+    level !== FeatureCore.prototype &&
+    level !== Object.prototype;
     level = Object.getPrototypeOf(level) as object | null
   )
     for (const name of Object.getOwnPropertyNames(level)) {
@@ -136,148 +145,4 @@ function methodsOf(target: object): ReadonlySet<string> {
     }
   METHODS.set(prototype, names);
   return names;
-}
-
-function intercepted<T extends object>(target: T, binding: Binding): T {
-  const proxy = new Proxy(target, {
-    get(held, property) {
-      const value: unknown = Reflect.get(held, property, held);
-      if (typeof property !== "string" || typeof value !== "function") return value;
-      if (!methodsOf(held).has(property)) return value;
-      return (...args: unknown[]) =>
-        run(held, property, value as (...args: unknown[]) => unknown, args, binding);
-    },
-  });
-  TARGETS.set(proxy, target);
-  return proxy;
-}
-
-/**
- * Whether this is the first run to report this error. A Feature that fails inside an
- * ApplicationService throws through it: the error is reported once, by the run where it
- * happened — its span is the one that says where — and every run around it still ends `failed`.
- */
-const REPORTED = new WeakSet<object>();
-
-function firstReport(error: unknown): boolean {
-  if (error === null || (typeof error !== "object" && typeof error !== "function"))
-    return true;
-  if (REPORTED.has(error)) return false;
-  REPORTED.add(error);
-  return true;
-}
-
-function quietly<T>(work: () => T, otherwise: T): T {
-  try {
-    return work();
-  } catch {
-    return otherwise;
-  }
-}
-
-const NO_SPAN: Span = {
-  traceId: "",
-  spanId: "",
-  sampled: false,
-  set: () => undefined,
-  end: () => undefined,
-};
-
-function run(
-  target: object,
-  method: string,
-  body: (...args: unknown[]) => unknown,
-  args: unknown[],
-  binding: Binding,
-): unknown {
-  const { runtime, domain, parent } = binding;
-  const name = binding.name ?? target.constructor.name;
-  const useCase = `${domain === undefined ? "" : `${domain}/`}${name}${method === "execute" ? "" : `.${method}`}`;
-  const context = parent?.context ?? quietly(() => runtime.context(), NO_CONTEXT);
-  const composes = target instanceof ApplicationService;
-  const id = newEntityId();
-  const attributes: Attributes = {
-    "sincpro.use_case": useCase,
-    "sincpro.layer": composes ? "application_service" : "feature",
-    "sincpro.execution_id": id,
-    ...(domain === undefined ? {} : { "sincpro.domain": domain }),
-  };
-  const span = quietly(
-    () =>
-      runtime.tracer.start(useCase, {
-        ...(parent === undefined ? {} : { parent: parent.span }),
-        attributes,
-      }),
-    NO_SPAN,
-  );
-  const execution: Execution = { id, useCase, domain, parent, span, context };
-
-  // The run's own view of the instance: its dependencies bound to this execution, its context,
-  // and — for an ApplicationService — its Features as children of this run.
-  const own = target as { deps?: Record<string, unknown>; features?: Record<string, object> };
-  const view: object = Object.create(target, {
-    deps: {
-      value: Object.fromEntries(
-        Object.entries(own.deps ?? {}).map(([key, dependency]) => [
-          key,
-          bindDependency(dependency, execution),
-        ]),
-      ),
-    },
-    context: { value: context },
-    ...(composes
-      ? {
-          features: {
-            value: Object.fromEntries(
-              Object.entries(own.features ?? {}).map(([key, feature]) => [
-                key,
-                intercepted(targetOf(feature), {
-                  runtime,
-                  domain,
-                  name: key,
-                  parent: execution,
-                }),
-              ]),
-            ),
-          },
-        }
-      : {}),
-  });
-
-  const finish = (failed: boolean, error?: unknown) => {
-    const outcome = failed ? quietly(() => runtime.outcomeOf(error), "failed") : "ok";
-    quietly(() => span.end(outcome, error), undefined);
-    if (outcome === "failed" && firstReport(error))
-      quietly(
-        () =>
-          runtime.reporter?.report(error, {
-            useCase,
-            traceId: span.traceId,
-            executionId: id,
-            context,
-          }),
-        undefined,
-      );
-  };
-
-  let answer: unknown;
-  try {
-    answer = body.apply(view, args);
-  } catch (error) {
-    finish(true, error);
-    throw error;
-  }
-  if (answer instanceof Promise)
-    return answer.then(
-      (value: unknown) => {
-        finish(false);
-        return value;
-      },
-      (error: unknown) => {
-        finish(true, error);
-        throw error;
-      },
-    );
-  finish(false);
-  return answer;
 }

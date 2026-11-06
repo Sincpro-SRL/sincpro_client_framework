@@ -49,13 +49,13 @@ export interface Tracer {
 
 /** What a report says about where the error happened. */
 export type ErrorAbout = {
-  /** `<domain>/<Feature>`, the span's name. */
+  /** `<bounded context>.<Service>[.<method>]`: the use case's identity, as the backend's. */
   useCase: string;
   /** The trace the error belongs to — the same id the server logged, when it got that far. */
   traceId: string;
   /** The execution's own id. */
   executionId: string;
-  /** What the use case ran with (`Runtime` `context`). */
+  /** What the use case ran with: the process's context, its bounded context's, its scope's. */
   context: Readonly<Record<string, unknown>>;
 };
 

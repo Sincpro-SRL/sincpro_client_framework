@@ -13,15 +13,15 @@ import type { Criteria } from "@sincpro/criteria";
  * nothing like it that survives an `await` (AsyncContext is a proposal, Zone.js patches the
  * world), and a global stack mixes the parents of two use cases running at once — which a
  * screen with several windows does all the time. So an execution is a value, handed to what
- * the use case calls: its Features (`ApplicationService`) and its dependencies (`BIND`).
+ * the use case calls: its Features (`this.feature`) and its dependencies (`BIND`).
  */
 export type Execution = {
   /** UUID v7, as 32 hex: this run. */
   readonly id: string;
-  /** `<domain>/<Feature>` — the span's name, as the backend names its own. */
+  /** `<bounded context>.<Service>[.<method>]` — the use case's identity, as the backend names its own. */
   readonly useCase: string;
-  /** The bounded context the use case belongs to, when it was bound to one. */
-  readonly domain: string | undefined;
+  /** The bounded context the use case belongs to. */
+  readonly boundedContext: string;
   /** The run that executed this one: an ApplicationService, for its Features. */
   readonly parent: Execution | undefined;
   readonly span: Span;
@@ -32,7 +32,7 @@ export type Execution = {
 /**
  * A dependency that has something to say about the execution it is used in: given that
  * execution, it answers itself bound to it. The transport and every generated client are;
- * anything else in a Feature's `deps` is handed as it is.
+ * any other dependency of a bounded context is handed as it is.
  */
 export const BIND: unique symbol = Symbol.for("sincpro.client-framework.bind");
 
@@ -113,7 +113,7 @@ export function bindTransport(transport: Transport, execution: Execution): Trans
 /**
  * A client made over a transport, made again over the transport bound to each execution it is
  * used in. What a generated `clientOf(transport)` answers, so a Feature that calls
- * `this.deps.project.sendIssue(…)` sends that request with its own trace.
+ * `this.client.sendIssue(…)` sends that request with its own trace.
  *
  *     export function clientOf(transport: Transport) {
  *       return bindable(transport, (transport) => ({ sendIssue: (body) => transport.send(…) }));
