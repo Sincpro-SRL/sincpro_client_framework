@@ -4,6 +4,7 @@ import type {
   Schema,
 } from "@sincpro/client-framework/codegen/metamodel";
 import {
+  answerOf,
   claimed,
   contextOf,
   deprecationOf,
@@ -186,7 +187,8 @@ function operationDoc(metamodel: Metamodel, local: string, operation: Operation)
  *
  * 1. The models, by name: an entity's contract, a related model by its own name.
  * 2. Each operation, by its local name (its identity without `<context>.`): its input as
- *    `<Name>` and its answer as `<Name>Answer`.
+ *    `<Name>` and its answer by the backend's own name for it (`answerOf`: `ResponseX`), with
+ *    `<Name>Answer` kept as a deprecated alias — or as `<Name>Answer` when it has no name.
  * 3. The shared definitions those reach — and the ones those reach, until none is new —, but
  *    never one a package of the stack already types (`Criteria`).
  * Final: a header that says where it came from and not to edit it, the imports, then models,
@@ -203,16 +205,29 @@ export function domainFileOf(metamodel: Metamodel): string {
     return `${docOf([schema.description], "")}export type ${identifierOf(name)} = ${typeOf(schema, scope, 0, true)};`;
   });
 
+  // A Response two Commands share is written once, under the first that answers with it.
+  const answered = new Set<string>();
   const operations = sorted(metamodel.operations).flatMap(([identity, operation]) => {
     const local = localOf(metamodel, identity);
+    const named = answerOf(metamodel, identity);
     claim(local, `operation ${identity}`);
-    claim(`${local}Answer`, `the answer of ${identity}`);
     const answer =
       operation.output === null ? "unknown" : typeOf(operation.output, scope, 0, false);
-    return [
+    const written = [
       `${operationDoc(metamodel, local, operation)}export type ${local} = ${typeOf(operation.input, scope, 0, false)};`,
-      `/** What \`${local}\` answers. */\nexport type ${local}Answer = ${answer};`,
     ];
+    if (!answered.has(named)) {
+      answered.add(named);
+      claim(named, `the answer of ${identity}`);
+      written.push(`/** What \`${local}\` answers. */\nexport type ${named} = ${answer};`);
+    }
+    if (named !== `${local}Answer`) {
+      claim(`${local}Answer`, `the old name of the answer of ${identity}`);
+      written.push(
+        `/** @deprecated The backend calls it \`${named}\`: use that name. */\nexport type ${local}Answer = ${named};`,
+      );
+    }
+    return written;
   });
 
   const written = new Map<string, string>();

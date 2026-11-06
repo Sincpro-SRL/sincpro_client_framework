@@ -49,7 +49,8 @@ export interface Tracer {
 
 /** What a report says about where the error happened. */
 export type ErrorAbout = {
-  /** `<bounded context>.<Service>[.<method>]`: the use case's identity, as the backend's. */
+  /** `<bounded context>.<Service>[.<method>]`: the use case's identity, as the backend's — or,
+   *  for what failed outside one (`reportError`), where it happened (`view project:issue/acme-3`). */
   useCase: string;
   /** The trace the error belongs to — the same id the server logged, when it got that far. */
   traceId: string;

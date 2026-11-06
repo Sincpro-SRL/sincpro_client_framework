@@ -74,6 +74,29 @@ test("a typed read is asked for, never imposed: as it is, as a class that reads 
   assert.throws(() => unpack('{"amount":"1"}', Money), /without its currency/);
 });
 
+test("any binary is bytes, and a toJSON that answers itself is an object, not a cycle", () => {
+  assert.deepEqual(valuesOf(new Int16Array([1])), { [BYTES]: "AQA=" });
+  const plain = {
+    a: 1,
+    toJSON() {
+      return this;
+    },
+  };
+  assert.deepEqual(valuesOf({ plain }), { plain: { a: 1 } });
+  const loop = {
+    toJSON() {
+      return { self: this };
+    },
+  };
+  assert.throws(() => valuesOf(loop), /a cycle/);
+});
+
+test("a string the in-memory server answers stays a string: «2.50» is never 2.5", async () => {
+  const transport = memoryTransport({}, { handle: () => "2.50", read: () => "123" });
+  assert.equal(await transport.send("POST", "/prices", "1.50"), "2.50");
+  assert.equal(await transport.read?.("/count"), "123");
+});
+
 test("the in-memory server answers what a real one would: what it was sent, by the wire's rules", async () => {
   let received: unknown;
   const transport = memoryTransport(

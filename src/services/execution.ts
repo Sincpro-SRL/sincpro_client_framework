@@ -3,7 +3,7 @@ import type {
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/transport";
-import { plainCodec, travels } from "@sincpro/client-framework/context/codec";
+import { CONTEXT_HEADER, plainCodec, travels } from "@sincpro/client-framework/context/codec";
 import type { Span } from "@sincpro/client-framework/observability/ports";
 import type { Criteria } from "@sincpro/criteria";
 
@@ -72,7 +72,7 @@ export function headersOf(execution: Execution): Record<string, string> {
   }
   // Only what travels: an object or a function held in the context stays in this process.
   if (Object.values(context).some(travels))
-    headers["sincpro-context"] = plainCodec.dumps(context);
+    headers[CONTEXT_HEADER] = plainCodec.dumps(context);
   return headers;
 }
 

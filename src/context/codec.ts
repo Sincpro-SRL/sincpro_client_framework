@@ -14,6 +14,9 @@ import type { ContextValues } from "@sincpro/client-framework/context/store";
  * context stays where it is. Reading never fails a context whole: text that is not a JSON object
  * reads as an empty one. A project with a schema of its own writes its own codec over this port.
  */
+/** The header the context travels in: the one sincpro_framework's entrances read. */
+export const CONTEXT_HEADER = "sincpro-context";
+
 export interface ContextCodec {
   dumps(values: ContextValues): string;
   loads(text: string): ContextValues;

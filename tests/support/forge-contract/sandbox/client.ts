@@ -126,7 +126,7 @@ export function clientOf(transport: Transport) {
   return bindable(transport, (transport) => ({
     /** Create a Sandbox on an existing Workspace nobody else holds. */
     createSandbox: (body: dto.CommandCreateSandbox, options?: SendOptions) =>
-      transport.send<dto.CommandCreateSandboxAnswer>(
+      transport.send<dto.ResponseCreateSandbox>(
         "POST",
         pathFor(routes.createSandbox, undefined, body),
         body,
@@ -138,7 +138,7 @@ export function clientOf(transport: Transport) {
      * host, one review request each. Only the revisions the verification passed go out.
      */
     deliver: (body: dto.CommandDeliver, options?: SendOptions) =>
-      transport.send<dto.CommandDeliverAnswer>(
+      transport.send<dto.ResponseDeliver>(
         "POST",
         pathFor(routes.deliver, undefined, body),
         body,
@@ -147,7 +147,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Deploy a Sandbox with its provider, from a source and parameters. */
     deploySandbox: (body: dto.CommandDeploySandbox, options?: SendOptions) =>
-      transport.send<dto.CommandDeploySandboxAnswer>(
+      transport.send<dto.ResponseDeploySandbox>(
         "POST",
         pathFor(routes.deploySandbox, undefined, body),
         body,
@@ -156,7 +156,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Destroy a Sandbox nobody holds; with ``dry_run``, say what would go. */
     destroySandbox: (body: dto.CommandDestroySandbox, options?: SendOptions) =>
-      transport.send<dto.CommandDestroySandboxAnswer>(
+      transport.send<dto.ResponseDestroySandbox>(
         "POST",
         pathFor(routes.destroySandbox, undefined, body),
         body,
@@ -165,13 +165,13 @@ export function clientOf(transport: Transport) {
       ),
     /** What a workspace's change branch delivered: its branches and their review requests. */
     getDeliveryStatus: (params?: Partial<Record<"branch" | "criteria" | "cursor" | "workspace_id", string>>) =>
-      readRoute<dto.CommandGetDeliveryStatusAnswer>(transport, listRoute("/deliveries", params)),
+      readRoute<dto.ResponseGetDeliveryStatus>(transport, listRoute("/deliveries", params)),
     /** One Sandbox: its lifecycle, its Workspace and its deployment. */
     getSandbox: (id: string) =>
       transport.one<dto.Sandbox>(`/sandboxes/${encodeURIComponent(id)}`),
     /** The Sandboxes no run may take now: reserved, or uncertain. */
     listOccupiedSandboxes: (params?: Partial<Record<"criteria" | "cursor", string>>) =>
-      readRoute<dto.CommandListOccupiedSandboxesAnswer>(transport, listRoute("/occupied-sandboxes", params)),
+      readRoute<dto.ResponseListOccupiedSandboxes>(transport, listRoute("/occupied-sandboxes", params)),
     /** Who holds each Sandbox, or held it last. */
     listReservations: (criteria: Criteria<dto.Reservation>, params?: Partial<Record<"drafts", string>>) =>
       transport.list<dto.Reservation>(listRoute("/reservations", params), criteria),
@@ -180,7 +180,7 @@ export function clientOf(transport: Transport) {
       transport.list<dto.SandboxEvent>(listRoute("/sandbox-events", params), criteria),
     /** Free a Sandbox left uncertain, once a person confirmed nothing is still writing in it. */
     reconcileSandbox: (body: dto.CommandReconcileSandbox, options?: SendOptions) =>
-      transport.send<dto.CommandReconcileSandboxAnswer>(
+      transport.send<dto.ResponseReconcileSandbox>(
         "POST",
         pathFor(routes.reconcileSandbox, undefined, body),
         body,
@@ -189,7 +189,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Record the state of a Sandbox's instrumentation (logs, traces) as its provider reports it. */
     recordInstrumentation: (body: dto.CommandRecordInstrumentation, options?: SendOptions) =>
-      transport.send<dto.CommandRecordInstrumentationAnswer>(
+      transport.send<dto.ResponseRecordInstrumentation>(
         "POST",
         pathFor(routes.recordInstrumentation, undefined, body),
         body,
@@ -198,7 +198,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Ask the Sandbox's provider for its current state. */
     refreshSandbox: (body: dto.CommandRefreshSandbox, options?: SendOptions) =>
-      transport.send<dto.CommandRefreshSandboxAnswer>(
+      transport.send<dto.ResponseRefreshSandbox>(
         "POST",
         pathFor(routes.refreshSandbox, undefined, body),
         body,

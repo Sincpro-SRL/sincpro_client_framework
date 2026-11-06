@@ -16,6 +16,7 @@ import {
   processNow,
   processStore,
 } from "@sincpro/client-framework/services/process";
+import { firstReport } from "@sincpro/client-framework/services/report";
 
 /**
  * A bounded context: its dependencies, its services, and the one object everything else uses
@@ -86,7 +87,7 @@ export type BoundedContext<
 /** Names `project` answers itself: no service is registered under them. */
 const RESERVED = new Set(["name", "context", "with", "scoped"]);
 /** Names a run answers on `this` itself: no dependency is added under them. */
-const ANSWERED = new Set(["context", "feature"]);
+const ANSWERED = new Set(["context", "feature", "span"]);
 
 export class UseBoundedContext<D extends object, C extends object = ContextValues> {
   readonly name: string;
@@ -266,6 +267,7 @@ function viewOf(target: object, binding: Binding, execution: Execution): object 
   return new Proxy(target, {
     get(held, property, receiver) {
       if (property === "context") return execution.context;
+      if (property === "span") return execution.span;
       if (property === "feature" && isComposer)
         return (features ??= featuresOf(binding, execution));
       if (typeof property === "string") {
@@ -317,21 +319,6 @@ function contextOf(binding: Binding): ContextValues {
     ...binding.registry.context.values,
     ...binding.scope,
   };
-}
-
-/**
- * Whether this is the first run to report this error. A Feature that fails inside an
- * ApplicationService throws through it: the error is reported once, by the run where it
- * happened — its span is the one that says where — and every run around it still ends `failed`.
- */
-const REPORTED = new WeakSet<object>();
-
-function firstReport(error: unknown): boolean {
-  if (error === null || (typeof error !== "object" && typeof error !== "function"))
-    return true;
-  if (REPORTED.has(error)) return false;
-  REPORTED.add(error);
-  return true;
 }
 
 /** What watches a use case never changes what it answers: a tracer or reporter that throws is ignored. */

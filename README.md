@@ -179,6 +179,23 @@ await project.Issues.close(input); // span project/Issues.close
 await project.CloseAndNotify.execute(input); // project/CloseAndNotify → its Features under it
 ```
 
+The generator writes this skeleton for you, once, from the service's contract — and never touches
+a file that is already there, because from then on it is yours:
+
+```bash
+sincpro-client generate project.contract.json --out src/domains/project/generated --domain project
+sincpro-client scaffold project.contract.json --out src/domains/project   # dependencies, bases, services, index
+```
+
+And the layers stay layers: `sincpro-client check` resolves every import of the application with
+its own TypeScript and `tsconfig` (aliases included) and fails when a bounded context reaches into
+another's insides, a service imports React or web-ui, `common` imports a bounded context, or the
+entrypoints skip a bounded context's `index.ts` — put it in `make doctor`:
+
+```bash
+sincpro-client check --root src
+```
+
 Every public method is a use case: a span named as the backend names its own
 (`project/Issues.close`, identity `project.Issues.close`), and a report when it fails in a way
 nobody expected. One gesture is one trace, from the click to the database:
@@ -224,6 +241,10 @@ processContext.set({ tenant_id: "acme" }); // every use case runs with it and se
 project.context.set({ warehouse_id: 4 }); // only what «project» runs
 ```
 
+What a screen reads and writes is a use case too when it goes through `screensTransport(transport)`:
+each request is `screens/EntityReads.list`, `…/EntityWrites.send` — traced, with the context on
+it, and reported when it failed.
+
 A service reads it as `this.context` — the process's values, under them its bounded context's,
 under them a scope's, read once where the gesture started — and every request it sends carries
 it in `sincpro-context`. A screen hears it change with `processContext.watch(…)`.
@@ -262,6 +283,10 @@ import { sentryReporter } from "@sincpro/client-framework/sentry"; // no depende
 const tracer = openTelemetryTracer(provider.getTracer("my-app")); // the app's provider and exporter
 const reporter = sentryReporter(client); // the app's Sentry-compatible client (GlitchTip too)
 ```
+
+What fails outside a use case — a screen that broke while drawing, a subscriber, a worker — goes to
+the same reporter with `reportError(error, where)`: once (an error a use case already reported is
+not sent again), with the process's context.
 
 Nothing is installed or shipped unless it is imported, and without a tracer or a reporter every use
 case runs the same — nothing traces, nothing reports. In a test, `memoryTracer()` and
@@ -343,6 +368,9 @@ three ports, in its `main`:
 | `ErrorReporter` | GlitchTip / Sentry browser client (`./errors`)  | Sentry React Native client                 | `memoryReporter`  |
 | `ContextStore`  | memory, `sessionStorage`, or the screens' store | MMKV, or memory hydrated from AsyncStorage | `memoryContexts`  |
 | `Transport`     | `restTransport` over `fetch`                    | `restTransport`, or SQLite offline         | `memoryTransport` |
+
+How @sincpro/mobile adopts all of this — what maps to what, the MMKV store, the order to move
+in — is [`docs/MOBILE.md`](docs/MOBILE.md).
 
 A store's reads are synchronous — a use case reads its context where a gesture starts and never
 waits for it — so an asynchronous storage is held in memory and written through.

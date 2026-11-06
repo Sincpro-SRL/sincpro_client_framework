@@ -24,9 +24,9 @@ export const groups = entity<
     removeMember: Omit<dto.CommandRemoveMember, "group_id">;
   },
   {
-    addMember: dto.CommandAddMemberAnswer;
-    createGroup: dto.CommandCreateGroupAnswer;
-    removeMember: dto.CommandRemoveMemberAnswer;
+    addMember: dto.ResponseAddMember;
+    createGroup: dto.ResponseCreateGroup;
+    removeMember: dto.ResponseRemoveMember;
   }
 >("auth:group", {
   list: "/groups",
@@ -57,9 +57,9 @@ export const tenants = entity<
     leaveTenant: Omit<dto.CommandLeaveTenant, "tenant_id">;
   },
   {
-    createTenant: dto.CommandCreateTenantAnswer;
-    joinTenant: dto.CommandJoinTenantAnswer;
-    leaveTenant: dto.CommandLeaveTenantAnswer;
+    createTenant: dto.ResponseCreateTenant;
+    joinTenant: dto.ResponseJoinTenant;
+    leaveTenant: dto.ResponseLeaveTenant;
   }
 >("auth:tenant", {
   list: "/tenants",
@@ -86,12 +86,12 @@ export const users = entity<
     removeMember: dto.CommandRemoveMember;
   },
   {
-    addMember: dto.CommandAddMemberAnswer;
-    addUser: dto.CommandAddUserAnswer;
-    issueToken: dto.CommandIssueTokenAnswer;
-    joinTenant: dto.CommandJoinTenantAnswer;
-    leaveTenant: dto.CommandLeaveTenantAnswer;
-    removeMember: dto.CommandRemoveMemberAnswer;
+    addMember: dto.ResponseAddMember;
+    addUser: dto.ResponseAddUser;
+    issueToken: dto.ResponseIssueToken;
+    joinTenant: dto.ResponseJoinTenant;
+    leaveTenant: dto.ResponseLeaveTenant;
+    removeMember: dto.ResponseRemoveMember;
   }
 >("auth:user", {
   list: "/users",

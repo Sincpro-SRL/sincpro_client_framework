@@ -2,6 +2,7 @@ import { entityKeyOf } from "@sincpro/client-framework/client/contract";
 import type { Metamodel, Operation } from "@sincpro/client-framework/codegen/metamodel";
 import {
   aliasOf,
+  answerOf,
   claimed,
   DOMAIN_MODULE,
   FRAMEWORK,
@@ -82,7 +83,14 @@ function entitySourceOf(
     const rest = restOf(metamodel, identity, options);
     return rest === undefined
       ? []
-      : [{ local: localOf(metamodel, identity), operation, rest }];
+      : [
+          {
+            local: localOf(metamodel, identity),
+            answer: answerOf(metamodel, identity),
+            operation,
+            rest,
+          },
+        ];
   });
   const reads = (role: string, method: (verb: string) => boolean) =>
     reached.filter(
@@ -139,7 +147,7 @@ function entitySourceOf(
         ? `    ${method}: dto.${command.local};`
         : `    ${method}: Omit<dto.${command.local}, ${JSON.stringify(target)}>;`,
     );
-    answers.push(`    ${method}: dto.${command.local}Answer;`);
+    answers.push(`    ${method}: dto.${command.answer};`);
     named.push(
       target === undefined
         ? `    ${method}: ${JSON.stringify(route)},`

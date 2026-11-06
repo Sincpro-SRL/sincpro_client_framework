@@ -1,4 +1,5 @@
 import type { ContextValues } from "@sincpro/client-framework/context/store";
+import type { Span } from "@sincpro/client-framework/observability/ports";
 
 /**
  * `Feature` and `ApplicationService`: the two kinds of service a bounded context holds, as in
@@ -48,6 +49,8 @@ type Within<D extends object, C extends object> = Readonly<D> & {
    * read once where the gesture started and the same for every Feature it runs.
    */
   readonly context: Readonly<Partial<C>>;
+  /** This run's span: a use case says more about what it ran on (`this.span.set({ … })`). */
+  readonly span: Span;
 };
 
 /** Service classes by the name a bounded context gives them: `{ Issues, Notices }`. */
@@ -59,7 +62,7 @@ export type ServiceClasses = Readonly<Record<string, new () => object>>;
  */
 export type ServiceMethods<I, D> = {
   readonly [
-    M in keyof I as M extends keyof D | "context" | "feature" | `_${string}`
+    M in keyof I as M extends keyof D | "context" | "feature" | "span" | `_${string}`
       ? never
       : I[M] extends (...args: never[]) => unknown
         ? M

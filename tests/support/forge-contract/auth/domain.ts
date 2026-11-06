@@ -175,10 +175,13 @@ export type CommandAddMember = {
 };
 
 /** What `CommandAddMember` answers. */
-export type CommandAddMemberAnswer = {
+export type ResponseAddMember = {
   email: string;
   group_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseAddMember`: use that name. */
+export type CommandAddMemberAnswer = ResponseAddMember;
 
 /**
  * Add a person who uses forge, in a first tenant or in none yet. More tenants:
@@ -195,7 +198,7 @@ export type CommandAddUser = {
 };
 
 /** What `CommandAddUser` answers. */
-export type CommandAddUserAnswer = {
+export type ResponseAddUser = {
   email: string;
   /** The new record's identity, as the model publishes it (``identity``): a screen becomes it. */
   id: string;
@@ -203,6 +206,9 @@ export type CommandAddUserAnswer = {
   tenant_id: string;
   version: number;
 };
+
+/** @deprecated The backend calls it `ResponseAddUser`: use that name. */
+export type CommandAddUserAnswer = ResponseAddUser;
 
 /**
  * Create a group of users, in a tenant or across tenants.
@@ -216,7 +222,7 @@ export type CommandCreateGroup = {
 };
 
 /** What `CommandCreateGroup` answers. */
-export type CommandCreateGroupAnswer = {
+export type ResponseCreateGroup = {
   display_name: string;
   group_id: string;
   /** The new record's identity, as the model publishes it (``identity``): a screen becomes it. */
@@ -224,6 +230,9 @@ export type CommandCreateGroupAnswer = {
   tenant_id: string;
   version: number;
 };
+
+/** @deprecated The backend calls it `ResponseCreateGroup`: use that name. */
+export type CommandCreateGroupAnswer = ResponseCreateGroup;
 
 /**
  * Register a client of Sincpro as a tenant of forge.
@@ -237,7 +246,7 @@ export type CommandCreateTenant = {
 };
 
 /** What `CommandCreateTenant` answers. */
-export type CommandCreateTenantAnswer = {
+export type ResponseCreateTenant = {
   active: boolean;
   display_name: string;
   /** The new record's identity, as the model publishes it (``identity``): a screen becomes it. */
@@ -245,6 +254,9 @@ export type CommandCreateTenantAnswer = {
   tenant_id: string;
   version: number;
 };
+
+/** @deprecated The backend calls it `ResponseCreateTenant`: use that name. */
+export type CommandCreateTenantAnswer = ResponseCreateTenant;
 
 /**
  * Change a group's name: a draft, a save or a discard.
@@ -272,7 +284,7 @@ export type CommandEditGroup = {
 };
 
 /** What `CommandEditGroup` answers. */
-export type CommandEditGroupAnswer = {
+export type ResponseEditGroup = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -286,6 +298,9 @@ export type CommandEditGroupAnswer = {
   states?: Record<string, FieldState>;
   warnings?: FormWarning[];
 };
+
+/** @deprecated The backend calls it `ResponseEditGroup`: use that name. */
+export type CommandEditGroupAnswer = ResponseEditGroup;
 
 /**
  * Change a tenant's name or whether it is active: a draft, a save or a discard.
@@ -313,7 +328,7 @@ export type CommandEditTenant = {
 };
 
 /** What `CommandEditTenant` answers. */
-export type CommandEditTenantAnswer = {
+export type ResponseEditTenant = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -327,6 +342,9 @@ export type CommandEditTenantAnswer = {
   tenant: Tenant;
   warnings?: FormWarning[];
 };
+
+/** @deprecated The backend calls it `ResponseEditTenant`: use that name. */
+export type CommandEditTenantAnswer = ResponseEditTenant;
 
 /**
  * Change a user's name: a draft, a save or a discard.
@@ -354,7 +372,7 @@ export type CommandEditUser = {
 };
 
 /** What `CommandEditUser` answers. */
-export type CommandEditUserAnswer = {
+export type ResponseEditUser = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -368,6 +386,9 @@ export type CommandEditUserAnswer = {
   user: User;
   warnings?: FormWarning[];
 };
+
+/** @deprecated The backend calls it `ResponseEditUser`: use that name. */
+export type CommandEditUserAnswer = ResponseEditUser;
 
 /**
  * Who calls and what they may do: the admin, or a user and the tenant they act in.
@@ -390,9 +411,12 @@ export type CommandGetCaller = {
 };
 
 /** What `CommandGetCaller` answers. */
-export type CommandGetCallerAnswer = {
+export type ResponseGetCaller = {
   caller: TheCaller;
 };
+
+/** @deprecated The backend calls it `ResponseGetCaller`: use that name. */
+export type CommandGetCallerAnswer = ResponseGetCaller;
 
 /**
  * One group, by its id.
@@ -418,7 +442,7 @@ export type CommandGetGroup = {
 };
 
 /** What `CommandGetGroup` answers. */
-export type CommandGetGroupAnswer = {
+export type ResponseGetGroup = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -430,6 +454,9 @@ export type CommandGetGroupAnswer = {
   /** The version of the model of the record, as a page answers it. */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseGetGroup`: use that name. */
+export type CommandGetGroupAnswer = ResponseGetGroup;
 
 /**
  * One tenant: whether it exists and whether it may use forge (``active``).
@@ -455,7 +482,7 @@ export type CommandGetTenant = {
 };
 
 /** What `CommandGetTenant` answers. */
-export type CommandGetTenantAnswer = {
+export type ResponseGetTenant = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -467,6 +494,9 @@ export type CommandGetTenantAnswer = {
   model_version?: string;
   tenant: Tenant;
 };
+
+/** @deprecated The backend calls it `ResponseGetTenant`: use that name. */
+export type CommandGetTenantAnswer = ResponseGetTenant;
 
 /**
  * One user, by their email, with the tenants they belong to.
@@ -492,7 +522,7 @@ export type CommandGetUser = {
 };
 
 /** What `CommandGetUser` answers. */
-export type CommandGetUserAnswer = {
+export type ResponseGetUser = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -504,6 +534,9 @@ export type CommandGetUserAnswer = {
   model_version?: string;
   user: User;
 };
+
+/** @deprecated The backend calls it `ResponseGetUser`: use that name. */
+export type CommandGetUserAnswer = ResponseGetUser;
 
 /**
  * A bearer token for a user: the admin issues anyone's, a user renews their own.
@@ -518,11 +551,14 @@ export type CommandIssueToken = {
 };
 
 /** What `CommandIssueToken` answers. */
-export type CommandIssueTokenAnswer = {
+export type ResponseIssueToken = {
   email: string;
   expires_at: string;
   token: string;
 };
+
+/** @deprecated The backend calls it `ResponseIssueToken`: use that name. */
+export type CommandIssueTokenAnswer = ResponseIssueToken;
 
 /**
  * Add a user to a tenant with a role; they keep the tenants they already had.
@@ -536,11 +572,14 @@ export type CommandJoinTenant = {
 };
 
 /** What `CommandJoinTenant` answers. */
-export type CommandJoinTenantAnswer = {
+export type ResponseJoinTenant = {
   email: string;
   /** Every tenant the user belongs to now, with their role in it. */
   tenants: Record<string, string>;
 };
+
+/** @deprecated The backend calls it `ResponseJoinTenant`: use that name. */
+export type CommandJoinTenantAnswer = ResponseJoinTenant;
 
 /**
  * Take a user out of a tenant; they keep the others.
@@ -553,11 +592,14 @@ export type CommandLeaveTenant = {
 };
 
 /** What `CommandLeaveTenant` answers. */
-export type CommandLeaveTenantAnswer = {
+export type ResponseLeaveTenant = {
   email: string;
   /** Every tenant the user belongs to now, with their role in it. */
   tenants: Record<string, string>;
 };
+
+/** @deprecated The backend calls it `ResponseLeaveTenant`: use that name. */
+export type CommandLeaveTenantAnswer = ResponseLeaveTenant;
 
 /**
  * The facts of the auth context — tenants, users and groups — newest first.
@@ -586,7 +628,7 @@ export type CommandListAuthEvents = {
 };
 
 /** What `CommandListAuthEvents` answers. */
-export type CommandListAuthEventsAnswer = {
+export type ResponseListAuthEvents = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -608,6 +650,9 @@ export type CommandListAuthEventsAnswer = {
    */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseListAuthEvents`: use that name. */
+export type CommandListAuthEventsAnswer = ResponseListAuthEvents;
 
 /**
  * The groups of one tenant, or the groups across tenants.
@@ -638,7 +683,7 @@ export type CommandListGroups = {
 };
 
 /** What `CommandListGroups` answers. */
-export type CommandListGroupsAnswer = {
+export type ResponseListGroups = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -660,6 +705,9 @@ export type CommandListGroupsAnswer = {
    */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseListGroups`: use that name. */
+export type CommandListGroupsAnswer = ResponseListGroups;
 
 /**
  * Who belongs to one tenant, with their role there.
@@ -689,7 +737,7 @@ export type CommandListTenantMembers = {
 };
 
 /** What `CommandListTenantMembers` answers. */
-export type CommandListTenantMembersAnswer = {
+export type ResponseListTenantMembers = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -711,6 +759,9 @@ export type CommandListTenantMembersAnswer = {
    */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseListTenantMembers`: use that name. */
+export type CommandListTenantMembersAnswer = ResponseListTenantMembers;
 
 /**
  * Every tenant forge knows, newest first.
@@ -739,7 +790,7 @@ export type CommandListTenants = {
 };
 
 /** What `CommandListTenants` answers. */
-export type CommandListTenantsAnswer = {
+export type ResponseListTenants = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -761,6 +812,9 @@ export type CommandListTenantsAnswer = {
   model_version?: string;
   tenants: Tenant[];
 };
+
+/** @deprecated The backend calls it `ResponseListTenants`: use that name. */
+export type CommandListTenantsAnswer = ResponseListTenants;
 
 /**
  * Every user forge knows, newest first.
@@ -789,7 +843,7 @@ export type CommandListUsers = {
 };
 
 /** What `CommandListUsers` answers. */
-export type CommandListUsersAnswer = {
+export type ResponseListUsers = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -812,6 +866,9 @@ export type CommandListUsersAnswer = {
   users: User[];
 };
 
+/** @deprecated The backend calls it `ResponseListUsers`: use that name. */
+export type CommandListUsersAnswer = ResponseListUsers;
+
 /**
  * Take a user out of a group.
  *
@@ -823,7 +880,10 @@ export type CommandRemoveMember = {
 };
 
 /** What `CommandRemoveMember` answers. */
-export type CommandRemoveMemberAnswer = {
+export type ResponseRemoveMember = {
   email: string;
   group_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseRemoveMember`: use that name. */
+export type CommandRemoveMemberAnswer = ResponseRemoveMember;
