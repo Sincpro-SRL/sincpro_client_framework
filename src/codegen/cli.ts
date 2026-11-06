@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
+import { CheckError, checkImports } from "@sincpro/client-framework/codegen/check";
 import { clientFileOf } from "@sincpro/client-framework/codegen/client";
 import { domainFileOf } from "@sincpro/client-framework/codegen/domain";
 import { entitiesFileOf } from "@sincpro/client-framework/codegen/entities";
 import type { Metamodel } from "@sincpro/client-framework/codegen/metamodel";
 import { aliasOf } from "@sincpro/client-framework/codegen/names";
 import type { GenerateOptions } from "@sincpro/client-framework/codegen/rest";
+import { scaffoldFilesOf } from "@sincpro/client-framework/codegen/scaffold";
 
 /**
  * `sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]` — what an
@@ -25,8 +27,11 @@ import type { GenerateOptions } from "@sincpro/client-framework/codegen/rest";
  * verify-client` regenerates and fails on any difference. The folder is the generator's: keep
  * it out of the application's prettier and eslint, or a formatter rewrites what was generated.
  */
-const USAGE =
-  "usage: sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]";
+const USAGE = [
+  "usage: sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]",
+  "       sincpro-client scaffold <contract.json> --out <dir> [--transport <module>]",
+  "       sincpro-client check [--root src] [--tsconfig tsconfig.json]",
+].join("\n");
 
 /** JSON with every key sorted: the snapshot reads the same however the server ordered it. */
 function canonical(value: unknown): unknown {
@@ -40,11 +45,18 @@ function canonical(value: unknown): unknown {
 }
 
 /** The command, its source and its flags — or `undefined` when they do not read as usage says. */
-function parsed(
-  args: readonly string[],
-): { source: string; out: string; options: GenerateOptions } | undefined {
+function parsed(args: readonly string[]):
+  | {
+      command: "generate" | "scaffold";
+      source: string;
+      out: string;
+      options: GenerateOptions;
+      transport: string | undefined;
+    }
+  | undefined {
   const [command, source, ...rest] = args;
-  if (command !== "generate" || source === undefined) return undefined;
+  if ((command !== "generate" && command !== "scaffold") || source === undefined)
+    return undefined;
   const flags = new Map<string, string>();
   for (let at = 0; at < rest.length; at += 2) {
     const flag = rest[at];
@@ -53,18 +65,76 @@ function parsed(
     flags.set(flag, value);
   }
   const out = flags.get("--out");
-  const known = new Set(["--out", "--domain", "--base"]);
+  const known = new Set(
+    command === "generate" ? ["--out", "--domain", "--base"] : ["--out", "--transport"],
+  );
   if (out === undefined || [...flags.keys()].some((one) => !known.has(one))) return undefined;
   const domain = flags.get("--domain");
   const base = flags.get("--base");
   return {
+    command,
     source,
     out,
     options: {
       ...(domain === undefined ? {} : { domain }),
       ...(base === undefined ? {} : { base }),
     },
+    transport: flags.get("--transport"),
   };
+}
+
+/** The skeleton, each file only when it is not there: what is there is the application's. */
+function scaffold(metamodel: Metamodel, out: string, transport: string | undefined): number {
+  const files = scaffoldFilesOf(metamodel, transport === undefined ? {} : { transport });
+  const written: string[] = [];
+  const kept: string[] = [];
+  for (const [name, source] of Object.entries(files)) {
+    const path = join(out, name);
+    if (existsSync(path)) {
+      kept.push(name);
+      continue;
+    }
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, source);
+    written.push(name);
+  }
+  console.log(
+    `✓ ${aliasOf(metamodel)} → ${out}: written ${written.join(", ") || "nothing"}${kept.length === 0 ? "" : `; kept, already yours: ${kept.join(", ")}`}`,
+  );
+  return 0;
+}
+
+/** The import rules (`codegen/check.ts`): every break said, and a failing exit when any. */
+async function check(args: readonly string[]): Promise<number> {
+  const flags = new Map<string, string>();
+  for (let at = 0; at < args.length; at += 2) {
+    const flag = args[at];
+    const value = args[at + 1];
+    if (
+      flag === undefined ||
+      value === undefined ||
+      !["--root", "--tsconfig"].includes(flag)
+    ) {
+      console.error(USAGE);
+      return 2;
+    }
+    flags.set(flag, value);
+  }
+  const root = flags.get("--root") ?? "src";
+  const tsconfig = flags.get("--tsconfig");
+  let found: Awaited<ReturnType<typeof checkImports>>;
+  try {
+    found = await checkImports(root, tsconfig === undefined ? {} : { tsconfig });
+  } catch (error) {
+    if (!(error instanceof CheckError)) throw error;
+    console.error(`✘ ${error.message}`);
+    return 2;
+  }
+  for (const one of found)
+    console.error(`✘ ${root}/${one.file} imports "${one.imports}": ${one.why}`);
+  if (found.length > 0) return 1;
+  console.log(`✓ ${root}: every import keeps the layers`);
+  return 0;
 }
 
 function main(args: readonly string[]): number {
@@ -74,6 +144,7 @@ function main(args: readonly string[]): number {
     return 2;
   }
   const metamodel = JSON.parse(readFileSync(asked.source, "utf8")) as Metamodel;
+  if (asked.command === "scaffold") return scaffold(metamodel, asked.out, asked.transport);
   const files: Record<string, string> = { "domain.ts": domainFileOf(metamodel) };
   if (metamodel.bindings !== undefined) {
     files["client.ts"] = clientFileOf(metamodel, asked.options);
@@ -87,4 +158,9 @@ function main(args: readonly string[]): number {
   return 0;
 }
 
-process.exitCode = main(process.argv.slice(2));
+const args = process.argv.slice(2);
+if (args[0] === "check")
+  void check(args.slice(1)).then((code) => {
+    process.exitCode = code;
+  });
+else process.exitCode = main(args);

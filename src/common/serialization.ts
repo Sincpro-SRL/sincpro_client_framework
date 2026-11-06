@@ -66,13 +66,12 @@ function bytesOf(text: string): Uint8Array {
   return bytes;
 }
 
-function isBytes(value: unknown): value is Uint8Array | ArrayBuffer | DataView {
-  return (
-    value instanceof Uint8Array || value instanceof ArrayBuffer || value instanceof DataView
-  );
+function isBytes(value: unknown): value is ArrayBufferView | ArrayBuffer {
+  return value instanceof ArrayBuffer || ArrayBuffer.isView(value);
 }
 
-function asBytes(value: Uint8Array | ArrayBuffer | DataView): Uint8Array {
+/** Any binary — a `Uint8Array`, another typed array, a `DataView`, a buffer — as its bytes. */
+function asBytes(value: ArrayBufferView | ArrayBuffer): Uint8Array {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -95,7 +94,12 @@ function written(value: unknown, where: string, seen: Set<object>): JsonValue | 
   seen.add(object);
   try {
     const own = (object as { toJSON?: unknown }).toJSON;
-    if (typeof own === "function") return written(own.call(object), where, seen);
+    if (typeof own === "function") {
+      const said: unknown = own.call(object);
+      // A `toJSON` that answers the object itself says nothing new: it is written as an object.
+      // Still in `seen` while what it said is written: `{ self: this }` is a cycle, not a loop.
+      if (said !== object) return written(said, where, seen);
+    }
     if (object instanceof Map)
       return Object.fromEntries(
         [...object].flatMap(([key, one]) => {
@@ -109,6 +113,8 @@ function written(value: unknown, where: string, seen: Set<object>): JsonValue | 
       );
     const entries: [string, JsonValue][] = [];
     for (const [key, one] of Object.entries(object)) {
+      // Its own way to travel is not a value of it.
+      if (key === "toJSON" && typeof one === "function") continue;
       const done = written(one, `${where}.${key}`, seen);
       if (done !== undefined) entries.push([key, done]);
     }
@@ -143,7 +149,11 @@ function walked(value: unknown): unknown {
   return value;
 }
 
-/** What `valuesOf` wrote, from JSON text or already parsed — each tagged bytes back as bytes. */
+/**
+ * What `valuesOf` wrote, from JSON text or already parsed — each tagged bytes back as bytes. A
+ * string is JSON text: to read values that were written but never sent, go through `pack`
+ * (`readValues(pack(value))`), as the in-memory transport does.
+ */
 export function readValues(text: string | unknown): unknown {
   if (typeof text === "string")
     return JSON.parse(text, (_key, value: unknown) =>

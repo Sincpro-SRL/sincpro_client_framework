@@ -1,4 +1,4 @@
-import type { Metamodel } from "@sincpro/client-framework/codegen/metamodel";
+import type { Metamodel, Schema } from "@sincpro/client-framework/codegen/metamodel";
 
 /**
  * How the generator names what the server names: a TypeScript identifier for a class, a method
@@ -64,6 +64,66 @@ export function isEntity(metamodel: Metamodel, model: string): boolean {
 export function localOf(metamodel: Metamodel, identity: string): string {
   const prefix = `${contextOf(metamodel)}.`;
   return identifierOf(identity.startsWith(prefix) ? identity.slice(prefix.length) : identity);
+}
+
+const ANSWERS = new WeakMap<Metamodel, ReadonlyMap<string, string>>();
+
+/** The output's own name, when it has one a TypeScript type can take. */
+function titleOf(output: Schema | null): string | undefined {
+  if (output === null || output.$ref !== undefined) return undefined;
+  const title = output.title;
+  return typeof title === "string" && /^[A-Za-z_$][\w$]*$/.test(title) ? title : undefined;
+}
+
+function answersOf(metamodel: Metamodel): ReadonlyMap<string, string> {
+  const operations = Object.entries(metamodel.operations);
+  const taken = new Set([
+    ...Object.keys(metamodel.models).map(identifierOf),
+    ...Object.keys(metamodel.$defs ?? {}).map(identifierOf),
+  ]);
+  for (const [identity] of operations) {
+    const local = localOf(metamodel, identity);
+    taken.add(local);
+    taken.add(`${local}Answer`);
+  }
+  // A title is one type when every output that carries it is the same schema — the backend
+  // answering two Commands with one Response class; two different schemas under one title are
+  // two types, and neither takes the name.
+  const shapes = new Map<string, Set<string>>();
+  for (const [, operation] of operations) {
+    const title = titleOf(operation.output);
+    if (title === undefined) continue;
+    const seen = shapes.get(title) ?? new Set<string>();
+    seen.add(JSON.stringify(operation.output));
+    shapes.set(title, seen);
+  }
+  const names = new Map<string, string>();
+  for (const [identity, operation] of operations) {
+    const title = titleOf(operation.output);
+    if (title !== undefined && shapes.get(title)?.size === 1 && !taken.has(title))
+      names.set(identity, title);
+  }
+  return names;
+}
+
+/**
+ * What an operation's answer is called: the backend's own name for it — its output's title,
+ * `ResponseCancelIssue` — when that name is one type (every output with it is the same schema)
+ * and no other type has it; `<Name>Answer` when the output has no name of its own (a model, a
+ * list) or two different shapes share it. A new operation answering with the same Response keeps
+ * the name: regenerating never renames by itself.
+ *
+ * Context: the ubiquitous language. The backend writes `CommandCancelIssue` → `ResponseCancelIssue`,
+ * and a client that calls it `CommandCancelIssueAnswer` makes a person learn two words for one
+ * thing. The `<Name>Answer` it used to write stays as a deprecated alias of the backend's name.
+ */
+export function answerOf(metamodel: Metamodel, identity: string): string {
+  let known = ANSWERS.get(metamodel);
+  if (known === undefined) {
+    known = answersOf(metamodel);
+    ANSWERS.set(metamodel, known);
+  }
+  return known.get(identity) ?? `${localOf(metamodel, identity)}Answer`;
 }
 
 /** The method an operation is called by: `CommandSendIssue` → `sendIssue`. */

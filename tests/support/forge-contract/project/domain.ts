@@ -301,11 +301,14 @@ export type CommandAssignIssueSandbox = {
 };
 
 /** What `CommandAssignIssueSandbox` answers. */
-export type CommandAssignIssueSandboxAnswer = {
+export type ResponseAssignIssueSandbox = {
   issue_id: string;
   previous: string;
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseAssignIssueSandbox`: use that name. */
+export type CommandAssignIssueSandboxAnswer = ResponseAssignIssueSandbox;
 
 /**
  * Close an issue as cancelled, with any queued run.
@@ -317,10 +320,13 @@ export type CommandCancelIssue = {
 };
 
 /** What `CommandCancelIssue` answers. */
-export type CommandCancelIssueAnswer = {
+export type ResponseCancelIssue = {
   issue_id: string;
   resolution: string;
 };
+
+/** @deprecated The backend calls it `ResponseCancelIssue`: use that name. */
+export type CommandCancelIssueAnswer = ResponseCancelIssue;
 
 /**
  * Verify the issue's change and publish its branch. Nothing is published if the checks fail.
@@ -332,12 +338,15 @@ export type CommandDeliverIssue = {
 };
 
 /** What `CommandDeliverIssue` answers. */
-export type CommandDeliverIssueAnswer = {
+export type ResponseRunStep = {
   data?: Record<string, unknown>;
   name: string;
   ok: boolean;
   summary: string;
 };
+
+/** @deprecated The backend calls it `ResponseRunStep`: use that name. */
+export type CommandDeliverIssueAnswer = ResponseRunStep;
 
 /**
  * Change a project's definition: a draft, a save or a discard.
@@ -365,7 +374,7 @@ export type CommandEditProject = {
 };
 
 /** What `CommandEditProject` answers. */
-export type CommandEditProjectAnswer = {
+export type ResponseEditProject = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -379,6 +388,9 @@ export type CommandEditProjectAnswer = {
   states?: Record<string, FieldState>;
   warnings?: FormWarning[];
 };
+
+/** @deprecated The backend calls it `ResponseEditProject`: use that name. */
+export type CommandEditProjectAnswer = ResponseEditProject;
 
 /**
  * One issue, by its id.
@@ -404,7 +416,7 @@ export type CommandGetIssue = {
 };
 
 /** What `CommandGetIssue` answers. */
-export type CommandGetIssueAnswer = {
+export type ResponseGetIssue = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -417,6 +429,9 @@ export type CommandGetIssueAnswer = {
   model_version?: string;
 };
 
+/** @deprecated The backend calls it `ResponseGetIssue`: use that name. */
+export type CommandGetIssueAnswer = ResponseGetIssue;
+
 /**
  * Get an issue's Sandbox ready before an agent works on it — or say why it is not.
  *
@@ -428,13 +443,8 @@ export type CommandGetIssueSandboxReady = {
   run_id?: string | null;
 };
 
-/** What `CommandGetIssueSandboxReady` answers. */
-export type CommandGetIssueSandboxReadyAnswer = {
-  data?: Record<string, unknown>;
-  name: string;
-  ok: boolean;
-  summary: string;
-};
+/** @deprecated The backend calls it `ResponseRunStep`: use that name. */
+export type CommandGetIssueSandboxReadyAnswer = ResponseRunStep;
 
 /**
  * One project, by its id.
@@ -460,7 +470,7 @@ export type CommandGetProject = {
 };
 
 /** What `CommandGetProject` answers. */
-export type CommandGetProjectAnswer = {
+export type ResponseGetProject = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -472,6 +482,9 @@ export type CommandGetProjectAnswer = {
   model_version?: string;
   project: Project;
 };
+
+/** @deprecated The backend calls it `ResponseGetProject`: use that name. */
+export type CommandGetProjectAnswer = ResponseGetProject;
 
 /**
  * One run of an issue (``<issue id>.<n>``): its status, its steps with their summaries and
@@ -498,7 +511,7 @@ export type CommandGetRun = {
 };
 
 /** What `CommandGetRun` answers. */
-export type CommandGetRunAnswer = {
+export type ResponseGetRun = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -510,6 +523,9 @@ export type CommandGetRunAnswer = {
   model_version?: string;
   run: Run;
 };
+
+/** @deprecated The backend calls it `ResponseGetRun`: use that name. */
+export type CommandGetRunAnswer = ResponseGetRun;
 
 /**
  * The issues of a project, newest first, each with its status: idle, running, finished,
@@ -542,7 +558,7 @@ export type CommandListIssues = {
 };
 
 /** What `CommandListIssues` answers. */
-export type CommandListIssuesAnswer = {
+export type ResponseListIssues = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -564,6 +580,9 @@ export type CommandListIssuesAnswer = {
    */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseListIssues`: use that name. */
+export type CommandListIssuesAnswer = ResponseListIssues;
 
 /**
  * The facts of the project context — projects and issues — newest first.
@@ -592,7 +611,7 @@ export type CommandListProjectEvents = {
 };
 
 /** What `CommandListProjectEvents` answers. */
-export type CommandListProjectEventsAnswer = {
+export type ResponseListProjectEvents = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -614,6 +633,9 @@ export type CommandListProjectEventsAnswer = {
    */
   model_version?: string;
 };
+
+/** @deprecated The backend calls it `ResponseListProjectEvents`: use that name. */
+export type CommandListProjectEventsAnswer = ResponseListProjectEvents;
 
 /**
  * The projects of a tenant: its own and those shared with it. Use a project's id to open or
@@ -646,7 +668,7 @@ export type CommandListProjects = {
 };
 
 /** What `CommandListProjects` answers. */
-export type CommandListProjectsAnswer = {
+export type ResponseListProjects = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -669,6 +691,9 @@ export type CommandListProjectsAnswer = {
   projects: Project[];
 };
 
+/** @deprecated The backend calls it `ResponseListProjects`: use that name. */
+export type CommandListProjectsAnswer = ResponseListProjects;
+
 /**
  * Open an issue: ask for work on a system of the requester's tenant. Give the project and
  * the request in their words. It does not start the harness: send a message, or queue it.
@@ -687,7 +712,7 @@ export type CommandOpenIssue = {
 };
 
 /** What `CommandOpenIssue` answers. */
-export type CommandOpenIssueAnswer = {
+export type ResponseOpenIssue = {
   /** The new issue's identity, as the model publishes it (``identity``): a screen becomes it. */
   id: string;
   issue_id: string;
@@ -697,6 +722,9 @@ export type CommandOpenIssueAnswer = {
   title: string;
   version: number;
 };
+
+/** @deprecated The backend calls it `ResponseOpenIssue`: use that name. */
+export type CommandOpenIssueAnswer = ResponseOpenIssue;
 
 /**
  * Ask forge to run the harness on an issue in the background. Returns at once.
@@ -708,11 +736,14 @@ export type CommandQueueIssueRun = {
 };
 
 /** What `CommandQueueIssueRun` answers. */
-export type CommandQueueIssueRunAnswer = {
+export type ResponseQueueIssueRun = {
   issue_id: string;
   run_id: string;
   status: string;
 };
+
+/** @deprecated The backend calls it `ResponseQueueIssueRun`: use that name. */
+export type CommandQueueIssueRunAnswer = ResponseQueueIssueRun;
 
 /**
  * Register a system forge works on: its repositories, where its sandboxes run, its agent and how a change is verified.
@@ -732,7 +763,7 @@ export type CommandRegisterProject = {
 };
 
 /** What `CommandRegisterProject` answers. */
-export type CommandRegisterProjectAnswer = {
+export type ResponseRegisterProject = {
   /** The new record's identity, as the model publishes it (``identity``): a screen becomes it. */
   id: string;
   project_id: string;
@@ -740,6 +771,9 @@ export type CommandRegisterProjectAnswer = {
   tenant_id: string;
   version: number;
 };
+
+/** @deprecated The backend calls it `ResponseRegisterProject`: use that name. */
+export type CommandRegisterProjectAnswer = ResponseRegisterProject;
 
 /**
  * Apply the project's current base again over the issue's Sandbox.
@@ -753,12 +787,15 @@ export type CommandResetIssueSandbox = {
 };
 
 /** What `CommandResetIssueSandbox` answers. */
-export type CommandResetIssueSandboxAnswer = {
+export type ResponseResetIssueSandbox = {
   base_ref: string;
   files: number;
   issue_id: string;
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseResetIssueSandbox`: use that name. */
+export type CommandResetIssueSandboxAnswer = ResponseResetIssueSandbox;
 
 /**
  * Save the message and queue one session. The subscriber starts the harness.
@@ -771,11 +808,14 @@ export type CommandSendIssue = {
 };
 
 /** What `CommandSendIssue` answers. */
-export type CommandSendIssueAnswer = {
+export type ResponseSendIssue = {
   issue_id: string;
   run_id: string;
   status: string;
 };
+
+/** @deprecated The backend calls it `ResponseSendIssue`: use that name. */
+export type CommandSendIssueAnswer = ResponseSendIssue;
 
 /**
  * Group a project under a tenant, or under none.
@@ -789,10 +829,13 @@ export type CommandSetProjectTenant = {
 };
 
 /** What `CommandSetProjectTenant` answers. */
-export type CommandSetProjectTenantAnswer = {
+export type ResponseSetProjectTenant = {
   project_id: string;
   tenant_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseSetProjectTenant`: use that name. */
+export type CommandSetProjectTenantAnswer = ResponseSetProjectTenant;
 
 /**
  * Share a project with another tenant: its users may open issues on it.
@@ -805,10 +848,13 @@ export type CommandShareProject = {
 };
 
 /** What `CommandShareProject` answers. */
-export type CommandShareProjectAnswer = {
+export type ResponseShareProject = {
   project_id: string;
   tenant_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseShareProject`: use that name. */
+export type CommandShareProjectAnswer = ResponseShareProject;
 
 /**
  * Stop a running session. A later message resumes the same thread.
@@ -820,10 +866,13 @@ export type CommandStopIssue = {
 };
 
 /** What `CommandStopIssue` answers. */
-export type CommandStopIssueAnswer = {
+export type ResponseStopIssue = {
   issue_id: string;
   status: string;
 };
+
+/** @deprecated The backend calls it `ResponseStopIssue`: use that name. */
+export type CommandStopIssueAnswer = ResponseStopIssue;
 
 /**
  * Stop sharing a project with a tenant. Its home tenant is unchanged.
@@ -836,7 +885,10 @@ export type CommandUnshareProject = {
 };
 
 /** What `CommandUnshareProject` answers. */
-export type CommandUnshareProjectAnswer = {
+export type ResponseUnshareProject = {
   project_id: string;
   tenant_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseUnshareProject`: use that name. */
+export type CommandUnshareProjectAnswer = ResponseUnshareProject;

@@ -22,14 +22,14 @@ export const issues = entity<
     stopIssue: Omit<dto.CommandStopIssue, "issue_id">;
   },
   {
-    assignIssueSandbox: dto.CommandAssignIssueSandboxAnswer;
-    cancelIssue: dto.CommandCancelIssueAnswer;
-    deliverIssue: dto.CommandDeliverIssueAnswer;
-    openIssue: dto.CommandOpenIssueAnswer;
-    queueIssueRun: dto.CommandQueueIssueRunAnswer;
-    resetIssueSandbox: dto.CommandResetIssueSandboxAnswer;
-    sendIssue: dto.CommandSendIssueAnswer;
-    stopIssue: dto.CommandStopIssueAnswer;
+    assignIssueSandbox: dto.ResponseAssignIssueSandbox;
+    cancelIssue: dto.ResponseCancelIssue;
+    deliverIssue: dto.ResponseRunStep;
+    openIssue: dto.ResponseOpenIssue;
+    queueIssueRun: dto.ResponseQueueIssueRun;
+    resetIssueSandbox: dto.ResponseResetIssueSandbox;
+    sendIssue: dto.ResponseSendIssue;
+    stopIssue: dto.ResponseStopIssue;
   }
 >("project:issue", {
   list: "/issues",
@@ -59,11 +59,11 @@ export const projects = entity<
     unshareProject: Omit<dto.CommandUnshareProject, "project_id">;
   },
   {
-    openIssue: dto.CommandOpenIssueAnswer;
-    registerProject: dto.CommandRegisterProjectAnswer;
-    setProjectTenant: dto.CommandSetProjectTenantAnswer;
-    shareProject: dto.CommandShareProjectAnswer;
-    unshareProject: dto.CommandUnshareProjectAnswer;
+    openIssue: dto.ResponseOpenIssue;
+    registerProject: dto.ResponseRegisterProject;
+    setProjectTenant: dto.ResponseSetProjectTenant;
+    shareProject: dto.ResponseShareProject;
+    unshareProject: dto.ResponseUnshareProject;
   }
 >("project:project", {
   list: "/projects",

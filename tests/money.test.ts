@@ -29,6 +29,10 @@ test("only rounding rounds — half up, away from zero, as the backend's ROUND_H
   assert.equal(new Decimal("-1").dividedBy("8", 2).toString(), "-0.13");
   assert.equal(new Decimal("1.5").dividedBy("0.5", 0).toString(), "3");
   assert.throws(() => new Decimal("1").dividedBy("0", 2), /divided by zero/);
+  // Digits after the point are a whole number from 0: anything else is refused, never a wrong amount.
+  assert.throws(() => new Decimal("125").rounded(-1), /-1 decimals/);
+  assert.throws(() => new Decimal("1").dividedBy("3", 1.5), /1\.5 decimals/);
+  assert.throws(() => new Money("125", "BOB").rounded(-1), /-1 decimals/);
 });
 
 test("decimals compare by amount, not by text: 10.5 is 10.50", () => {

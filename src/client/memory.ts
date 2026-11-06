@@ -6,7 +6,7 @@ import {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/transport";
-import { readValues, valuesOf } from "@sincpro/client-framework/common/serialization";
+import { pack, readValues } from "@sincpro/client-framework/common/serialization";
 import type { AnyRecord, Criteria, Meta, Problem } from "@sincpro/criteria";
 import { answer, answerGroups } from "@sincpro/criteria/engine";
 
@@ -51,13 +51,14 @@ export type MemoryOptions = {
 };
 
 /**
- * A deep copy written and read by the wire's rules (`valuesOf`, `readValues`): what a real server
+ * A deep copy written and read by the wire's rules (`pack`, `readValues`): what a real server
  * would have received and answered — a `Money` as `{ amount, currency }`, a `Decimal` as its text,
  * a `Date` as an instant, bytes as bytes — the same on every platform. `structuredClone` kept a
  * `Date` a `Date` in a browser and a JSON round trip made it text on a phone; neither is a wire.
  */
 const copyOf = <T>(value: T): T =>
-  value === undefined ? value : (readValues(valuesOf(value)) as T);
+  // Through text, as a wire is: an answer that is a string («"2.50"», an instant) stays one.
+  value === undefined ? value : (readValues(pack(value)) as T);
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();

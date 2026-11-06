@@ -209,7 +209,7 @@ export function clientOf(transport: Transport) {
   return bindable(transport, (transport) => ({
     /** Make an issue's next runs work on an existing Sandbox of its project. */
     assignIssueSandbox: (body: dto.CommandAssignIssueSandbox, options?: SendOptions) =>
-      transport.send<dto.CommandAssignIssueSandboxAnswer>(
+      transport.send<dto.ResponseAssignIssueSandbox>(
         "PUT",
         pathFor(routes.assignIssueSandbox, undefined, body),
         body,
@@ -218,7 +218,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Close an issue as cancelled, with any queued run. */
     cancelIssue: (body: dto.CommandCancelIssue, options?: SendOptions) =>
-      transport.send<dto.CommandCancelIssueAnswer>(
+      transport.send<dto.ResponseCancelIssue>(
         "POST",
         pathFor(routes.cancelIssue, undefined, body),
         body,
@@ -227,7 +227,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Verify the issue's change and publish its branch. Nothing is published if the checks fail. */
     deliverIssue: (body: dto.CommandDeliverIssue, options?: SendOptions) =>
-      transport.send<dto.CommandDeliverIssueAnswer>(
+      transport.send<dto.ResponseRunStep>(
         "POST",
         pathFor(routes.deliverIssue, undefined, body),
         body,
@@ -236,7 +236,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Change a project's definition: a draft, a save or a discard. */
     editProject: (body: dto.CommandEditProject, options?: SendOptions) =>
-      transport.send<dto.CommandEditProjectAnswer>(
+      transport.send<dto.ResponseEditProject>(
         "PUT",
         pathFor(routes.editProject, body.id === undefined ? undefined : String(body.id), body),
         body,
@@ -248,7 +248,7 @@ export function clientOf(transport: Transport) {
       transport.one<dto.Issue>(`/issues/${encodeURIComponent(id)}`),
     /** Get an issue's Sandbox ready before an agent works on it — or say why it is not. */
     getIssueSandboxReady: (body: dto.CommandGetIssueSandboxReady, options?: SendOptions) =>
-      transport.send<dto.CommandGetIssueSandboxReadyAnswer>(
+      transport.send<dto.ResponseRunStep>(
         "POST",
         pathFor(routes.getIssueSandboxReady, undefined, body),
         body,
@@ -285,7 +285,7 @@ export function clientOf(transport: Transport) {
      * the request in their words. It does not start the harness: send a message, or queue it.
      */
     openIssue: (body: dto.CommandOpenIssue, options?: SendOptions) =>
-      transport.send<dto.CommandOpenIssueAnswer>(
+      transport.send<dto.ResponseOpenIssue>(
         "POST",
         pathFor(routes.openIssue, undefined, body),
         body,
@@ -294,7 +294,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Ask forge to run the harness on an issue in the background. Returns at once. */
     queueIssueRun: (body: dto.CommandQueueIssueRun, options?: SendOptions) =>
-      transport.send<dto.CommandQueueIssueRunAnswer>(
+      transport.send<dto.ResponseQueueIssueRun>(
         "POST",
         pathFor(routes.queueIssueRun, undefined, body),
         body,
@@ -303,7 +303,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Register a system forge works on: its repositories, where its sandboxes run, its agent and how a change is verified. */
     registerProject: (body: dto.CommandRegisterProject, options?: SendOptions) =>
-      transport.send<dto.CommandRegisterProjectAnswer>(
+      transport.send<dto.ResponseRegisterProject>(
         "POST",
         pathFor(routes.registerProject, undefined, body),
         body,
@@ -312,7 +312,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Apply the project's current base again over the issue's Sandbox. */
     resetIssueSandbox: (body: dto.CommandResetIssueSandbox, options?: SendOptions) =>
-      transport.send<dto.CommandResetIssueSandboxAnswer>(
+      transport.send<dto.ResponseResetIssueSandbox>(
         "POST",
         pathFor(routes.resetIssueSandbox, undefined, body),
         body,
@@ -321,7 +321,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Save the message and queue one session. The subscriber starts the harness. */
     sendIssue: (body: dto.CommandSendIssue, options?: SendOptions) =>
-      transport.send<dto.CommandSendIssueAnswer>(
+      transport.send<dto.ResponseSendIssue>(
         "POST",
         pathFor(routes.sendIssue, undefined, body),
         body,
@@ -330,7 +330,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Group a project under a tenant, or under none. */
     setProjectTenant: (body: dto.CommandSetProjectTenant, options?: SendOptions) =>
-      transport.send<dto.CommandSetProjectTenantAnswer>(
+      transport.send<dto.ResponseSetProjectTenant>(
         "PUT",
         pathFor(routes.setProjectTenant, undefined, body),
         body,
@@ -339,7 +339,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Share a project with another tenant: its users may open issues on it. */
     shareProject: (body: dto.CommandShareProject, options?: SendOptions) =>
-      transport.send<dto.CommandShareProjectAnswer>(
+      transport.send<dto.ResponseShareProject>(
         "POST",
         pathFor(routes.shareProject, undefined, body),
         body,
@@ -348,7 +348,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Stop a running session. A later message resumes the same thread. */
     stopIssue: (body: dto.CommandStopIssue, options?: SendOptions) =>
-      transport.send<dto.CommandStopIssueAnswer>(
+      transport.send<dto.ResponseStopIssue>(
         "POST",
         pathFor(routes.stopIssue, undefined, body),
         body,
@@ -357,7 +357,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Stop sharing a project with a tenant. Its home tenant is unchanged. */
     unshareProject: (body: dto.CommandUnshareProject, options?: SendOptions) =>
-      transport.send<dto.CommandUnshareProjectAnswer>(
+      transport.send<dto.ResponseUnshareProject>(
         "POST",
         pathFor(routes.unshareProject, undefined, body),
         body,

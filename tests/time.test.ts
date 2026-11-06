@@ -47,6 +47,13 @@ test("a day is a day of the calendar: «today» depends on the company's zone, n
   assert.equal(isDay("2026-03-12"), true);
   assert.equal(isDay("2026-03-12T00:00:00Z"), false);
   assert.equal(isDay("2026-13-40"), false);
+  // A day the calendar does not have, which `Date` would roll into the next month.
+  assert.equal(isDay("2026-02-30"), false);
+  assert.equal(isDay("2026-02-29"), false);
+  assert.equal(isDay("2028-02-29"), true);
+  // A day alone is not an instant: never read as midnight in UTC, the day before here.
+  assert.equal(dayOf("2026-11-07", "America/La_Paz"), null);
+  assert.equal(wallTimeOf("2026-11-07", "America/La_Paz"), null);
   // 02:00 UTC on the 13th is still the 12th in La Paz.
   assert.equal(dayOf("2026-03-13T02:00:00Z", "America/La_Paz"), "2026-03-12");
   assert.equal(dayOf("2026-03-13T02:00:00Z", "Europe/Madrid"), "2026-03-13");

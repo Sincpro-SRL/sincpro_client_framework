@@ -194,7 +194,7 @@ export function clientOf(transport: Transport) {
   return bindable(transport, (transport) => ({
     /** Put a user in a group. */
     addMember: (body: dto.CommandAddMember, options?: SendOptions) =>
-      transport.send<dto.CommandAddMemberAnswer>(
+      transport.send<dto.ResponseAddMember>(
         "POST",
         pathFor(routes.addMember, undefined, body),
         body,
@@ -206,7 +206,7 @@ export function clientOf(transport: Transport) {
      * ``POST /v1/users/{email}/tenants``.
      */
     addUser: (body: dto.CommandAddUser, options?: SendOptions) =>
-      transport.send<dto.CommandAddUserAnswer>(
+      transport.send<dto.ResponseAddUser>(
         "POST",
         pathFor(routes.addUser, undefined, body),
         body,
@@ -215,7 +215,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Create a group of users, in a tenant or across tenants. */
     createGroup: (body: dto.CommandCreateGroup, options?: SendOptions) =>
-      transport.send<dto.CommandCreateGroupAnswer>(
+      transport.send<dto.ResponseCreateGroup>(
         "POST",
         pathFor(routes.createGroup, undefined, body),
         body,
@@ -224,7 +224,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Register a client of Sincpro as a tenant of forge. */
     createTenant: (body: dto.CommandCreateTenant, options?: SendOptions) =>
-      transport.send<dto.CommandCreateTenantAnswer>(
+      transport.send<dto.ResponseCreateTenant>(
         "POST",
         pathFor(routes.createTenant, undefined, body),
         body,
@@ -233,7 +233,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Change a group's name: a draft, a save or a discard. */
     editGroup: (body: dto.CommandEditGroup, options?: SendOptions) =>
-      transport.send<dto.CommandEditGroupAnswer>(
+      transport.send<dto.ResponseEditGroup>(
         "PUT",
         pathFor(routes.editGroup, body.id === undefined ? undefined : String(body.id), body),
         body,
@@ -242,7 +242,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Change a tenant's name or whether it is active: a draft, a save or a discard. */
     editTenant: (body: dto.CommandEditTenant, options?: SendOptions) =>
-      transport.send<dto.CommandEditTenantAnswer>(
+      transport.send<dto.ResponseEditTenant>(
         "PUT",
         pathFor(routes.editTenant, body.id === undefined ? undefined : String(body.id), body),
         body,
@@ -251,7 +251,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Change a user's name: a draft, a save or a discard. */
     editUser: (body: dto.CommandEditUser, options?: SendOptions) =>
-      transport.send<dto.CommandEditUserAnswer>(
+      transport.send<dto.ResponseEditUser>(
         "PUT",
         pathFor(routes.editUser, body.id === undefined ? undefined : String(body.id), body),
         body,
@@ -260,7 +260,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Who calls and what they may do: the admin, or a user and the tenant they act in. */
     getCaller: (params?: Partial<Record<"criteria" | "cursor", string>>) =>
-      readRoute<dto.CommandGetCallerAnswer>(transport, listRoute("/me", params)),
+      readRoute<dto.ResponseGetCaller>(transport, listRoute("/me", params)),
     /** One group, by its id. */
     getGroup: (id: string) =>
       transport.one<dto.Group>(`/groups/${encodeURIComponent(id)}`),
@@ -272,7 +272,7 @@ export function clientOf(transport: Transport) {
       transport.one<dto.User>(`/users/${encodeURIComponent(id)}`),
     /** A bearer token for a user: the admin issues anyone's, a user renews their own. */
     issueToken: (body: dto.CommandIssueToken, options?: SendOptions) =>
-      transport.send<dto.CommandIssueTokenAnswer>(
+      transport.send<dto.ResponseIssueToken>(
         "POST",
         pathFor(routes.issueToken, undefined, body),
         body,
@@ -281,7 +281,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Add a user to a tenant with a role; they keep the tenants they already had. */
     joinTenant: (body: dto.CommandJoinTenant, options?: SendOptions) =>
-      transport.send<dto.CommandJoinTenantAnswer>(
+      transport.send<dto.ResponseJoinTenant>(
         "POST",
         pathFor(routes.joinTenant, undefined, body),
         body,
@@ -290,7 +290,7 @@ export function clientOf(transport: Transport) {
       ),
     /** Take a user out of a tenant; they keep the others. */
     leaveTenant: (body: dto.CommandLeaveTenant, options?: SendOptions) =>
-      transport.send<dto.CommandLeaveTenantAnswer>(
+      transport.send<dto.ResponseLeaveTenant>(
         "POST",
         pathFor(routes.leaveTenant, undefined, body),
         body,
@@ -314,7 +314,7 @@ export function clientOf(transport: Transport) {
       transport.list<dto.User>(listRoute("/users", params), criteria),
     /** Take a user out of a group. */
     removeMember: (body: dto.CommandRemoveMember, options?: SendOptions) =>
-      transport.send<dto.CommandRemoveMemberAnswer>(
+      transport.send<dto.ResponseRemoveMember>(
         "POST",
         pathFor(routes.removeMember, undefined, body),
         body,

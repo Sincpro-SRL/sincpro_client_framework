@@ -74,6 +74,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** `"2026-03-12T14:30:00Z"` → `"2026-03-12T10:30"` in `America/La_Paz`: the wall clock there,
  *  as a date-and-time control reads it. `null` when it is not an instant. */
 export function wallTimeOf(instant: string, timeZone: string): string | null {
+  // A day alone is not an instant: `Date` would read it as midnight in UTC, the day before here.
+  if (!/T\d{2}:\d{2}/.test(instant)) return null;
   const at = Date.parse(instant);
   if (Number.isNaN(at)) return null;
   const wall = new Date(wallAt(at, timeZone));
@@ -102,9 +104,12 @@ export function instantOf(wall: string, timeZone: string): string | null {
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** A day of the calendar as the server writes it: `"2026-03-12"` — never an instant. */
+/** A day of the calendar as the server writes it: `"2026-03-12"` — never an instant, never a day
+ *  the calendar does not have (`"2026-02-30"`, which `Date` would roll into March). */
 export function isDay(text: string): boolean {
-  return DAY.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`));
+  if (!DAY.test(text)) return false;
+  const at = Date.parse(`${text}T00:00:00Z`);
+  return !Number.isNaN(at) && new Date(at).toISOString().slice(0, 10) === text;
 }
 
 /** The day it is at `instant` on the wall clock of `timeZone`: what «today» means for a company.

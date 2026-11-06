@@ -68,10 +68,14 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@sincpro/criteria": "^2.0.0"
+    "@sincpro/criteria": "^2.0.0",
+    "typescript": ">=5.5 <7"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "typescript": {
       "optional": true
     }
   },

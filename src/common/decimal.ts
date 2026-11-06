@@ -25,6 +25,15 @@ function pow10(exponent: number): bigint {
   return TEN ** BigInt(exponent);
 }
 
+/** How many digits after the point a result keeps: a whole number from 0 up. */
+function decimalsGiven(decimals: number): number {
+  if (!Number.isInteger(decimals) || decimals < 0)
+    throw new RangeError(
+      `${decimals} decimals: a decimal keeps 0 or more whole digits after the point`,
+    );
+  return decimals;
+}
+
 /** `units / divisor` rounded half up, away from zero. */
 function halfUp(units: bigint, divisor: bigint): bigint {
   const quotient = units / divisor;
@@ -111,6 +120,7 @@ export class Decimal {
 
   /** This over `divisor`, with `decimals` digits after the point, rounded half up. */
   dividedBy(divisor: DecimalLike, decimals: number): Decimal {
+    decimalsGiven(decimals);
     const by = Decimal.of(divisor);
     if (by.units === 0n) throw new RangeError("a decimal divided by zero");
     const numerator = this.units * pow10(by.scale + decimals);
@@ -120,6 +130,7 @@ export class Decimal {
 
   /** With `decimals` digits after the point: rounded half up when it had more, padded when fewer. */
   rounded(decimals: number): Decimal {
+    decimalsGiven(decimals);
     if (decimals >= this.scale)
       return Decimal.at(this.units * pow10(decimals - this.scale), decimals);
     return Decimal.at(halfUp(this.units, pow10(this.scale - decimals)), decimals);

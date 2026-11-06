@@ -506,3 +506,74 @@ test("a reference outside the metamodel is refused, never guessed", () => {
 test("the generated files are checked by the compiler: this file only has to compile", () => {
   assert.equal(typeof useForgeAsGenerated, "function");
 });
+
+/** `shop` where the backend named some answers, as pydantic titles a Response DTO. */
+function titled(titles: Readonly<Record<string, string>>): Metamodel {
+  return {
+    ...shop,
+    operations: Object.fromEntries(
+      Object.entries(shop.operations).map(([identity, one]) => [
+        identity,
+        titles[identity] === undefined
+          ? one
+          : {
+              ...one,
+              output: {
+                title: titles[identity],
+                type: "object",
+                properties: { order_id: { type: "string" } },
+              },
+            },
+      ]),
+    ),
+  };
+}
+
+test("an answer goes by the backend's own name, and the old <Name>Answer stays as a deprecated alias", () => {
+  const named = titled({ "shop.CommandPlaceOrder": "ResponsePlaceOrder" });
+  const domain = domainFileOf(named);
+  assert.ok(domain.includes("export type ResponsePlaceOrder = {\n  order_id?: string;\n};"));
+  assert.ok(
+    domain.includes(
+      "/** @deprecated The backend calls it `ResponsePlaceOrder`: use that name. */\nexport type CommandPlaceOrderAnswer = ResponsePlaceOrder;",
+    ),
+  );
+  assert.ok(
+    entitiesFileOf(named, options).includes("    placeOrder: dto.ResponsePlaceOrder;"),
+  );
+  assert.ok(clientFileOf(named, options).includes("transport.send<dto.ResponsePlaceOrder>("));
+  // Without a name of its own, as before.
+  assert.ok(domain.includes("export type CommandPayOrderAnswer = null;"));
+});
+
+test("a Response two Commands answer with is one type, written once; a name two shapes share is nobody's", () => {
+  const shared = titled({
+    "shop.CommandPlaceOrder": "ResponseOrder",
+    "shop.CommandPayOrder": "ResponseOrder",
+  });
+  const domain = domainFileOf(shared);
+  assert.equal(domain.split("export type ResponseOrder = {").length - 1, 1);
+  assert.ok(domain.includes("export type CommandPlaceOrderAnswer = ResponseOrder;"));
+  assert.ok(domain.includes("export type CommandPayOrderAnswer = ResponseOrder;"));
+  // Two different shapes under one title are two types: neither takes the name.
+  const differ: Metamodel = {
+    ...shared,
+    operations: {
+      ...shared.operations,
+      "shop.CommandPayOrder": {
+        ...shared.operations["shop.CommandPayOrder"]!,
+        output: {
+          title: "ResponseOrder",
+          type: "object",
+          properties: { paid: { type: "boolean" } },
+        },
+      },
+    },
+  };
+  const two = domainFileOf(differ);
+  assert.ok(!two.includes("export type ResponseOrder"));
+  assert.ok(two.includes("export type CommandPlaceOrderAnswer = {"));
+  // A name another type has is not taken either.
+  const clash = domainFileOf(titled({ "shop.CommandPlaceOrder": "Order" }));
+  assert.ok(clash.includes("export type CommandPlaceOrderAnswer = {"));
+});

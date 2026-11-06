@@ -98,6 +98,7 @@ export {
   wallTimeOf,
 } from "@sincpro/client-framework/common/time";
 export {
+  CONTEXT_HEADER,
   type ContextCodec,
   plainCodec,
   travelling,
@@ -158,3 +159,5 @@ export {
   processContext,
   type ProcessOptions,
 } from "@sincpro/client-framework/services/process";
+export { reportError } from "@sincpro/client-framework/services/report";
+export { screensTransport } from "@sincpro/client-framework/services/screens";

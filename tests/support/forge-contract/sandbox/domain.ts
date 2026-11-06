@@ -187,10 +187,13 @@ export type CommandCreateSandbox = {
 };
 
 /** What `CommandCreateSandbox` answers. */
-export type CommandCreateSandboxAnswer = {
+export type ResponseCreateSandbox = {
   sandbox_id: string;
   workspace_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseCreateSandbox`: use that name. */
+export type CommandCreateSandboxAnswer = ResponseCreateSandbox;
 
 /**
  * Publish a workspace's verified change: one branch per repository and, with a review
@@ -225,7 +228,7 @@ export type CommandDeliver = {
 };
 
 /** What `CommandDeliver` answers. */
-export type CommandDeliverAnswer = {
+export type ResponseDeliver = {
   /** One per repository in the delivery. */
   changes: DeliveredChange[];
   /**
@@ -241,6 +244,9 @@ export type CommandDeliverAnswer = {
   workspace_id: string;
 };
 
+/** @deprecated The backend calls it `ResponseDeliver`: use that name. */
+export type CommandDeliverAnswer = ResponseDeliver;
+
 /**
  * Deploy a Sandbox with its provider, from a source and parameters.
  *
@@ -254,10 +260,13 @@ export type CommandDeploySandbox = {
 };
 
 /** What `CommandDeploySandbox` answers. */
-export type CommandDeploySandboxAnswer = {
+export type ResponseDeploySandbox = {
   provision: SandboxProvision;
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseDeploySandbox`: use that name. */
+export type CommandDeploySandboxAnswer = ResponseDeploySandbox;
 
 /**
  * Destroy a Sandbox nobody holds; with ``dry_run``, say what would go.
@@ -271,10 +280,13 @@ export type CommandDestroySandbox = {
 };
 
 /** What `CommandDestroySandbox` answers. */
-export type CommandDestroySandboxAnswer = {
+export type ResponseDestroySandbox = {
   reference: string;
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseDestroySandbox`: use that name. */
+export type CommandDestroySandboxAnswer = ResponseDestroySandbox;
 
 /**
  * What a workspace's change branch delivered: its branches and their review requests.
@@ -300,7 +312,7 @@ export type CommandGetDeliveryStatus = {
 };
 
 /** What `CommandGetDeliveryStatus` answers. */
-export type CommandGetDeliveryStatusAnswer = {
+export type ResponseGetDeliveryStatus = {
   changes: ChangeStatus[];
   /**
    * Of the change set: ``MERGED`` once every review request is merged, ``CLOSED`` if any was
@@ -312,6 +324,9 @@ export type CommandGetDeliveryStatusAnswer = {
   verdict: string;
   workspace_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseGetDeliveryStatus`: use that name. */
+export type CommandGetDeliveryStatusAnswer = ResponseGetDeliveryStatus;
 
 /**
  * One Sandbox: its lifecycle, its Workspace and its deployment.
@@ -337,7 +352,7 @@ export type CommandGetSandbox = {
 };
 
 /** What `CommandGetSandbox` answers. */
-export type CommandGetSandboxAnswer = {
+export type ResponseGetSandbox = {
   /**
    * `None`: the record as stored. Otherwise its owner's draft, asked for with `draft=True`
    * (`Get`) or answered by an edit (`Edit`).
@@ -349,6 +364,9 @@ export type CommandGetSandboxAnswer = {
   model_version?: string;
   sandbox: Sandbox;
 };
+
+/** @deprecated The backend calls it `ResponseGetSandbox`: use that name. */
+export type CommandGetSandboxAnswer = ResponseGetSandbox;
 
 /**
  * The Sandboxes no run may take now: reserved, or uncertain.
@@ -371,9 +389,12 @@ export type CommandListOccupiedSandboxes = {
 };
 
 /** What `CommandListOccupiedSandboxes` answers. */
-export type CommandListOccupiedSandboxesAnswer = {
+export type ResponseListOccupiedSandboxes = {
   sandboxes: OccupiedSandbox[];
 };
+
+/** @deprecated The backend calls it `ResponseListOccupiedSandboxes`: use that name. */
+export type CommandListOccupiedSandboxesAnswer = ResponseListOccupiedSandboxes;
 
 /**
  * Who holds each Sandbox, or held it last.
@@ -402,7 +423,7 @@ export type CommandListReservations = {
 };
 
 /** What `CommandListReservations` answers. */
-export type CommandListReservationsAnswer = {
+export type ResponseListReservations = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -424,6 +445,9 @@ export type CommandListReservationsAnswer = {
   model_version?: string;
   reservations: Reservation[];
 };
+
+/** @deprecated The backend calls it `ResponseListReservations`: use that name. */
+export type CommandListReservationsAnswer = ResponseListReservations;
 
 /**
  * The facts of the sandbox context — sandboxes, workspaces, deliveries — newest first.
@@ -452,7 +476,7 @@ export type CommandListSandboxEvents = {
 };
 
 /** What `CommandListSandboxEvents` answers. */
-export type CommandListSandboxEventsAnswer = {
+export type ResponseListSandboxEvents = {
   /**
    * How many match in total, capped unless the criteria asked for the exact number.
    * `exact=False` means *at least* that many.
@@ -475,6 +499,9 @@ export type CommandListSandboxEventsAnswer = {
   model_version?: string;
 };
 
+/** @deprecated The backend calls it `ResponseListSandboxEvents`: use that name. */
+export type CommandListSandboxEventsAnswer = ResponseListSandboxEvents;
+
 /**
  * Free a Sandbox left uncertain, once a person confirmed nothing is still writing in it.
  *
@@ -487,9 +514,12 @@ export type CommandReconcileSandbox = {
 };
 
 /** What `CommandReconcileSandbox` answers. */
-export type CommandReconcileSandboxAnswer = {
+export type ResponseReconcileSandbox = {
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseReconcileSandbox`: use that name. */
+export type CommandReconcileSandboxAnswer = ResponseReconcileSandbox;
 
 /**
  * Record the state of a Sandbox's instrumentation (logs, traces) as its provider reports it.
@@ -503,11 +533,14 @@ export type CommandRecordInstrumentation = {
 };
 
 /** What `CommandRecordInstrumentation` answers. */
-export type CommandRecordInstrumentationAnswer = {
+export type ResponseRecordInstrumentation = {
   ready: boolean;
   sandbox_id: string;
   state: InstrumentationState;
 };
+
+/** @deprecated The backend calls it `ResponseRecordInstrumentation`: use that name. */
+export type CommandRecordInstrumentationAnswer = ResponseRecordInstrumentation;
 
 /**
  * Ask the Sandbox's provider for its current state.
@@ -519,7 +552,10 @@ export type CommandRefreshSandbox = {
 };
 
 /** What `CommandRefreshSandbox` answers. */
-export type CommandRefreshSandboxAnswer = {
+export type ResponseRefreshSandbox = {
   provision: SandboxProvision;
   sandbox_id: string;
 };
+
+/** @deprecated The backend calls it `ResponseRefreshSandbox`: use that name. */
+export type CommandRefreshSandboxAnswer = ResponseRefreshSandbox;

@@ -1,6 +1,7 @@
 import type { Metamodel, Operation } from "@sincpro/client-framework/codegen/metamodel";
 import {
   aliasOf,
+  answerOf,
   claimed,
   deprecationOf,
   docOf,
@@ -116,6 +117,7 @@ function dataOf(
 
 function methodSourceOf(
   local: string,
+  answer: string,
   method: string,
   call: Call,
   rest: Reached,
@@ -129,7 +131,7 @@ function methodSourceOf(
   }
   if (call.kind === "read") {
     const params = paramsOf(call);
-    return `${doc}    ${method}: (${params.signature}) =>\n      readRoute<dto.${local}Answer>(transport, ${params.route(rest.path)}),`;
+    return `${doc}    ${method}: (${params.signature}) =>\n      readRoute<dto.${answer}>(transport, ${params.route(rest.path)}),`;
   }
   if (call.kind === "one") {
     const path = rest.path.replace(`{${call.field}}`, "${encodeURIComponent(id)}");
@@ -140,7 +142,7 @@ function methodSourceOf(
     : "undefined";
   return [
     `${doc}    ${method}: (body: dto.${local}, options?: SendOptions) =>`,
-    `      transport.send<dto.${local}Answer>(`,
+    `      transport.send<dto.${answer}>(`,
     `        ${JSON.stringify(rest.method)},`,
     `        pathFor(routes.${method}, ${id}, body),`,
     `        body,`,
@@ -185,7 +187,9 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
     const method = methodOf(local);
     claim(method, `operation ${identity}`);
     const doc = docOf([operation.description, deprecationOf(metamodel, operation)], "    ");
-    methods.push(methodSourceOf(local, method, call, rest, doc));
+    methods.push(
+      methodSourceOf(local, answerOf(metamodel, identity), method, call, rest, doc),
+    );
     if (call.kind === "list" || call.kind === "read") {
       paged ||= call.kind === "list";
       reads ||= call.kind === "read";
