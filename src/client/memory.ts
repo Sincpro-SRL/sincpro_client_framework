@@ -6,6 +6,7 @@ import {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/transport";
+import { readValues, valuesOf } from "@sincpro/client-framework/common/serialization";
 import type { AnyRecord, Criteria, Meta, Problem } from "@sincpro/criteria";
 import { answer, answerGroups } from "@sincpro/criteria/engine";
 
@@ -50,13 +51,13 @@ export type MemoryOptions = {
 };
 
 /**
- * A deep copy, as over a wire: `structuredClone` where the platform has it, a JSON round trip
- * where it does not (some React Native engines) — the rows a fake server holds are plain JSON.
+ * A deep copy written and read by the wire's rules (`valuesOf`, `readValues`): what a real server
+ * would have received and answered — a `Money` as `{ amount, currency }`, a `Decimal` as its text,
+ * a `Date` as an instant, bytes as bytes — the same on every platform. `structuredClone` kept a
+ * `Date` a `Date` in a browser and a JSON round trip made it text on a phone; neither is a wire.
  */
-const copyOf: <T>(value: T) => T =
-  typeof globalThis.structuredClone === "function"
-    ? (value) => globalThis.structuredClone(value)
-    : (value) => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
+const copyOf = <T>(value: T): T =>
+  value === undefined ? value : (readValues(valuesOf(value)) as T);
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) return Promise.resolve();

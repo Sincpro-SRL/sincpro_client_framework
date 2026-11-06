@@ -267,6 +267,36 @@ Nothing is installed or shipped unless it is imported, and without a tracer or a
 case runs the same — nothing traces, nothing reports. In a test, `memoryTracer()` and
 `memoryReporter()` (`@sincpro/client-framework/testing`).
 
+## Values on the wire
+
+The backend writes every message with one set of rules, and every client reads and writes them
+the same — so they live here, not in each platform:
+
+| Value       | Travels as                                 | Here                                             |
+| ----------- | ------------------------------------------ | ------------------------------------------------ |
+| a decimal   | text, every digit: `"10.50"`               | `Decimal` — exact, on `BigInt`; rounds half up   |
+| a money     | `{ "amount": "10.50", "currency": "BOB" }` | `Money` — never adds two currencies              |
+| a day       | `"2026-10-02"`, never converted            | `isDay`, `dayOf(instant, zone)` for «today»      |
+| an instant  | ISO text: `"2026-10-02T14:30:00Z"`         | `wallTimeOf` / `instantOf` on the company's zone |
+| an id       | a UUID v7 as 32 hex                        | `newEntityId`, `isEntityId`, `momentOf`          |
+| bytes       | `{ "$bytes": "<base64>" }`                 | `valuesOf` / `readValues`                        |
+| the context | only what travels: text, numbers, lists    | `plainCodec`, `travelling`                       |
+
+```ts
+import { Money, pack, unpack, valuesOf } from "@sincpro/client-framework";
+
+const line = new Money("19.90", "BOB").times("3"); // 59.70 BOB, exact
+const total = Money.total([line, delivery], "BOB").rounded(); // to the currency's decimals
+valuesOf({ total, at: new Date() }); // { total: { amount, currency }, at: "…Z" }
+const answer = unpack(text, Money); // a typed read when asked for — never imposed
+```
+
+Not restrictive, like the backend: reading keeps every key it finds, a typed read is asked for
+(`rebuilt(values, Money)`), any currency code is read, and an application adds its own decimals
+(`Money.decimals["USDT"] = 6`). What JSON cannot write (`NaN`, a function, a cycle) is refused at
+once, naming where. Showing a value to a person — `Intl.NumberFormat`, a date picker — is each
+platform's, never this package's.
+
 ## Where it sits
 
 ```mermaid

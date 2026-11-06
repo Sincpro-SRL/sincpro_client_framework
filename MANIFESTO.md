@@ -48,10 +48,14 @@ server-side render, in a script and in a test, unchanged.**
    never import each other's insides.
 6. **The client.** The `Transport` port and its implementations (REST, memory), `entity()` with
    typed commands and answers, the service's client contract, model definitions read once from
-   the server, client-side ids (UUID v7) and the server's `Problem`.
-7. **The generator.** From a service's client contract to each domain's types, client and
+   the server and the server's `Problem`.
+7. **The values of the wire.** How every value travels, as the backend writes it — a decimal as
+   text, a money with its currency, a day that is never an instant, bytes tagged, ids as UUID v7 —
+   and the exact arithmetic a client needs on them (`Decimal`, `Money`). Only the wire form and
+   what follows from it: showing a value to a person is each platform's.
+8. **The generator.** From a service's client contract to each domain's types, client and
    entities — generated, never edited, and as platform-neutral as everything else here.
-8. **Testing.** An in-memory transport, tracer and reporter, so a use case is proven in Node with
+9. **Testing.** An in-memory transport, tracer and reporter, so a use case is proven in Node with
    nothing else.
 
 ## What it is not

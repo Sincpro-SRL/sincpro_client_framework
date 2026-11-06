@@ -57,3 +57,15 @@ export function newEntityId(now: number = Date.now()): string {
 export function isEntityId(text: string): boolean {
   return /^[0-9a-f]{12}7[0-9a-f]{3}[89ab][0-9a-f]{15}$/.test(text);
 }
+
+/**
+ * When a UUID v7 was minted, read off its leading 48 bits — sincpro_framework's `moment_of`;
+ * `null` for a key that is not one (a project's own format, a UUID v4).
+ *
+ *     momentOf(newEntityId())   →  "2026-11-06T22:41:07.512Z", the moment it was minted
+ */
+export function momentOf(identity: string): string | null {
+  const hex = identity.replaceAll("-", "").toLowerCase();
+  if (!isEntityId(hex)) return null;
+  return new Date(Number.parseInt(hex.slice(0, 12), 16)).toISOString();
+}

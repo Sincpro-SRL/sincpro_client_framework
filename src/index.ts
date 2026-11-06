@@ -6,8 +6,10 @@
  * (`sideEffects: false`), so an application pays only for what it uses, and a use case, the
  * client it calls and the entity it reads come from the same place.
  *
+ *   common/   the values of the wire, as the backend writes them: ids, a day and an instant,
+ *             `Decimal`, `Money`, and how any value is written and read (`valuesOf`, `rebuilt`)
  *   client/   the seam with a server: the transport and its REST and in-memory implementations,
- *             entities with typed commands, the service's client contract, client-side ids
+ *             entities with typed commands, the service's client contract
  *   model/    model definitions: written by hand, read from a JSON Schema, kept once known
  *   services/ the bounded context (`UseBoundedContext`), its `Feature` and `ApplicationService`,
  *             the process they run in (`configureProcess`), what each run carries
@@ -48,7 +50,6 @@ export {
   type WriteRoute,
   writeRoute,
 } from "@sincpro/client-framework/client/entity";
-export { isEntityId, newEntityId } from "@sincpro/client-framework/client/ids";
 export {
   type MemoryOptions,
   type MemoryTable,
@@ -75,6 +76,33 @@ export {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/transport";
+export { Decimal, type DecimalLike } from "@sincpro/client-framework/common/decimal";
+export { isEntityId, momentOf, newEntityId } from "@sincpro/client-framework/common/ids";
+export { Money } from "@sincpro/client-framework/common/money";
+export {
+  BYTES,
+  type JsonValue,
+  pack,
+  readValues,
+  type Rebuild,
+  rebuilt,
+  unpack,
+  valuesOf,
+} from "@sincpro/client-framework/common/serialization";
+export {
+  dayOf,
+  installTimeZone,
+  instantOf,
+  isDay,
+  timeZoneNow,
+  wallTimeOf,
+} from "@sincpro/client-framework/common/time";
+export {
+  type ContextCodec,
+  plainCodec,
+  travelling,
+  travels,
+} from "@sincpro/client-framework/context/codec";
 export { type Context } from "@sincpro/client-framework/context/context";
 export {
   type ContextStore,
