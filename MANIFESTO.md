@@ -58,8 +58,11 @@ server-side render, in a script and in a test, unchanged.**
   with the libraries that do it best.
 - **Not offline storage.** SQLite on a phone or IndexedDB in a point of sale are platform
   adapters.
-- **Not a telemetry or error-tracking SDK.** It defines the ports and calls them; it bundles no
-  vendor.
+- **Not a telemetry or error-tracking SDK.** It defines the ports and calls them. For the
+  common vendors it offers optional adapters (`./opentelemetry`, `./sentry`) that wrap what the
+  application built — its provider, its client, with its endpoint and its DSN. It initialises
+  nothing and registers nothing global; an application that does not import them installs
+  nothing and ships nothing, and without a tracer or a reporter everything runs the same.
 - **Not where business rules live.** The server keeps them; a client reads what it publishes.
 - **Not an event bus**, and not a dispatcher: a use case is executed by calling it, and the
   interceptors are what make that call traced and reported.

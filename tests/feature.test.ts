@@ -273,3 +273,31 @@ test("a dependency that is not a transport nor bindable is handed as it is", asy
   // A raw transport in `deps` is bound too: its requests carry the run's trace.
   assert.equal(project.bound.execute(), true);
 });
+
+class Composed extends ApplicationService<{ refuse: Refuse }> {
+  execute() {
+    return this.features.refuse.execute();
+  }
+}
+
+test("an error thrown through an ApplicationService is reported once, where it happened", async () => {
+  const tracer = memoryTracer();
+  const reporter = memoryReporter();
+  const broken = new TypeError("undefined is not a function");
+  const project = bindServices(createRuntime({ tracer, reporter }), "project", {
+    composed: new Composed({ refuse: new Refuse({ error: broken }) }),
+  });
+  await assert.rejects(project.composed.execute(), broken);
+  assert.deepEqual(
+    reporter.reports.map(({ about }) => about.useCase),
+    ["project/refuse"],
+  );
+  // Both runs still say they failed.
+  assert.deepEqual(
+    tracer.spans.map(({ name, outcome }) => [name, outcome]),
+    [
+      ["project/composed", "failed"],
+      ["project/refuse", "failed"],
+    ],
+  );
+});

@@ -43,9 +43,21 @@ const project = bindServices(runtime, "project", {
 await project.closeIssue.execute(input); // project/closeIssue → project/preview, project/send
 ```
 
-`tracer` and `reporter` are the platform's: OpenTelemetry and GlitchTip in a browser, a queue on
-a phone, `memoryTracer()` and `memoryReporter()` (`@sincpro/client-framework/testing`) in a test.
-A use case that was never bound runs too, with nothing tracing.
+`tracer` and `reporter` are injected by the application — this package initialises nothing.
+Any object that fulfils the port works; for the common vendors there are optional adapters that
+wrap what the application built:
+
+```ts
+import { openTelemetryTracer } from "@sincpro/client-framework/opentelemetry"; // peer: @opentelemetry/api
+import { sentryReporter } from "@sincpro/client-framework/sentry"; // no dependency
+
+const tracer = openTelemetryTracer(provider.getTracer("my-app")); // the app's provider and exporter
+const reporter = sentryReporter(client); // the app's Sentry-compatible client (GlitchTip too)
+```
+
+Nothing is installed or shipped unless it is imported, and without a tracer or a reporter every use
+case runs the same — nothing traces, nothing reports. In a test, `memoryTracer()` and
+`memoryReporter()` (`@sincpro/client-framework/testing`).
 
 ## Where it sits
 
