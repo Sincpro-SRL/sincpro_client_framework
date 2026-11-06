@@ -1,6 +1,6 @@
 {
   "name": "@sincpro/client-framework",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The client side of sincpro_framework, for every platform: Feature and ApplicationService traced and reported by default, applications made of domains, and the typed client generated from a service's contract. No React, no DOM.",
   "type": "module",
   "main": "./dist/index.js",
