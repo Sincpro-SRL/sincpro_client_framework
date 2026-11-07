@@ -7,7 +7,8 @@
  * client it calls and the entity it reads come from the same place.
  *
  *   common/   the values of the wire, as the backend writes them: ids, a day and an instant,
- *             `Decimal`, `Money`, and how any value is written and read (`valuesOf`, `rebuilt`)
+ *             `Decimal`, `Money`, a to-many as a page of its records (`EntityCollection`), and
+ *             how any value is written and read (`valuesOf`, `rebuilt`)
  *   client/   the seam with a server: the transport and its REST and in-memory implementations,
  *             entities with typed commands, the service's client contract
  *   model/    model definitions: written by hand, read from a JSON Schema, kept once known
@@ -35,6 +36,8 @@ export {
   entity,
   type EntityRef,
   type EntityRoutes,
+  type ExportFormat,
+  exportRoute,
   listRoute,
   NEW_PARAM,
   pathFor,
@@ -68,6 +71,9 @@ export {
 } from "@sincpro/client-framework/client/retry";
 export {
   type CallOptions,
+  type Decoder,
+  type Download,
+  downloadRoute,
   type Draft,
   type Method,
   type One,
@@ -76,6 +82,16 @@ export {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/transport";
+export {
+  collectionOf,
+  type EntityCollection,
+  type HeldCollection,
+  isCollection,
+  isPartial,
+  relatedCriteria,
+  type RelationKeys,
+  totalOf,
+} from "@sincpro/client-framework/common/collection";
 export { Decimal, type DecimalLike } from "@sincpro/client-framework/common/decimal";
 export { isEntityId, momentOf, newEntityId } from "@sincpro/client-framework/common/ids";
 export { Money } from "@sincpro/client-framework/common/money";

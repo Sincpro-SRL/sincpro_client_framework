@@ -2,6 +2,7 @@
 // Version 3e8928c6507301da2ff31e1e4afaf5d592160e28adfbb7340421f1192d5213fc.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
+import type { EntityCollection } from "@sincpro/client-framework";
 import type { Criteria } from "@sincpro/criteria";
 
 export type AuthEvent = {
@@ -23,7 +24,7 @@ export type Group = {
   display_name: string;
   id: string;
   member_ids: string[];
-  members?: User[];
+  members?: EntityCollection<User>;
   tenant_id: string | null;
   updated_at: string | null;
   version: number;
@@ -43,9 +44,9 @@ export type Tenant = {
   active: boolean;
   created_at: string;
   display_name: string;
-  groups?: Group[];
+  groups?: EntityCollection<Group>;
   id: string;
-  members?: Membership[];
+  members?: EntityCollection<Membership>;
   updated_at: string | null;
   version: number;
 };
@@ -54,7 +55,7 @@ export type User = {
   created_at: string;
   display_name: string;
   id: string;
-  memberships?: Membership[];
+  memberships?: EntityCollection<Membership>;
   updated_at: string | null;
   version: number;
 };

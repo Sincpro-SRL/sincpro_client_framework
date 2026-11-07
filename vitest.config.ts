@@ -17,7 +17,7 @@ export default defineConfig({
       { find: /^@sincpro\/client-framework$/, replacement: `${src}/index.ts` },
       // The optional entries live in adapters/, as package.json's `exports` says.
       {
-        find: /^@sincpro\/client-framework\/(opentelemetry|sentry)$/,
+        find: /^@sincpro\/client-framework\/(opentelemetry|sentry|parquet)$/,
         replacement: `${src}/adapters/$1.ts`,
       },
       { find: /^@sincpro\/client-framework\//, replacement: `${src}/` },

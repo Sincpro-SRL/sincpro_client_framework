@@ -275,10 +275,10 @@
   resolved "https://registry.yarnpkg.com/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz#e3fcee093fbb5ce765e1ad088ff4de2889f6f9be"
   integrity sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==
 
-"@sincpro/criteria@^2.0.0":
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/@sincpro/criteria/-/criteria-2.0.0.tgz#672cfe03889a771663a91939e4c56d6075578bea"
-  integrity sha512-gJmlSn4g3qlV/OZpy/iyvgXV+lB4UPIspGogru2jT/wFdlPQUB3WR/guTyVxGwWdR7v0QiKOZzgExce9B1wo2A==
+"@sincpro/criteria@^2.1.0":
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/@sincpro/criteria/-/criteria-2.1.0.tgz#9d1d56e78e7bb76f9e15a5a1c3c5684e254860d7"
+  integrity sha512-rXOCC5MxYTZ1JYiJ++8EJFvkYpMRMZl4JQ9PNgqzYa/StsZjGJsK7mnQAqdJb2TfHuwUys8gMxj9wp4fEZN5ZQ==
 
 "@types/chai@^5.2.2":
   version "5.2.3"
@@ -806,6 +806,11 @@ hookified@^2.1.1:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/hookified/-/hookified-2.2.0.tgz#1d024ac1668973dd5bcc4a96ab9ccdb7639ef8d4"
   integrity sha512-p/LgFzRN5FeoD3DLS6bkUapeye6E4SI6yJs6KetENd18S+FBthqYq2amJUWpt5z0EQwwHemidjY5OqJGEKm5uA==
+
+hyparquet@^1.32.0:
+  version "1.32.0"
+  resolved "https://registry.yarnpkg.com/hyparquet/-/hyparquet-1.32.0.tgz#3d258f2cb0951a0d7964ed7c73a2a5a96f1b61d3"
+  integrity sha512-SpkvdfgQjcdCJA+MTzo0WSreLLy/aLRYs3xetk1SsuFvq8vF+J/97OaRnZhf+p5Nx3J27i9FhSC0bJ5eQZG/7Q==
 
 ignore@^5.2.0:
   version "5.3.2"

@@ -1,5 +1,6 @@
 import type {
   CallOptions,
+  Download,
   One,
   SendOptions,
   Transport,
@@ -34,6 +35,16 @@ class EntityReads extends Feature<Through> {
       );
     return read.call(this.transport, route, signal, options) as Promise<T>;
   }
+
+  download(route: string, signal?: AbortSignal, options?: CallOptions): Promise<Download> {
+    this.span.set({ "http.route": route });
+    const download = this.transport.download;
+    if (download === undefined)
+      return Promise.reject(
+        new Error(`this transport cannot download ${route}: it has no download()`),
+      );
+    return download.call(this.transport, route, signal, options);
+  }
 }
 
 /** What a screen writes — a save, a draft, a preview, a Command: each request a use case. */
@@ -61,7 +72,7 @@ class EntityWrites extends Feature<Through> {
  * screen reads through the transport was none of that — no span, no `traceparent` (the backend's
  * trace started there, with no client in it), no company, and a 500 reported to nobody. Here
  * each read and write runs as a use case of `screens` — `EntityReads.list`, `.one`, `.read`,
- * `EntityWrites.send` —, so it gets all three the way any other does: the span (its route said
+ * `.download`, `EntityWrites.send` —, so it gets all three the way any other does: the span (its route said
  * on it), the trace and the process's context on the request, and a report only when it failed
  * (a 4xx the server explained is the screen's to show). A bounded context's own dependencies are
  * never given this: there its use case is the one that runs.
@@ -97,6 +108,9 @@ export function screensTransport(transport: Transport, name = "screens"): Transp
   if (transport.read !== undefined)
     through.read = <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
       reads.read<T>(route, signal, options);
+  if (transport.download !== undefined)
+    through.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
+      reads.download(route, signal, options);
   MADE.add(through);
   return through;
 }

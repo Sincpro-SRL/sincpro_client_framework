@@ -2,11 +2,12 @@
 // Version e8726340e160b36073b426d9dad6e4107f590ccf548984491ea1a2f81bb59742.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
+import type { EntityCollection } from "@sincpro/client-framework";
 import type { Criteria } from "@sincpro/criteria";
 
 export type Delivery = {
   branch: string;
-  changes?: RepositoryChange[];
+  changes?: EntityCollection<RepositoryChange>;
   created_at: string;
   evidence_ref: string;
   id: string;

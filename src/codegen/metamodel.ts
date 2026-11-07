@@ -22,7 +22,15 @@ export type Schema = {
   additionalProperties?: boolean | Schema;
   title?: string;
   description?: string;
-  "x-sincpro"?: { type?: string; relation?: string | null; identity?: string };
+  "x-sincpro"?: {
+    type?: string;
+    relation?: string | null;
+    identity?: string;
+    /** A to-many whose records are other aggregates: listed and searched, never edited as lines. */
+    reference?: boolean;
+  };
+  /** An answer that is bytes as they are produced (an export): the media types it may be. */
+  "x-sincpro-streamed"?: readonly string[];
 };
 
 export type Operation = {

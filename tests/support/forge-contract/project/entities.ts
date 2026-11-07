@@ -67,7 +67,7 @@ export const projects = entity<
   }
 >("project:project", {
   list: "/projects",
-  one: "/projects/{id}",
+  one: "/projects/{id}?draft=true",
   edit: "PUT /projects/{id}/edit",
   commands: {
     openIssue: { route: "POST /issues", target: "project_id" },

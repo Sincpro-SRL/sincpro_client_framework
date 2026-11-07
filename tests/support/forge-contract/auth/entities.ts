@@ -30,7 +30,7 @@ export const groups = entity<
   }
 >("auth:group", {
   list: "/groups",
-  one: "/groups/{id}",
+  one: "/groups/{id}?draft=true",
   edit: "PUT /groups/{id}/edit",
   commands: {
     addMember: { route: "POST /groups/{group_id}/members", target: "group_id" },
@@ -63,7 +63,7 @@ export const tenants = entity<
   }
 >("auth:tenant", {
   list: "/tenants",
-  one: "/tenants/{id}",
+  one: "/tenants/{id}?draft=true",
   edit: "PUT /tenants/{id}/edit",
   commands: {
     createTenant: { route: "POST /tenants", target: "tenant_id" },
@@ -95,7 +95,7 @@ export const users = entity<
   }
 >("auth:user", {
   list: "/users",
-  one: "/users/{id}",
+  one: "/users/{id}?draft=true",
   edit: "PUT /users/{id}/edit",
   commands: {
     addMember: "POST /groups/{group_id}/members",

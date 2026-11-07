@@ -71,7 +71,7 @@ doctor:
 	if $(SCAN) 'from "node:|(^|[^.A-Za-z_])(process|Buffer)\.' src | $(NOT_CODEGEN) | $(NOT_COMMENT); then \
 		echo >&2 "✘ Node outside codegen/ — the runtime runs in a browser and on a phone"; found=1; \
 	fi; \
-	if $(SCAN) 'from "@opentelemetry/|from "@sentry/' src | grep -v '^src/adapters/' | $(NOT_COMMENT); then \
+	if $(SCAN) 'from "@opentelemetry/|from "@sentry/|from "hyparquet' src | grep -v '^src/adapters/' | $(NOT_COMMENT); then \
 		echo >&2 "✘ a vendor's SDK outside adapters/ — the runtime knows only its ports"; found=1; \
 	fi; \
 	if $(SCAN) 'from "$(PACKAGE)/adapters/' src | grep -v '^src/adapters/' | $(NOT_COMMENT); then \

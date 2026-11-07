@@ -111,10 +111,19 @@ function entitySourceOf(
   const missing: string[] = [];
   const routes: string[] = [`  list: ${JSON.stringify(list.found.rest.path)},`];
   const one = oneOf(reads("get", isGet), "get");
+  const edit = oneOf(reads("edit", isWrite), "edit");
   if (one !== undefined && "found" in one) {
     const field = one.found.operation.targets[model];
+    // sincpro_framework's `Get` answers the caller's own draft only when asked (`draft`), and an
+    // entity edited through `Edit` keeps its drafts there: its record is read with them, or a
+    // draft kept on one visit never comes back on the next.
+    const drafts =
+      edit !== undefined &&
+      "found" in edit &&
+      one.found.operation.input.properties?.["draft"]?.type === "boolean";
+    const path = `${recordPath(one.found.rest, field)}${drafts ? "?draft=true" : ""}`;
     if (field !== undefined && one.found.rest.fields.length === 1)
-      routes.push(`  one: ${JSON.stringify(recordPath(one.found.rest, field))},`);
+      routes.push(`  one: ${JSON.stringify(path)},`);
     else missing.push(`one: \`${one.found.local}\` is at ${one.found.rest.path}`);
   } else if (one !== undefined) missing.push(`one: ${one.missing}`);
   for (const role of ["edit", "preview"]) {
@@ -127,6 +136,12 @@ function entitySourceOf(
     const field = write.found.operation.targets[model];
     const route = `${write.found.rest.method} ${recordPath(write.found.rest, field)}`;
     routes.push(`  ${role}: ${JSON.stringify(route)},`);
+  }
+
+  const exported = oneOf(reads("export", isGet), "export");
+  if (exported !== undefined) {
+    if ("missing" in exported) missing.push(`export: ${exported.missing}`);
+    else routes.push(`  export: ${JSON.stringify(exported.found.rest.path)},`);
   }
 
   const commands = reached.filter(
@@ -183,7 +198,8 @@ function entitySourceOf(
  *
  * 1. Per model, by name: the one `search` a transport reads for it (`own` when there are
  *    several) — none, and the model gets no entity, said in the file's own doc.
- * 2. Its `get`, `edit` and `preview` the same way, the record's field written `{id}`.
+ * 2. Its `get`, `edit` and `preview` the same way, the record's field written `{id}`, and its
+ *    `export` — every record of a criteria as a file — by its path.
  * 3. Every write of role `command` that concerns it: with `target` when its body names the
  *    record, as it is when it creates one; its body typed without that field.
  * Final: an `entity<T, C>()` per model listed, keyed `<domain>:<kind>`, and `entities`, all of
