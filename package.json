@@ -25,6 +25,10 @@
     "./sentry": {
       "types": "./dist/adapters/sentry.d.ts",
       "default": "./dist/adapters/sentry.js"
+    },
+    "./parquet": {
+      "types": "./dist/adapters/parquet.d.ts",
+      "default": "./dist/adapters/parquet.js"
     }
   },
   "bin": {
@@ -68,11 +72,15 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@sincpro/criteria": "^2.0.0",
+    "@sincpro/criteria": "^2.1.0",
+    "hyparquet": "^1.32.0",
     "typescript": ">=5.5 <7"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "hyparquet": {
       "optional": true
     },
     "typescript": {
@@ -83,11 +91,12 @@
     "@eslint/js": "^10.0.1",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/sdk-trace": "3.1.0",
-    "@sincpro/criteria": "^2.0.0",
+    "@sincpro/criteria": "^2.1.0",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^14.0.0",
+    "hyparquet": "^1.32.0",
     "prettier": "^3.9.10",
     "tsc-alias": "^1.9.9",
     "typescript": "~6.0.3",

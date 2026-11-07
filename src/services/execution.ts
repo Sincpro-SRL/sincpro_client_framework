@@ -110,6 +110,10 @@ export function bindTransport(transport: Transport, execution: Execution): Trans
   if (read !== undefined)
     bound.read = <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
       read.call(transport, route, signal, call(options)) as Promise<T>;
+  const download = transport.download;
+  if (download !== undefined)
+    bound.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
+      download.call(transport, route, signal, call(options));
   return bound;
 }
 

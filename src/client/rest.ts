@@ -5,6 +5,8 @@ import {
 } from "@sincpro/client-framework/client/discovery";
 import {
   type CallOptions,
+  type Decoder,
+  type Download,
   type Draft,
   type Method,
   type One,
@@ -41,6 +43,12 @@ export type RestOptions = {
   headers?: Record<string, string> | (() => Record<string, string>);
   /** Defaults to the global `fetch`. Inject one for tests. */
   fetch?: typeof fetch;
+  /**
+   * The formats besides JSON this transport reads a page in — `[parquetDecoder]` from
+   * `@sincpro/client-framework/parquet`. Each is said in `Accept`, so a search that answers its
+   * large pages as Parquet does so only to a client that reads it.
+   */
+  decoders?: readonly Decoder[];
   /** Where the bounded context's discovery document is: `"/openapi.json"` by default, at the
    *  origin of `base`. `null`: none is read, and the definitions come only from `metas`. */
   document?: string | null;
@@ -60,6 +68,25 @@ export type VersionDrift = { model: string; snapshot: string; live: string };
 
 /** The keys of an answer that are not the record: what is left is the record's own field. */
 const ENVELOPE = new Set(["cursor", "count", "model_version", "dropped", "draft", "missing"]);
+
+/**
+ * The name a `Content-Disposition` says to save a file as; `""` when it says none. The encoded
+ * form (`filename*=UTF-8'es'informe%20final.parquet`, RFC 5987) wins, its charset and language
+ * dropped and its bytes decoded; the plain one (`filename="report 100%.csv"`) is taken as it is.
+ */
+function filenameOf(disposition: string | null): string {
+  const said = disposition ?? "";
+  const encoded = /filename\*\s*=\s*([^']*)'[^']*'([^;]+)/i.exec(said);
+  if (encoded?.[2] !== undefined) {
+    try {
+      return decodeURIComponent(encoded[2].trim().replace(/^"|"$/g, ""));
+    } catch {
+      return encoded[2].trim();
+    }
+  }
+  const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(said);
+  return (plain?.[2] ?? plain?.[1] ?? "").trim();
+}
 
 export function urlOf<T>(base: string, route: string, criteria?: Criteria<T>): string {
   const url = `${base}${route}`;
@@ -84,8 +111,19 @@ export function restTransport(options: RestOptions = {}): Transport {
   const base = options.base ?? "";
   const doFetch = options.fetch ?? ((input, init) => fetch(input, init));
 
-  const own = () =>
+  const decoders = options.decoders ?? [];
+  const accept: Record<string, string> =
+    decoders.length === 0
+      ? {}
+      : { Accept: ["application/json", ...decoders.map((one) => one.mediaType)].join(", ") };
+  const own = (): Record<string, string> =>
     typeof options.headers === "function" ? options.headers() : (options.headers ?? {});
+  /** A body in a format a decoder reads, read by it; anything else left to JSON. */
+  const decode = async (response: Response) => {
+    const type = (response.headers.get("content-type") ?? "").split(";")[0]?.trim();
+    const decoder = decoders.find((one) => one.mediaType === type);
+    return decoder === undefined ? undefined : decoder.decode(response);
+  };
 
   // The discovery document, read once; asked again — with its ETag — when an answer says a
   // version of its model the document did not.
@@ -171,8 +209,10 @@ export function restTransport(options: RestOptions = {}): Transport {
   return {
     async list(route, criteria, signal, call) {
       const source = restSource<never>(`${base}${route}`, {
-        headers: () => ({ ...own(), ...call?.headers }),
+        // Only a page may come in another format: the decoders are said here, and nowhere else.
+        headers: () => ({ ...accept, ...own(), ...call?.headers }),
         fetch: doFetch,
+        ...(decoders.length === 0 ? {} : { decode }),
       });
       try {
         const page = await source.read(criteria as never, signal);
@@ -189,6 +229,30 @@ export function restTransport(options: RestOptions = {}): Transport {
 
     async read<T>(route: string, signal?: AbortSignal, call?: CallOptions): Promise<T> {
       return (await get(route, urlOf(base, route), signal, undefined, call)) as T;
+    },
+
+    async download(
+      route: string,
+      signal?: AbortSignal,
+      call?: CallOptions,
+    ): Promise<Download> {
+      const response = await doFetch(urlOf(base, route), {
+        headers: { ...own(), ...call?.headers },
+        ...(signal ? { signal } : {}),
+      });
+      if (!response.ok)
+        throw new TransportError(
+          route,
+          response.status,
+          readProblem(await response.text()),
+          undefined,
+        );
+      return {
+        mediaType: (response.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "",
+        filename: filenameOf(response.headers.get("content-disposition")),
+        body: response.body,
+        blob: () => response.blob(),
+      };
     },
 
     async one<T>(route: string, signal?: AbortSignal, call?: CallOptions): Promise<One<T>> {

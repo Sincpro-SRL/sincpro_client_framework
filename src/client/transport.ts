@@ -1,4 +1,12 @@
-import type { Criteria, Dropped, Meta, Page, Problem } from "@sincpro/criteria";
+import type {
+  AnyRecord,
+  Criteria,
+  Dropped,
+  Envelope,
+  Meta,
+  Page,
+  Problem,
+} from "@sincpro/criteria";
 
 /**
  * The one seam between this package and a server.
@@ -36,6 +44,56 @@ export interface Transport {
    * so a transport written before it keeps compiling; call it through `readRoute`.
    */
   read?<T>(route: string, signal?: AbortSignal, options?: CallOptions): Promise<T>;
+  /**
+   * A file the server streams — an export (`Export[Entity, Streamed]`): the route with its
+   * parameters already in it, the bytes as they arrive. Optional, as `read`; call it through
+   * `downloadRoute`.
+   */
+  download?(route: string, signal?: AbortSignal, options?: CallOptions): Promise<Download>;
+}
+
+/**
+ * What a server streams instead of answering JSON — every record of a criteria as Parquet, an
+ * Arrow stream or JSON Lines: what it is, the name to save it under, and its bytes.
+ *
+ * Context: an export is millions of rows, written by the server a page at a time; parsing it as
+ * JSON, or holding it whole before the first byte is used, is what it exists to avoid. `body`
+ * hands the bytes on as they come — to Arrow JS, to a file — where the platform's fetch streams
+ * (a browser); `blob()` reads them all, which is what a phone's fetch can do.
+ */
+export type Download = {
+  /** `"application/vnd.apache.parquet"`, `"application/vnd.apache.arrow.stream"`, `"application/jsonl"`. */
+  mediaType: string;
+  /** What the server says to save it as (`Content-Disposition`); `""` when it says nothing. */
+  filename: string;
+  /** The bytes as they arrive; `null` where the platform's fetch has no streams. */
+  body: ReadableStream<Uint8Array> | null;
+  /** Every byte, at once. */
+  blob(): Promise<Blob>;
+};
+
+/**
+ * How a transport reads a page that came in another format than JSON — Parquet, from
+ * `@sincpro/client-framework/parquet` —: the media type, said to the server in `Accept`, and how
+ * a body of it becomes the envelope JSON would have sent.
+ */
+export type Decoder = {
+  mediaType: string;
+  decode(response: Response): Promise<Envelope & AnyRecord>;
+};
+
+/** A download through `transport.download`, or the reason it cannot be, by name. */
+export function downloadRoute(
+  transport: Transport,
+  route: string,
+  signal?: AbortSignal,
+  options?: CallOptions,
+): Promise<Download> {
+  if (transport.download === undefined)
+    return Promise.reject(
+      new Error(`this transport has no download(): it cannot ask GET ${route} — give it one`),
+    );
+  return transport.download(route, signal, options);
 }
 
 /**

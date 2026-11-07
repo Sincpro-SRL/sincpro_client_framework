@@ -2,6 +2,7 @@
 // Version 457cd1a4fbe9ac4a3cd319ba20931bc6666fbdab9ad1f4f512096170caef0efc.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
+import type { EntityCollection } from "@sincpro/client-framework";
 import type { Criteria } from "@sincpro/criteria";
 
 export type Actor = {
@@ -40,7 +41,7 @@ export type Issue = {
   request: string;
   requester: string;
   resolution: string;
-  runs?: Run[];
+  runs?: EntityCollection<Run>;
   runs_started: number;
   sandbox_id: string;
   status: "idle" | "running" | "stopped" | "finished" | "failed";
@@ -63,8 +64,8 @@ export type Project = {
   display_name: string;
   id: string;
   inventory: ProjectInventory;
-  issues?: Issue[];
-  project_repositories?: ProjectRepository[];
+  issues?: EntityCollection<Issue>;
+  project_repositories?: EntityCollection<ProjectRepository>;
   shared_with: string[];
   specification: ProjectSpecification;
   tenant_id: string;
@@ -157,7 +158,7 @@ export type Run = {
   issue_id: string;
   sandbox_id: string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
-  steps?: RunStep[];
+  steps?: EntityCollection<RunStep>;
   summary: string;
   updated_at: string | null;
   version: number;

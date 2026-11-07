@@ -117,9 +117,11 @@ export function memoryTransport(
 
     async one<T>(route: string, signal?: AbortSignal): Promise<One<T>> {
       await check(route, signal);
-      const slash = route.lastIndexOf("/");
-      const table = tableAt(route.slice(0, slash));
-      const id = decodeURIComponent(route.slice(slash + 1));
+      // A record's route may carry a question (`?draft=true`): the id is the path's last part.
+      const path = route.split("?")[0] ?? route;
+      const slash = path.lastIndexOf("/");
+      const table = tableAt(path.slice(0, slash));
+      const id = decodeURIComponent(path.slice(slash + 1));
       const key = table.meta.get_id || table.meta.identity;
       const record = table.rows.find((row) => String(row[key]) === id);
       if (record === undefined)

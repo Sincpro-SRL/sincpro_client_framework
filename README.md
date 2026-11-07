@@ -297,15 +297,18 @@ case runs the same — nothing traces, nothing reports. In a test, `memoryTracer
 The backend writes every message with one set of rules, and every client reads and writes them
 the same — so they live here, not in each platform:
 
-| Value       | Travels as                                 | Here                                             |
-| ----------- | ------------------------------------------ | ------------------------------------------------ |
-| a decimal   | text, every digit: `"10.50"`               | `Decimal` — exact, on `BigInt`; rounds half up   |
-| a money     | `{ "amount": "10.50", "currency": "BOB" }` | `Money` — never adds two currencies              |
-| a day       | `"2026-10-02"`, never converted            | `isDay`, `dayOf(instant, zone)` for «today»      |
-| an instant  | ISO text: `"2026-10-02T14:30:00Z"`         | `wallTimeOf` / `instantOf` on the company's zone |
-| an id       | a UUID v7 as 32 hex                        | `newEntityId`, `isEntityId`, `momentOf`          |
-| bytes       | `{ "$bytes": "<base64>" }`                 | `valuesOf` / `readValues`                        |
-| the context | only what travels: text, numbers, lists    | `plainCodec`, `travelling`                       |
+| Value        | Travels as                                 | Here                                               |
+| ------------ | ------------------------------------------ | -------------------------------------------------- |
+| a decimal    | text, every digit: `"10.50"`               | `Decimal` — exact, on `BigInt`; rounds half up     |
+| a money      | `{ "amount": "10.50", "currency": "BOB" }` | `Money` — never adds two currencies                |
+| a day        | `"2026-10-02"`, never converted            | `isDay`, `dayOf(instant, zone)` for «today»        |
+| an instant   | ISO text: `"2026-10-02T14:30:00Z"`         | `wallTimeOf` / `instantOf` on the company's zone   |
+| an id        | a UUID v7 as 32 hex                        | `newEntityId`, `isEntityId`, `momentOf`            |
+| bytes        | `{ "$bytes": "<base64>" }`                 | `valuesOf` / `readValues`                          |
+| the context  | only what travels: text, numbers, lists    | `plainCodec`, `travelling`                         |
+| a to-many    | `{ "items": […], "count": {…}, "cursor" }` | `EntityCollection<T>`, `collectionOf`, `isPartial` |
+| an export    | Parquet, Arrow or JSON Lines, streamed     | `downloadRoute`, `exportRoute`, `Download`         |
+| a large page | Parquet, when the search says so           | `restTransport({ decoders: [parquetDecoder] })`    |
 
 ```ts
 import { Money, pack, unpack, valuesOf } from "@sincpro/client-framework";
@@ -321,6 +324,25 @@ Not restrictive, like the backend: reading keeps every key it finds, a typed rea
 (`Money.decimals["USDT"] = 6`). What JSON cannot write (`NaN`, a function, a cycle) is refused at
 once, naming where. Showing a value to a person — `Intl.NumberFormat`, a date picker — is each
 platform's, never this package's.
+
+A relation that holds several records — the invoices of a customer — comes as a page of them,
+never an array: forty records, «at least 1000», and the cursor to go on. Read it with
+`collectionOf` (an array from a hand-written domain reads the same) — a `HeldCollection`, edited
+the way a string is: `append`, `extend`, `remove`, `replace` answer a new one. Say «1000+» when
+`count.exact` is false, and ask for the rest as a list of the related entity
+(`relatedCriteria(meta.fields.invoices, customer)`). A part of the record — the lines of an
+invoice — is written back only whole: the backend refuses a page of it.
+
+A search asked for millions of records answers Parquet instead of JSON to a client that reads it.
+Give the transport the decoder — an optional entry over `hyparquet` — and nothing above it
+changes: the same page, each value as the JSON wire writes it.
+
+```ts
+import { restTransport } from "@sincpro/client-framework";
+import { parquetDecoder } from "@sincpro/client-framework/parquet";
+
+const transport = restTransport({ base: "/v1", decoders: [parquetDecoder] });
+```
 
 ## Where it sits
 

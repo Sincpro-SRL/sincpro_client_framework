@@ -1,5 +1,10 @@
 import type { Method } from "@sincpro/client-framework/client/transport";
-import { type AnyRecord, type Expression, readExpression } from "@sincpro/criteria";
+import {
+  type AnyRecord,
+  type Criteria,
+  type Expression,
+  readExpression,
+} from "@sincpro/criteria";
 
 /**
  * The parts any record may have beside its name: what a link, a card or a record's header says
@@ -109,6 +114,8 @@ export type Entity<
   edit?: WriteRoute;
   /** Its business events: the context's events route, and the `entity_type` they carry. */
   history?: { route: string; type: string };
+  /** Every record of a criteria as a file: the route `exportRoute` fills, `downloadRoute` asks. */
+  export?: string;
   /** Which fields are its description, state, picture… when they are not the conventional
    *  ones (`summaryOf`). Empty: the convention decides. */
   summary: SummaryFields;
@@ -220,6 +227,9 @@ export type EntityRoutes<C extends CommandBodies = CommandBodies> = CommandRoute
   /** `"PUT /invoices/{id}/edit"`: the use case that answers sincpro_framework's `Edit`. */
   edit?: string;
   history?: { route: string; type: string };
+  /** `"/invoices/export"`: every record of a criteria as a file (`Export[Invoice, Streamed]`),
+   *  asked through `exportRoute` and `downloadRoute`. */
+  export?: string;
   /** `{ image: "logo", state: "estado_pago", person: true }` — not a route, but declared once
    *  with the rest of what a screen should not have to know. */
   summary?: SummaryFields;
@@ -315,6 +325,29 @@ export function listRoute(list: string, params?: Readonly<Record<string, string>
   return `${path}${path.includes("?") ? "&" : "?"}${query}`;
 }
 
+/** What an export is written as: Parquet, an Arrow IPC stream, or JSON Lines. */
+export type ExportFormat = "parquet" | "arrow" | "jsonl";
+
+/**
+ * The route of an export: its path, its keys filled from `params`, the criteria and the format as
+ * its query — what `downloadRoute` asks.
+ *
+ *     exportRoute("/invoices/export", { selection: { field: "paid", operator: "=", value: false } }, "jsonl")
+ *       -> "/invoices/export?criteria=%7B…%7D&format=jsonl"
+ */
+export function exportRoute<T>(
+  path: string,
+  criteria?: Criteria<T>,
+  format?: ExportFormat,
+  params?: Readonly<Record<string, string>>,
+): string {
+  return listRoute(path, {
+    ...params,
+    ...(criteria === undefined ? {} : { criteria: JSON.stringify(criteria) }),
+    ...(format === undefined ? {} : { format }),
+  });
+}
+
 export function entity<
   T extends AnyRecord = AnyRecord,
   C extends CommandBodies = CommandBodies,
@@ -366,6 +399,7 @@ export function entity<
     ...(routes.draft === undefined ? {} : { draft: writeRoute(routes.draft) }),
     ...(routes.edit === undefined ? {} : { edit: writeRoute(routes.edit) }),
     ...(routes.history === undefined ? {} : { history: routes.history }),
+    ...(routes.export === undefined ? {} : { export: routes.export }),
     summary: routes.summary ?? {},
     ...(routes.aggregate === undefined ? {} : { aggregate: routes.aggregate }),
   };

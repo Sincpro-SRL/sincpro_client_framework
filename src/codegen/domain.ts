@@ -38,7 +38,11 @@ const DEFINITIONS = "#/$defs/";
 /** A shared definition a package of the stack already types: imported, never written again. */
 const IMPORTED: Readonly<Record<string, { name: string; from: string }>> = {
   Criteria: { name: "Criteria", from: "@sincpro/criteria" },
+  Download: { name: "Download", from: "@sincpro/client-framework" },
+  EntityCollection: { name: "EntityCollection", from: "@sincpro/client-framework" },
 };
+/** A relation that holds several records: a reading answers it as a page of them. */
+const TO_MANY = new Set(["one2many", "many2many"]);
 /** The field types whose value is the record itself, not a key that names it. */
 const RELATIONAL = new Set(["many2one", "one2many", "many2many", "embedded"]);
 /** A related record: in an answer only when the read expands it. */
@@ -110,6 +114,34 @@ function optional(name: string, property: Schema, schema: Schema, record: boolea
   return !(schema.required ?? []).includes(name);
 }
 
+/**
+ * The records a to-many holds, when `property` is one — however the contract writes it: the
+ * collection a reading answers (`{items, count, cursor}`, sincpro_framework 3.33 on) or, before
+ * that, a bare array, which said less than the wire sent.
+ */
+function heldRecords(property: Schema): Schema | undefined {
+  if (!TO_MANY.has(property["x-sincpro"]?.type ?? "")) return undefined;
+  const held = property.properties?.["items"] ?? property;
+  return held.type === "array" ? held.items : undefined;
+}
+
+/**
+ * A property's TypeScript. A to-many inside a record is an `EntityCollection` of its records —
+ * a page with its count and cursor, as the read answers it — never an array, which would say the
+ * page is all there is.
+ */
+function propertyTypeOf(
+  property: Schema,
+  scope: Scope,
+  depth: number,
+  record: boolean,
+): string {
+  const records = record ? heldRecords(property) : undefined;
+  if (records === undefined) return typeOf(property, scope, depth, record);
+  scope.imports.add("EntityCollection");
+  return `EntityCollection<${typeOf(records, scope, depth, record)}>`;
+}
+
 function objectOf(schema: Schema, scope: Scope, depth: number, record: boolean): string {
   const properties = sorted(schema.properties ?? {});
   if (properties.length === 0) {
@@ -123,7 +155,7 @@ function objectOf(schema: Schema, scope: Scope, depth: number, record: boolean):
   const lines = properties.map(([name, property]) => {
     const doc = docOf([property.description, keyNote(property)], pad);
     const mark = optional(name, property, schema, record) ? "?" : "";
-    return `${doc}${pad}${keyOf(name)}${mark}: ${typeOf(property, scope, depth + 1, record)};`;
+    return `${doc}${pad}${keyOf(name)}${mark}: ${propertyTypeOf(property, scope, depth + 1, record)};`;
   });
   return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`;
 }
@@ -160,6 +192,14 @@ function typeOf(schema: Schema, scope: Scope, depth: number, record: boolean): s
         ? "unknown"
         : objectOf(schema, scope, depth, record);
   }
+}
+
+/** What a streamed answer is on the client — an export's bytes (`Download`) —, else nothing. */
+function streamed(output: Schema, scope: Scope): string | undefined {
+  if ((output as Record<string, unknown>)["x-sincpro-streamed"] === undefined)
+    return undefined;
+  scope.imports.add("Download");
+  return "Download";
 }
 
 /** What the server says of an operation: its words, then what it is, for whom, on which field. */
@@ -212,7 +252,9 @@ export function domainFileOf(metamodel: Metamodel): string {
     const named = answerOf(metamodel, identity);
     claim(local, `operation ${identity}`);
     const answer =
-      operation.output === null ? "unknown" : typeOf(operation.output, scope, 0, false);
+      operation.output === null
+        ? "unknown"
+        : (streamed(operation.output, scope) ?? typeOf(operation.output, scope, 0, false));
     const written = [
       `${operationDoc(metamodel, local, operation)}export type ${local} = ${typeOf(operation.input, scope, 0, false)};`,
     ];
@@ -246,10 +288,15 @@ export function domainFileOf(metamodel: Metamodel): string {
     return written.get(name)!;
   });
 
-  const imports = [...scope.imports].sort().map((name) => {
+  // One line per package, its names sorted.
+  const byPackage = new Map<string, string[]>();
+  for (const name of [...scope.imports].sort()) {
     const imported = IMPORTED[name]!;
-    return `import type { ${imported.name} } from "${imported.from}";`;
-  });
+    byPackage.set(imported.from, [...(byPackage.get(imported.from) ?? []), imported.name]);
+  }
+  const imports = [...byPackage.keys()]
+    .sort()
+    .map((from) => `import type { ${byPackage.get(from)!.join(", ")} } from "${from}";`);
 
   return `${[headerOf("The DTOs", metamodel), ...(imports.length === 0 ? [] : [imports.join("\n")]), ...models, ...shared, ...operations].join("\n\n")}\n`;
 }

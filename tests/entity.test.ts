@@ -11,6 +11,8 @@ import {
 import type { Expression } from "@sincpro/criteria";
 import { test } from "vitest";
 
+import { VENTAS } from "./support/ventas";
+
 const projects = entity("forge:project", {
   list: "/projects",
   commands: {
@@ -97,4 +99,21 @@ test("a list whose path needs a key the parameters lack is refused before anythi
     () => listRoute("/tenants/{tenant_id}/members", { role: "admin" }),
     /the list "\/tenants\/\{tenant_id\}\/members" needs "tenant_id"/,
   );
+});
+
+test("an entity keeps its export route, and a record route with a question reads in memory", async () => {
+  const { entity, memoryTransport } = await import("@sincpro/client-framework");
+  const groups = entity("auth:Group", {
+    list: "/groups",
+    one: "/groups/{id}?draft=true",
+    export: "/groups/export",
+  });
+  const meta = (await memoryTransport(VENTAS).list("/clientes", {})).meta!;
+  const transport = memoryTransport({
+    "/groups": { meta: { ...meta, identity: "id", get_id: "id" }, rows: [{ id: "g1" }] },
+  });
+
+  assert.equal(groups.export, "/groups/export");
+  const read = await transport.one<{ id: string }>(groups.one("g1"));
+  assert.equal(read.record.id, "g1");
 });

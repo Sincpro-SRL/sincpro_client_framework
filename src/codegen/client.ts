@@ -29,13 +29,16 @@ import {
  *
  * Context: a method only writes down the route the contract published and hands the call to the
  * transport, which keeps the rules — the `Idempotency-Key`, the `Problem`, the model's version.
- * A GET is a page (`list`), one record (`one`), or — a Query of the context's own, `GET /me` —
- * a read of its answer as it came (`readRoute`, over a transport that has `read`). A GET's
+ * A GET is a page (`list`), one record (`one`), a file (`export`: `downloadRoute`, its bytes as
+ * they arrive), or — a Query of the context's own, `GET /me` — a read of its answer as it came
+ * (`readRoute`, over a transport that has `read`). A GET's
  * keys in its path are required parameters; every other field is an optional one.
  */
 
 /** A search's fields a page asks with, not the screen: the criteria, and its cursor inside it. */
 const PAGED = new Set(["criteria", "cursor"]);
+/** An export's fields its method takes apart: the criteria and the format. */
+const EXPORTED = new Set(["criteria", "cursor", "format"]);
 
 /** What a GET is asked with: the keys its path names, and every other field, as text. */
 type Asked = { path: readonly string[]; query: readonly string[] };
@@ -43,16 +46,22 @@ type Asked = { path: readonly string[]; query: readonly string[] };
 /** How an operation is called through a transport, or why it is not. */
 type Call =
   | ({ kind: "list"; entity: string } & Asked)
+  | ({ kind: "download"; entity: string } & Asked)
   | { kind: "one"; entity: string; field: string }
   | ({ kind: "read" } & Asked)
   | { kind: "send" }
   | { kind: "none"; why: string };
 
 /** A GET's parameters: the path's keys, and the rest of its input but what a page asks with. */
-function askedOf(operation: Operation, rest: Reached, paged: boolean): Asked {
+function askedOf(
+  operation: Operation,
+  rest: Reached,
+  paged: boolean,
+  apart: ReadonlySet<string> = PAGED,
+): Asked {
   const path = [...rest.fields].sort();
   const query = Object.keys(operation.input.properties ?? {})
-    .filter((one) => !path.includes(one) && !(paged && PAGED.has(one)))
+    .filter((one) => !path.includes(one) && !(paged && apart.has(one)))
     .sort();
   return { path, query };
 }
@@ -63,6 +72,9 @@ function callOf(metamodel: Metamodel, operation: Operation, rest: Reached | unde
   const owner = ownerOf(metamodel, operation);
   if (operation.role === "search" && owner !== undefined && owner in metamodel.models)
     return { kind: "list", entity: owner, ...askedOf(operation, rest, true) };
+  // An export answers bytes, never JSON: it is downloaded.
+  if (operation.role === "export" && owner !== undefined && owner in metamodel.models)
+    return { kind: "download", entity: owner, ...askedOf(operation, rest, true, EXPORTED) };
   const field = owner === undefined ? undefined : operation.targets[owner];
   const record = rest.fields.length === 1 && rest.fields[0] === field;
   if (operation.role === "get" && owner !== undefined && field !== undefined && record)
@@ -129,6 +141,16 @@ function methodSourceOf(
     const signature = params.signature === "" ? "" : `, ${params.signature}`;
     return `${doc}    ${method}: (criteria: Criteria<${entity}>${signature}) =>\n      transport.list<${entity}>(${params.route(rest.path)}, criteria),`;
   }
+  if (call.kind === "download") {
+    const entity = `dto.${identifierOf(call.entity)}`;
+    const params = paramsOf(call);
+    // The path's keys are required, so they come first: a required parameter never follows an
+    // optional one.
+    const keys =
+      params.signature === "" ? "" : `${params.signature.replace("params?:", "params:")}, `;
+    const given = params.signature === "" ? "" : ", params";
+    return `${doc}    ${method}: (${keys}criteria?: Criteria<${entity}>, format?: ExportFormat) =>\n      downloadRoute(transport, exportRoute(${JSON.stringify(rest.path)}, criteria, format${given})),`;
+  }
   if (call.kind === "read") {
     const params = paramsOf(call);
     return `${doc}    ${method}: (${params.signature}) =>\n      readRoute<dto.${answer}>(transport, ${params.route(rest.path)}),`;
@@ -174,6 +196,7 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
   let paged = false;
   let reads = false;
   let sends = false;
+  let downloads = false;
 
   for (const [identity, operation] of operations) {
     const local = localOf(metamodel, identity);
@@ -190,6 +213,10 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
     methods.push(
       methodSourceOf(local, answerOf(metamodel, identity), method, call, rest, doc),
     );
+    if (call.kind === "download") {
+      downloads = true;
+      paged = true;
+    }
     if (call.kind === "list" || call.kind === "read") {
       paged ||= call.kind === "list";
       reads ||= call.kind === "read";
@@ -205,6 +232,7 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
 
   const core = [
     "bindable",
+    ...(downloads ? ["downloadRoute", "type ExportFormat", "exportRoute"] : []),
     ...(lists ? ["listRoute"] : []),
     ...(sends ? ["pathFor"] : []),
     ...(reads ? ["readRoute"] : []),

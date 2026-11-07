@@ -235,7 +235,12 @@ test("a record brings every field but a related one, which comes when the read e
   assert.ok(source.includes("  id: string;\n"));
   assert.ok(source.includes('  state: "draft" | "paid";\n'));
   assert.ok(source.includes("  note: string | null;\n"));
-  assert.ok(source.includes("  lines?: Line[];\n"));
+  // A to-many is a page of its records, as the read answers it — even from a contract that
+  // still writes it as an array.
+  assert.ok(source.includes("  lines?: EntityCollection<Line>;\n"));
+  assert.ok(
+    source.includes('import type { EntityCollection } from "@sincpro/client-framework";'),
+  );
   assert.ok(
     source.includes("   * The key of a `crm.Customer`.\n   */\n  customer_id: string;"),
   );
@@ -385,6 +390,33 @@ test("an entity's routes come from what each operation is for it", () => {
   );
   assert.ok(source.includes('    placeOrder: "POST /orders",'));
   assert.ok(source.includes("export const entities = [orders] as const;"));
+});
+
+test("an entity edited through `Edit` reads its record with the caller's draft; one without, as it is", () => {
+  const drafted = (over: Partial<Metamodel>): Metamodel => ({
+    ...shop,
+    ...over,
+    operations: {
+      ...shop.operations,
+      "shop.QueryGetOrder": {
+        ...shop.operations["shop.QueryGetOrder"]!,
+        input: {
+          type: "object",
+          required: ["id"],
+          properties: { id: { type: "string" }, draft: { type: "boolean" } },
+        },
+      },
+      ...over.operations,
+    },
+  });
+  assert.ok(
+    entitiesFileOf(drafted({}), options).includes('  one: "/orders/{id}?draft=true",'),
+  );
+  // No `Edit`: no draft is kept, so none is asked for.
+  const { "shop.CommandEditOrder": _edit, ...withoutEdit } = drafted({}).operations;
+  const source = entitiesFileOf({ ...drafted({}), operations: withoutEdit }, options);
+  assert.ok(source.includes('  one: "/orders/{id}",'));
+  assert.ok(!source.includes("draft=true"));
 });
 
 test("a value a record holds is a named type, never an entity nor a preloaded definition", () => {
@@ -576,4 +608,132 @@ test("a Response two Commands answer with is one type, written once; a name two 
   // A name another type has is not taken either.
   const clash = domainFileOf(titled({ "shop.CommandPlaceOrder": "Order" }));
   assert.ok(clash.includes("export type CommandPlaceOrderAnswer = {"));
+});
+
+/** A context whose relation is published as the collection a read answers, and whose orders
+ *  are exported: what sincpro_framework 3.33 writes. */
+const ledger: Metamodel = {
+  format: "sincpro.client-contract/1",
+  bounded_context: "ledger",
+  alias: "ledger",
+  version: "v1",
+  models: {
+    Account: {
+      type: "object",
+      "x-sincpro": { identity: "id" },
+      properties: {
+        id: { type: "string", "x-sincpro": { type: "text" } },
+        entries: {
+          type: "object",
+          properties: {
+            items: { type: "array", items: { $ref: "#/$defs/Entry" } },
+            count: { anyOf: [{ $ref: "#/$defs/Count" }, { type: "null" }] },
+            cursor: { anyOf: [{ type: "string" }, { type: "null" }] },
+          },
+          required: ["items"],
+          "x-sincpro": { type: "one2many", relation: "Entry", reference: true },
+        },
+      },
+    },
+    Entry: {
+      type: "object",
+      "x-sincpro": { identity: "id" },
+      properties: { amount: { type: "string", "x-sincpro": { type: "number" } } },
+    },
+  },
+  operations: {
+    "ledger.QueryListEntries": operation({
+      role: "search",
+      query: true,
+      entities: ["Entry"],
+    }),
+    "ledger.QueryExportEntries": operation({
+      role: "export",
+      query: true,
+      entities: ["Entry"],
+      input: {
+        type: "object",
+        properties: {
+          criteria: { $ref: "#/$defs/Criteria" },
+          cursor: { anyOf: [{ type: "string" }, { type: "null" }] },
+          format: { type: "string", enum: ["parquet", "arrow", "jsonl"] },
+        },
+      },
+      output: {
+        type: "object",
+        properties: { media_type: { type: "string" }, filename: { type: "string" } },
+        "x-sincpro-streamed": ["application/vnd.apache.parquet"],
+      },
+    }),
+  },
+  $defs: {
+    Criteria: { type: "object" },
+    Count: {
+      type: "object",
+      properties: { value: { type: "integer" }, exact: { type: "boolean" } },
+    },
+  },
+  bindings: {
+    rest: {
+      "ledger.QueryListEntries": { method: "GET", path: "/v1/entries", path_fields: [] },
+      "ledger.QueryExportEntries": {
+        method: "GET",
+        path: "/v1/entries/export",
+        path_fields: [],
+      },
+    },
+  },
+};
+
+test("a relation published as a collection is an EntityCollection of its records", () => {
+  const source = domainFileOf(ledger);
+
+  assert.ok(source.includes("  entries?: EntityCollection<Entry>;\n"));
+  assert.ok(!source.includes("export type Count"));
+});
+
+test("an export answers a Download, is downloaded by the client, and is the entity's export", () => {
+  const domain = domainFileOf(ledger);
+  const client = clientFileOf(ledger, options);
+  const entities = entitiesFileOf(ledger, { domain: "ledger", base: "/v1" });
+
+  assert.ok(domain.includes("export type QueryExportEntriesAnswer = Download;"));
+  assert.ok(
+    domain.includes(
+      'import type { Download, EntityCollection } from "@sincpro/client-framework";',
+    ),
+  );
+  assert.ok(
+    client.includes(
+      "exportEntries: (criteria?: Criteria<dto.Entry>, format?: ExportFormat) =>\n" +
+        '      downloadRoute(transport, exportRoute("/entries/export", criteria, format)),',
+    ),
+  );
+  assert.ok(client.includes("downloadRoute, type ExportFormat, exportRoute"));
+  assert.ok(entities.includes('  export: "/entries/export",'));
+});
+
+test("an export under a record's keys takes them first: a required parameter never follows an optional one", () => {
+  const keyed: Metamodel = {
+    ...ledger,
+    bindings: {
+      rest: {
+        ...ledger.bindings!.rest,
+        "ledger.QueryExportEntries": {
+          method: "GET",
+          path: "/v1/tenants/{tenant_id}/entries/export",
+          path_fields: ["tenant_id"],
+        },
+      },
+    },
+  };
+
+  const client = clientFileOf(keyed, options);
+
+  assert.ok(
+    client.includes(
+      'exportEntries: (params: Readonly<Record<"tenant_id", string>>, criteria?: Criteria<dto.Entry>, format?: ExportFormat) =>',
+    ),
+    client,
+  );
 });
