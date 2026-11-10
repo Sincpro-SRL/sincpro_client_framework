@@ -1,425 +1,404 @@
 # @sincpro/client-framework
 
-**The client side of [sincpro_framework](https://github.com/Sincpro-SRL/sincpro_framework), for
-every platform.** Write a use case once — a `Feature`, or an `ApplicationService` that composes
-Features — and run it in a browser, on a phone, in a server-side render, in a script or in a test.
-Every use case is traced and every unexpected error reported, continuing the backend's trace,
-without its author writing either. A service's client contract becomes typed code for each of
-its bounded contexts.
+The client side of [sincpro_framework](https://github.com/Sincpro-SRL/sincpro_framework), for
+the web, React Native, scripts and tests: the same application layer as the backend —
+Commands, Features, ApplicationServices and a bounded context that is their bus —, observed
+the same way, and a typed client generated from a service's contract. No React, no DOM, no
+platform storage: what a platform must give, it gives through a port.
 
-> **Status: 0.x.** The API may still change before 1.0. In: the client, the generator, the
-> bounded context with its `Feature` and `ApplicationService`, the process (tracing, error
-> reporting, the context) and its ports. Read the [manifesto](MANIFESTO.md) for what this package
-> is responsible for, what it is not and where it is going, and the
-> [ubiquitous language](docs/UBIQUITOUS_LANGUAGE.md) every Sincpro framework shares.
+- [A bounded context](#a-bounded-context)
+- [Errors](#errors)
+- [Observability](#observability)
+- [Context](#context)
+- [Talking to a server](#talking-to-a-server)
+- [Generated code](#generated-code)
+- [Values on the wire](#values-on-the-wire)
+- [Package layout](#package-layout)
+- [Development](#development)
 
-## What it gives, at a glance
-
-```mermaid
-classDiagram
-  direction LR
-  class UseBoundedContext {
-    +name
-    +context : Context
-    +addDependency(name, value)
-    +register(features, applicationServices) BoundedContext
-  }
-  class BoundedContext {
-    +Issues : the methods of Issues
-    +CloseAndNotify : the methods of CloseAndNotify
-    +context : Context
-    +with(dependencies) BoundedContext
-    +scoped(context) BoundedContext
-  }
-  class Feature {
-    #client, session : each dependency
-    #context : what this run executes with
-  }
-  class ApplicationService {
-    #feature : Issues, Notices
-  }
-  class Context {
-    +values
-    +get(name)
-    +set(values)
-    +clear(names)
-    +watch(listener)
-  }
-  class ContextStore {
-    <<port>>
-    +load(key)
-    +save(key, values)
-    +delete(key)
-    +version(key)
-    +watch(key, listener)
-  }
-  class Tracer {
-    <<port>>
-    +start(name, parent, attributes) Span
-  }
-  class ErrorReporter {
-    <<port>>
-    +report(error, about)
-  }
-  class Transport {
-    <<port>>
-    +list(route, criteria)
-    +one(route)
-    +send(method, route, body)
-  }
-  UseBoundedContext --> BoundedContext : register
-  BoundedContext o-- Feature : each by its name
-  Feature <|-- ApplicationService
-  BoundedContext --> Context : its level
-  Context --> ContextStore : kept in
-  BoundedContext ..> Tracer : a span per use case
-  BoundedContext ..> ErrorReporter : what nobody expected
-  Feature ..> Transport : through its generated client
-```
-
-`configureProcess({ tracer, reporter, context })` plugs the ports once; `processContext` is the
-process's level of the context. Beside them: the generated client (`sincpro-client generate`),
-`entity()`, model definitions (`defineMeta`, `metaFromSchema`) and client-side ids.
-
-## A bounded context, set up like the backend's
-
-Each bounded context of an application has the layout sincpro_framework gives a service: what its
-services can count on, its bases, its services, and the one object the rest of the application
-uses it through.
-
-```mermaid
-flowchart LR
-  subgraph py["sincpro_framework · Python"]
-    direction TB
-    pd["infrastructure/dependencies.py<br/>DependencyContextType · add_dependency"]
-    pf["infrastructure/framework.py<br/>Feature · ApplicationService · UseFramework"]
-    ps["services/<br/>@bus.feature · @bus.app_service"]
-    pi["__init__.py<br/>the bounded context"]
-    pd --> pf --> ps --> pi
-  end
-  subgraph ts["@sincpro/client-framework · TypeScript"]
-    direction TB
-    td["infrastructure/dependencies.ts<br/>ProjectDependencies · addDependency"]
-    tf["infrastructure/bounded_context.ts<br/>Feature · ApplicationService · UseBoundedContext"]
-    tsv["services/<br/>features · applicationServices"]
-    ti["index.ts<br/>export const project"]
-    td --> tf --> tsv --> ti
-  end
-  ti --> users["a screen · another bounded context · a test<br/>project.Issues.close(input)"]
-  pi -. "the client contract" .-> td
-```
+## A bounded context
 
 ```ts
-// domains/project/infrastructure/dependencies.ts — what the services can count on
-export interface ProjectDependencies {
-  client: ProjectClient; // generated from the service's contract
-  session: Session;
-}
-
-export function registerDependencies(bc: UseBoundedContext<ProjectDependencies>) {
-  bc.addDependency("client", clientOf(transport));
-  bc.addDependency("session", session);
-  return bc;
-}
-```
-
-```ts
-// domains/project/infrastructure/bounded_context.ts
 import {
-  ApplicationService as BaseApplicationService,
-  Feature as BaseFeature,
-  UseBoundedContext,
+  ApplicationService,
+  BoundedContext,
+  Command,
+  Feature,
+  Response,
 } from "@sincpro/client-framework";
 
-import type { ProjectFeatures } from "../services";
-
-export class Feature extends BaseFeature<ProjectDependencies> {}
-export class ApplicationService extends BaseApplicationService<
-  ProjectDependencies,
-  ProjectFeatures
-> {}
-
-export function configProjectBoundedContext(name: string) {
-  return registerDependencies(new UseBoundedContext<ProjectDependencies>(name));
-}
-```
-
-```ts
-// domains/project/services/issues.ts — a Feature is a facade: one part of the domain
-export class Issues extends Feature {
-  close(input: dto.CommandCloseIssue) {
-    this.session.require(); // each dependency is a typed property
-    return this.client.closeIssue(input); // carries this run's traceparent
+class ResponseTotal extends Response {
+  constructor(readonly total: number) {
+    super();
   }
 }
 
-// domains/project/services/close_and_notify.ts — composes the Features of its bounded context
-export class CloseAndNotify extends ApplicationService {
-  async execute(input: dto.CommandCloseIssue) {
-    await this.feature.Issues.close(input); // a child span, the same trace
-    return this.feature.Notices.tell(input);
+class CommandTotal extends Command<ResponseTotal> {
+  constructor(readonly quantity: number) {
+    super();
   }
 }
 
-// domains/project/services/index.ts
-export const features = { Issues, Notices };
-export const applicationServices = { CloseAndNotify };
-export type ProjectFeatures = typeof features;
+class CommandQuote extends Command<ResponseTotal> {
+  constructor(readonly quantity: number) {
+    super();
+  }
+}
+
+class Total extends Feature<CommandTotal, ResponseTotal> {
+  static readonly serviceName = "Total";
+  declare readonly unitPrice: number; // a dependency, typed
+
+  execute(command: CommandTotal): ResponseTotal {
+    this.logger.info("Totalling", { quantity: command.quantity });
+    return new ResponseTotal(command.quantity * this.unitPrice);
+  }
+}
+
+class Quote extends ApplicationService<CommandQuote, ResponseTotal> {
+  static readonly serviceName = "Quote";
+
+  execute(command: CommandQuote): Promise<ResponseTotal> {
+    return this.featureBus.execute(new CommandTotal(command.quantity));
+  }
+}
+
+const sales = new BoundedContext<{ unitPrice: number }>("sales");
+sales.addDependency("unitPrice", 10);
+sales.feature(CommandTotal)(Total);
+sales.appService(CommandQuote)(Quote);
+
+const answer = await sales.execute(new CommandQuote(3)); // ResponseTotal — total 30
 ```
 
+A Command names, by its type, the Response it answers: `execute` infers it, with no second
+argument (the backend's `bus(dto, ResponseType)` is accepted too, and checked in TypeScript
+only). A Response may be a class, a plain object, a page, a primitive or `void`.
+
+- **One Command, one service.** A Command class is registered once, across both layers, and
+  dispatched by its exact constructor. `serviceName` names the service in spans and logs —
+  stable, where a minifier renames classes.
+- **Dependencies are attributes.** `addDependency` supplies them; a service declares their types
+  (`declare readonly client: …`), usually once on a base class per bounded context, as
+  `sincpro-client scaffold` writes it. Declaring registers nothing; reading a missing one fails.
+  A replacement names what it replaces: `addDependency(name, next, { replaces: previous })`.
+- **A service is a singleton of its generation.** What belongs to one request goes in the
+  Command or the context, never on `this`. Use TypeScript `private`, not `#private`: a run sees
+  the instance through a view of its own.
+- **Generations.** The first call (or `buildRootBus()`) builds one; what is registered later
+  answers from the next call, and a running call keeps its own. `fresh()` copies the
+  registrations; `scoped({ company_id: 2 })` runs with more context and the same instances.
+- **Composition.** An ApplicationService runs its context's Features through `this.featureBus`,
+  as children of its own execution; never another ApplicationService.
+
+### Decorators, when the project has them
+
 ```ts
-// domains/project/index.ts
-export const project = configProjectBoundedContext("project").register({
-  features,
-  applicationServices,
+@sales.feature(CommandTotal)
+class Total extends Feature<CommandTotal, ResponseTotal> { … }
+```
+
+The same functions work as standard decorators and as legacy ones (`experimentalDecorators`);
+without a decorator transform, call them: `sales.feature(CommandTotal)(Total)`. No DI library
+and no `reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's
+transform (Vite, Metro/Babel) is each application's to configure and test.
+
+## Errors
+
+As the backend's, a bounded context has three chains of error handlers, run
+first-registered-first. A handler returns the answer, or throws to hand the error on; the last
+one's throw reaches the caller:
+
+```ts
+sales.addFeatureErrorHandler((error) => {
+  if (error instanceof PriceNotFound) return new ResponseTotal(0); // the answer
+  throw error; // the next handler, or the caller
 });
+sales.addAppServiceErrorHandler(toBusinessError);
+sales.addGlobalErrorHandler(toProblem); // what reaches sales.execute or a scope
 
-// anywhere: a screen, a script, a test
-await project.Issues.close(input); // span project/Issues.close
-await project.CloseAndNotify.execute(input); // project/CloseAndNotify → its Features under it
+sales.expectErrors(QuoteExpired); // the business answering: `refused`, never reported
 ```
 
-The generator writes this skeleton for you, once, from the service's contract — and never touches
-a file that is already there, because from then on it is yours:
+A failure is observed where it happened, before any handler runs: its span closes with its
+outcome, its log line is written and, when unexpected, it is reported once. A handler decides
+the answer, not whether the failure is seen; an answered one adds an `error.handled` line. A
+feature handler answers wherever the Feature ran, inside an ApplicationService too; the global
+chain wraps only `execute` and `scoped(...).execute`.
 
-```bash
-sincpro-client generate project.contract.json --out src/domains/project/generated --domain project
-sincpro-client scaffold project.contract.json --out src/domains/project   # dependencies, bases, services, index
+How an error ended a use case:
+
+| Outcome   | When                                                                         | Reported |
+| --------- | ---------------------------------------------------------------------------- | -------- |
+| `ok`      | it answered                                                                  | —        |
+| `refused` | the server answered a 4xx (`TransportError`), or the class is `expectErrors` | no       |
+| `aborted` | whoever asked stopped waiting (`AbortError`)                                 | no       |
+| `failed`  | anything else: a bug, a 5xx, a server nobody reached                         | yes      |
+
+`configureProcess({ outcomeOf })` replaces the process-wide rule. `reportError(error, where)`
+reports what fails outside a use case — a view, a worker —, with the same rule.
+
+## Observability
+
+The platform plugs the implementations once, at startup; nothing breaks without them:
+
+```ts
+import { configureProcess, memoryContexts } from "@sincpro/client-framework";
+import { openTelemetryTracer } from "@sincpro/client-framework/opentelemetry";
+import { sentryReporter } from "@sincpro/client-framework/sentry";
+
+configureProcess({
+  tracer: openTelemetryTracer(provider.getTracer("forge-web")), // the app's provider
+  reporter: sentryReporter(client), // the app's Sentry or GlitchTip client
+  logger: { mode: production ? "production" : "development" },
+  context: memoryContexts(),
+});
 ```
 
-And the layers stay layers: `sincpro-client check` resolves every import of the application with
-its own TypeScript and `tsconfig` (aliases included) and fails when a bounded context reaches into
-another's insides, a service imports React or web-ui, `common` imports a bounded context, or the
-entrypoints skip a bounded context's `index.ts` — put it in `make doctor`:
+Every execution opens a span `<bounded context>/<serviceName>`; an ApplicationService's Features
+are its children, on the same trace. A dependency that is a `Transport` or a generated client is
+bound to the run, so each request carries `traceparent` (and `tracestate`) and
+`sincpro-context` — the backend continues the trace. A tracer, reporter or logger that fails is
+ignored: telling about a use case never changes its answer.
+
+The vendor entries wrap what the application built — they initialize nothing, read no
+environment and register nothing global. There is no context manager: the trace reaches the
+wire through the transport. On the web, leave the backend's origin out of OpenTelemetry's
+automatic `fetch` instrumentation (`ignoreUrls`), or it writes a `traceparent` of a trace of its
+own over this one.
+
+### Logging
+
+The application layer imports no logger. Two are predefined, for the code around the use cases:
+
+```ts
+import { logger, loggerAdapter } from "@sincpro/client-framework";
+
+logger.info("Database opened"); // infrastructure — the global logger
+loggerAdapter.warn("Printer is slow", { ms: 900 }); // an adapter
+sales.logger.info("Catalog preloaded"); // a bounded context, outside a use case
+this.logger.info("Totalling"); // inside a Feature or ApplicationService
+```
+
+| Logger                    | Layer                 | Each line carries                              |
+| ------------------------- | --------------------- | ---------------------------------------------- |
+| `logger`                  | `infrastructure`      | —                                              |
+| `loggerAdapter`           | `adapter`             | the run, when injected as a dependency         |
+| `sales.logger`            | `bounded_context`     | its bounded context                            |
+| `this.logger`, Feature    | `feature`             | bounded context, use case, execution and trace |
+| `this.logger`, AppService | `application_service` | the same                                       |
+
+`this.logger` keeps its run across awaits and concurrent calls, without a global stack. An
+adapter that imports `loggerAdapter` at module level writes without the run; inject it
+(`sales.addDependency("log", loggerAdapter)`) or pass `this.logger` when a line must carry it.
+
+One configuration, two doors — `configureProcess({ logger })` replaces every process port,
+`configureLogger(...)` only logging (an in-app debug switch):
+
+```ts
+configureLogger({ mode: "development", level: "info", layers: { adapter: false } }); // the console
+configureLogger({ mode: "production" }); // the console, silent
+configureLogger({ engine: combineLoggers(consoleLogger({ mode }), lokiLogger) }); // other sinks
+configureLogger({ engine: false }); // no logs
+```
+
+The console is the default engine. In production it is silent; in development it prints
+everything, and `level` and `layers` hide only INFO/DEBUG. A supplied `engine` owns its own
+policy, and each sink of `combineLoggers` keeps its own — the console's silence never silences
+another. Every execution writes `execution.started` (DEBUG) and `execution.finished` with its
+outcome and duration (INFO, WARN when refused, ERROR when failed). No line carries a DTO, a
+result, an error body or the session's context unless the author writes it. Delivery, buffering
+and credentials (Loki, a phone's queue) are the platform's.
+
+## Context
+
+The values every use case runs with — the tenant, the company —, in levels: the process's, the
+bounded context's, a scope's. A root execution reads them once; its Features inherit that
+snapshot, and what travels goes to the server in `sincpro-context`.
+
+```ts
+processContext.set({ tenant_id: "acme" });
+sales.context.set({ warehouse_id: 4 });
+await sales.scoped({ company_id: 2 }).execute(new CommandQuote(1));
+```
+
+Where the values live is a port (`ContextStore`): synchronous reads, a version per change and an
+optional `watch`. `memoryContexts()` is the default; a browser, a phone or a server render plugs
+its own. `values` is the same object until it changes, so a screen can hand it to React's
+`useSyncExternalStore`.
+
+## Talking to a server
+
+| Piece                          | What it does                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| `restTransport({ base })`      | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
+| `memoryTransport(tables)`      | the same contract in memory, copying by the wire's rules — for tests and demos        |
+| `entity(key, routes)`          | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
+| `retryKeys()`                  | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
+| `screensTransport(transport)`  | screen reads and writes run as use cases of `screens`: traced and reported            |
+| `parquetDecoder` (`./parquet`) | large pages read as Parquet through the same transport                                |
+
+Inside a Feature, inject the transport or the generated client as they are — the run already
+observes them. `screensTransport` is for what a screen asks directly, outside any Feature.
+
+## Generated code
 
 ```bash
+python -m sincpro_framework.entrypoints export-client-contract app.http:gateways contracts [--events]
+sincpro-client generate contracts/project.contract.json --out src/domains/project/generated --domain project
+sincpro-client scaffold contracts/project.contract.json --out src/domains/project
 sincpro-client check --root src
 ```
 
-Every public method is a use case: a span named as the backend names its own
-(`project/Issues.close`, identity `project.Issues.close`), and a report when it fails in a way
-nobody expected. One gesture is one trace, from the click to the database:
+`generate` writes, from the contract the backend exports — never edited, written again whole:
 
-```mermaid
-sequenceDiagram
-  participant caller as Caller<br/>(a screen, a test)
-  participant app as project.CloseAndNotify<br/>(ApplicationService)
-  participant feature as this.feature.Issues<br/>(Feature)
-  participant client as this.client<br/>(generated, bound to the run)
-  participant process as Process<br/>(Tracer · ErrorReporter)
-  participant server as sincpro_framework
+| File          | What                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `domain.ts`   | a type per model, per `<Name>Input`, per operation's input and answer, per domain event    |
+| `client.ts`   | `clientOf(transport)`: a method per operation REST reaches; `operations` and `events` data |
+| `entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                |
 
-  caller->>app: execute(input)
-  app->>process: span project/CloseAndNotify — the context read once
-  app->>feature: close(input)
-  feature->>process: child span project/Issues.close
-  feature->>client: closeIssue(input)
-  client->>server: POST /issues/{issue_id}/close · traceparent · sincpro-context
-  server-->>client: ResponseCloseIssue — or a Problem
-  client-->>caller: the answer, through each run
-  Note over process: each run ends ok · refused (shown, never reported) · aborted · failed (reported once, with its trace id)
-```
+`scaffold` writes, once, the application's own files: its dependencies, its service bases and
+`registerServices`. `check` enforces the application's layers and bounded-context boundaries.
 
-`project` holds references only — each service is made once, the first time it is
-asked for — and it is never frozen: `project.with({ client: fake })` and
-`project.scoped({ company_id: 2 })` derive a variant that shares everything else.
-
-## The process: tracing, errors and the context
-
-What every bounded context runs with is set once, where the application starts — the way the
-backend's process is. All of it is optional:
+**Domain events, on demand.** A backend leaves its events out of the contract unless it is
+exported with `--events`. Then each event is a type as it is received — every field present,
+`name` its wire name as a literal — and `DomainEvent`, their union, narrows by `name`:
 
 ```ts
-// entrypoints/main.ts
-configureProcess({
-  tracer, // the platform's Tracer
-  reporter, // the platform's ErrorReporter
-  context: memoryContexts(), // where the context lives (this is the default)
-});
+import type * as remote from "./generated/domain";
 
-processContext.set({ tenant_id: "acme" }); // every use case runs with it and sends it
-project.context.set({ warehouse_id: 4 }); // only what «project» runs
+function subjectOf(event: remote.DomainEvent): string {
+  switch (event.name) {
+    case "project.issue.v1.closed":
+      return event.issue_id; // remote.IssueClosed
+    // …
+  }
+}
 ```
 
-What a screen reads and writes is a use case too when it goes through `screensTransport(transport)`:
-each request is `screens/EntityReads.list`, `…/EntityWrites.send` — traced, with the context on
-it, and reported when it failed.
+`events` in `client.ts` says, per event, its wire name and whether the bounded context records it
+(its aggregates' own) or handles it (a Feature subscribes).
 
-A service reads it as `this.context` — the process's values, under them its bounded context's,
-under them a scope's, read once where the gesture started — and every request it sends carries
-it in `sincpro-context`. A screen hears it change with `processContext.watch(…)`.
+### Types, not classes
 
-```mermaid
-flowchart LR
-  p["processContext<br/>tenant_id · company_id"]
-  b["project.context<br/>warehouse_id"]
-  s["project.scoped({ company_id: 2 })<br/>one window"]
-  e["this.context<br/>read once where the gesture starts"]
-  c["this.context of each Feature it runs<br/>the same values"]
-  h["sincpro-context<br/>on every request"]
-  store[("ContextStore<br/>the platform's")]
-  p --> e
-  b --> e
-  s --> e
-  e --> c
-  e --> h
-  c --> h
-  p -.-> store
-  b -.-> store
-```
+What is generated is the remote service's contract and an adapter over it, so it is written as
+types; the application's own Commands are classes, written by hand.
 
-The context lives in a `ContextStore`, the port each platform implements with its own technology:
-memory by default, `sessionStorage` or the screens' own store in a browser, MMKV on a phone,
-`AsyncLocalStorage` in a server that renders. The services never know which.
+- **The wire is JSON, and a type says it exactly.** A decimal is text, a day is text, a page is
+  `{ items, count, cursor }`. A class around that JSON would claim more than it holds unless
+  every field had a reader; a type claims nothing it does not hold.
+- **The local bus routes by class, and the remote contract must not reach it.** A generated
+  class extending `Command` could be registered and executed locally — the confusion between a
+  remote operation and a local use case this package keeps apart. A remote call happens inside
+  a local Feature, through the injected client.
+- **Events read best as a union.** A stream of facts — a queue, a history page — is narrowed by
+  `name`, with no registry of constructors to rebuild each one.
+- **Nothing runs.** `domain.ts` adds no byte to a bundle and no side effect; a contract of three
+  hundred models costs nothing at runtime.
 
-`tracer` and `reporter` are injected by the application — this package initialises nothing.
-Any object that fulfils the port works; for the common vendors there are optional adapters that
-wrap what the application built:
+A local class takes the contract's shape and stays checked against it:
 
 ```ts
-import { openTelemetryTracer } from "@sincpro/client-framework/opentelemetry"; // peer: @opentelemetry/api
-import { sentryReporter } from "@sincpro/client-framework/sentry"; // no dependency
+import type * as remote from "../generated/domain";
 
-const tracer = openTelemetryTracer(provider.getTracer("my-app")); // the app's provider and exporter
-const reporter = sentryReporter(client); // the app's Sentry-compatible client (GlitchTip too)
+class CommandCancelIssue
+  extends Command<ResponseCancelIssue>
+  implements remote.CommandCancelIssue
+{
+  constructor(readonly issue_id: string) {
+    super();
+  }
+}
 ```
 
-What fails outside a use case — a screen that broke while drawing, a subscriber, a worker — goes to
-the same reporter with `reportError(error, where)`: once (an error a use case already reported is
-not sent again), with the process's context.
-
-Nothing is installed or shipped unless it is imported, and without a tracer or a reporter every use
-case runs the same — nothing traces, nothing reports. In a test, `memoryTracer()` and
-`memoryReporter()` (`@sincpro/client-framework/testing`).
+The generated name and the local one may be the same — the backend's —, so the generated ones
+are imported under their own (`remote`). Validating and converting what arrives (a decimal into
+`Decimal`) is a reader's job, not a class's: generated readers are the next step, when a use
+needs them.
 
 ## Values on the wire
 
-The backend writes every message with one set of rules, and every client reads and writes them
-the same — so they live here, not in each platform:
+| Value      | Travels as                             | API                                            |
+| ---------- | -------------------------------------- | ---------------------------------------------- |
+| Decimal    | exact text, `"10.50"`                  | `Decimal`                                      |
+| Money      | `{ amount: "10.50", currency: "BOB" }` | `Money`                                        |
+| Day        | `"2026-10-02"`, never an instant       | `isDay`, `dayOf`                               |
+| Instant    | ISO text                               | `wallTimeOf`, `instantOf`                      |
+| ID         | UUID v7 as 32 hex                      | `newEntityId`, `isEntityId`, `momentOf`        |
+| Bytes      | `{ "$bytes": "<base64>" }`             | `valuesOf`, `readValues`                       |
+| Collection | items, count and cursor                | `collectionOf`, `isPartial`, `relatedCriteria` |
+| Export     | Parquet, Arrow or JSON Lines           | `downloadRoute`, `exportRoute`                 |
 
-| Value        | Travels as                                 | Here                                               |
-| ------------ | ------------------------------------------ | -------------------------------------------------- |
-| a decimal    | text, every digit: `"10.50"`               | `Decimal` — exact, on `BigInt`; rounds half up     |
-| a money      | `{ "amount": "10.50", "currency": "BOB" }` | `Money` — never adds two currencies                |
-| a day        | `"2026-10-02"`, never converted            | `isDay`, `dayOf(instant, zone)` for «today»        |
-| an instant   | ISO text: `"2026-10-02T14:30:00Z"`         | `wallTimeOf` / `instantOf` on the company's zone   |
-| an id        | a UUID v7 as 32 hex                        | `newEntityId`, `isEntityId`, `momentOf`            |
-| bytes        | `{ "$bytes": "<base64>" }`                 | `valuesOf` / `readValues`                          |
-| the context  | only what travels: text, numbers, lists    | `plainCodec`, `travelling`                         |
-| a to-many    | `{ "items": […], "count": {…}, "cursor" }` | `EntityCollection<T>`, `collectionOf`, `isPartial` |
-| an export    | Parquet, Arrow or JSON Lines, streamed     | `downloadRoute`, `exportRoute`, `Download`         |
-| a large page | Parquet, when the search says so           | `restTransport({ decoders: [parquetDecoder] })`    |
+`Decimal` and `Money` compute exactly, on `BigInt`; a decimal never becomes a `number` and a day
+never a `Date`. `valuesOf`/`pack` write; `readValues` reads tagged values back; `rebuilt`/`unpack`
+use a reader given explicitly. Cycles, functions and non-finite numbers are refused. How a value
+is shown, typed or stored is the platform's.
 
-```ts
-import { Money, pack, unpack, valuesOf } from "@sincpro/client-framework";
+## Package layout
 
-const line = new Money("19.90", "BOB").times("3"); // 59.70 BOB, exact
-const total = Money.total([line, delivery], "BOB").rounded(); // to the currency's decimals
-valuesOf({ total, at: new Date() }); // { total: { amount, currency }, at: "…Z" }
-const answer = unpack(text, Money); // a typed read when asked for — never imposed
+Each module is laid out as sincpro_framework's are, and says what it offers in its `index.ts`:
+
+```text
+src/
+  common/          the values of the wire
+  context/
+    domain/          ContextStore and ContextCodec ports, what travels, Execution
+    adapters/        memoryContexts, plainCodec
+    entrypoint/      Context: one door over a level
+    infrastructure/  the process's store and processContext
+  observability/
+    domain/          Tracer, ErrorReporter, Logger ports
+    adapters/        console (default), memory, opentelemetry and sentry (optional entries)
+    infrastructure/  the ports this process runs with
+    services/        logger, loggerAdapter, reportError, outcomeOf
+  client/
+    domain/          Transport, TransportError, entity(), the client contract
+    adapters/        rest, memory, parquet (optional entry)
+    services/        discovery, retry keys, propagation of trace and context
+  model/           defineMeta, metaFromSchema, metaStore
+  core/
+    domain/          Command, Response, Feature, ApplicationService, FeatureBus, ErrorHandler
+    services/        the execution pipeline, dependency binding, the handler chain
+    entrypoint/      BoundedContext, screensTransport
+    infrastructure/  configureProcess, configureLogger
+  codegen/         the generator and its CLI — the only place Node is allowed
+  testing/         memoryTracer, memoryReporter, memoryLogger
 ```
 
-Not restrictive, like the backend: reading keeps every key it finds, a typed read is asked for
-(`rebuilt(values, Money)`), any currency code is read, and an application adds its own decimals
-(`Money.decimals["USDT"] = 6`). What JSON cannot write (`NaN`, a function, a cycle) is refused at
-once, naming where. Showing a value to a person — `Intl.NumberFormat`, a date picker — is each
-platform's, never this package's.
-
-A relation that holds several records — the invoices of a customer — comes as a page of them,
-never an array: forty records, «at least 1000», and the cursor to go on. Read it with
-`collectionOf` (an array from a hand-written domain reads the same) — a `HeldCollection`, edited
-the way a string is: `append`, `extend`, `remove`, `replace` answer a new one. Say «1000+» when
-`count.exact` is false, and ask for the rest as a list of the related entity
-(`relatedCriteria(meta.fields.invoices, customer)`). A part of the record — the lines of an
-invoice — is written back only whole: the backend refuses a page of it.
-
-A search asked for millions of records answers Parquet instead of JSON to a client that reads it.
-Give the transport the decoder — an optional entry over `hyparquet` — and nothing above it
-changes: the same page, each value as the JSON wire writes it.
-
-```ts
-import { restTransport } from "@sincpro/client-framework";
-import { parquetDecoder } from "@sincpro/client-framework/parquet";
-
-const transport = restTransport({ base: "/v1", decoders: [parquetDecoder] });
-```
-
-## Where it sits
-
-```mermaid
-flowchart TB
-  backend["sincpro_framework<br/>the service: its bounded contexts, Commands, the client contract"]
-  criteria["@sincpro/criteria<br/>Criteria · Meta · Page · Problem"]
-  cf["@sincpro/client-framework<br/>bounded contexts · services · process · context · ports · the client · the generator"]
-  web["@sincpro/web-framework<br/>hooks · screens · the browser's tracer and reporter"]
-  mobile["@sincpro/mobile<br/>React Native · SQLite · its queue"]
-  rest["a script · a server-side render · a test"]
-  web --> cf
-  mobile --> cf
-  rest --> cf
-  cf --> criteria
-  backend -. "client contract → sincpro-client generate" .-> cf
-  cf -- "HTTP · traceparent · sincpro-context" --> backend
-```
-
-No React, no DOM, no platform: what a platform must provide — how a span is exported, where an
-error is reported, where the context lives — it plugs through a port.
-
-## On each platform
-
-This package asks the platform for little: `fetch`, `AbortSignal`, `URL` / `URLSearchParams`,
-`crypto.getRandomValues` (client-side ids, retry keys), `Proxy` / `WeakMap`. Browsers and Node 26
-have them all. **React Native** (Hermes) needs two polyfills, installed once where the app
-starts, before anything imports this package:
-
-```ts
-import "react-native-get-random-values"; // or expo-crypto's getRandomValues polyfill
-import "react-native-url-polyfill/auto"; // RN's own URL resolves relative paths poorly
-```
-
-`memoryTransport` copies with `structuredClone` where the engine has it and a JSON round trip
-where it does not. The OpenTelemetry adapter takes `@opentelemetry/api` from 1.9, the version
-`@sincpro/mobile` runs.
-
-The services are the same everywhere; each platform plugs its own technology behind the same
-three ports, in its `main`:
-
-| Port            | Browser (@sincpro/web-framework)                | Phone (@sincpro/mobile)                    | Test              |
-| --------------- | ----------------------------------------------- | ------------------------------------------ | ----------------- |
-| `Tracer`        | OpenTelemetry + OTLP/HTTP (`./telemetry`)       | OpenTelemetry with its queue and exporter  | `memoryTracer`    |
-| `ErrorReporter` | GlitchTip / Sentry browser client (`./errors`)  | Sentry React Native client                 | `memoryReporter`  |
-| `ContextStore`  | memory, `sessionStorage`, or the screens' store | MMKV, or memory hydrated from AsyncStorage | `memoryContexts`  |
-| `Transport`     | `restTransport` over `fetch`                    | `restTransport`, or SQLite offline         | `memoryTransport` |
-
-How @sincpro/mobile adopts all of this — what maps to what, the MMKV store, the order to move
-in — is [`docs/MOBILE.md`](docs/MOBILE.md).
-
-A store's reads are synchronous — a use case reads its context where a gesture starts and never
-waits for it — so an asynchronous storage is held in memory and written through.
+| Entry                                                   | What                                        |
+| ------------------------------------------------------- | ------------------------------------------- |
+| `@sincpro/client-framework`                             | everything an application runs              |
+| `@sincpro/client-framework/core`                        | the application layer alone                 |
+| `@sincpro/client-framework/testing`                     | the observability ports in memory           |
+| `@sincpro/client-framework/codegen`                     | the generator, as functions                 |
+| `./console`, `./opentelemetry`, `./sentry`, `./parquet` | optional entries; a vendor's SDK only there |
 
 ## Development
 
-Node 26 (`nvm use`).
+Node 26 (`nvm use`):
 
 ```bash
-make init            # pre-commit + dependencies
-make test            # vitest, in Node
-make verify-format   # format + lint + doctor; fails if the tree is left dirty (what CI runs)
-make build           # tsc into dist/
+make init
+make typecheck
+make test
+make verify-format      # eslint --fix + prettier + typecheck + doctor; fails on a dirty tree
+make build
+make codegen-fixtures   # after changing the generator on purpose; read the diff
 ```
 
-`make doctor` enforces what the type checker cannot: the source imports itself, never a relative
-path; no React, no UI, no browser global; Node only inside the generator. Read
-[`AGENTS.md`](AGENTS.md) before changing anything, and [`CONTRIBUTING.md`](CONTRIBUTING.md)
-before opening a pull request.
+`make doctor` enforces what the compiler does not: self-imports, no platform (React, DOM, Node
+outside `codegen/`), a vendor's SDK only in its optional entry, and `domain/` importing only
+`domain/`. Tests run in Node, one folder per module; `tests/support/forge-contract/` holds real
+contracts and what the generator writes from them, compared byte for byte.
 
-## CI/CD
+The runtime uses `fetch`, `AbortSignal`, `URL`, `crypto.getRandomValues`, `Proxy`, `WeakMap` and
+`BigInt`; React Native must provide URL and random values before ids or transports are used.
 
-Every workflow in `.github/workflows/` delegates to
-[`Sincpro-SRL/.github`](https://github.com/Sincpro-SRL/.github) and only calls `make` targets:
-checks on every pull request and push to `main`, a release draft on `main`, publication to npm
-when a release is published, and notifications. The version is written by the release pipeline,
-never by hand.
+Read [`MANIFESTO.md`](MANIFESTO.md) (what this package is and is not), [`AGENTS.md`](AGENTS.md)
+(how to change it), [`CONTRIBUTING.md`](CONTRIBUTING.md),
+[`docs/UBIQUITOUS_LANGUAGE.md`](docs/UBIQUITOUS_LANGUAGE.md) and
+[`docs/MOBILE.md`](docs/MOBILE.md). Versions are written by the release pipeline.
 
 ## License
 

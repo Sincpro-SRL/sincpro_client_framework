@@ -1,4 +1,5 @@
-import { restTransport, type UseBoundedContext } from "@sincpro/client-framework";
+import { restTransport } from "@sincpro/client-framework";
+import type { BoundedContext } from "@sincpro/client-framework/core";
 
 import { clientOf } from "../../forge-contract/project/client";
 
@@ -37,7 +38,7 @@ const cancelling: typeof fetch = (async () =>
   })) as typeof fetch;
 
 export function registerDependencies(
-  bc: UseBoundedContext<ProjectDependencies, ProjectContext>,
+  bc: BoundedContext<ProjectDependencies, ProjectContext>,
 ) {
   bc.addDependency("client", clientOf(restTransport({ document: null, fetch: cancelling })));
   bc.addDependency("session", signedIn("ana"));

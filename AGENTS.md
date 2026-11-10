@@ -20,18 +20,22 @@ it says what this package is responsible for and what it is not. This file is ho
 
 ## Where things go
 
-| Folder               | What                                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt` |
-| `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract            |
-| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                  |
-| `src/services/`      | `UseBoundedContext`, `Feature`, `ApplicationService`, the process, the execution              |
-| `src/context/`       | The `ContextStore` port, `memoryContexts`, and `Context` — one level of it                    |
-| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                         |
-| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed        |
-| `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named   |
-| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                             |
-| `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts            |
+Each module is laid out as sincpro_framework's are: `domain/` (ports, types and rules),
+`adapters/` (implementations of the ports), `services/` (what uses them), `infrastructure/`
+(the process's state and technical support) and `entrypoint/` (the doors a caller uses). A
+module has only the layers it needs, and says what it offers in its own `index.ts`.
+
+| Folder               | What                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt`  |
+| `src/context/`       | `ContextStore`, codec, `Execution` (domain); memory and plain codec; `Context`; the process's  |
+| `src/observability/` | Tracer/ErrorReporter/Logger ports; console, memory, OpenTelemetry, Sentry; loggers, reporting  |
+| `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation  |
+| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                   |
+| `src/core/`          | DTOs, bus, Feature/ApplicationService, error handlers; pipeline; `BoundedContext`; the process |
+| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed         |
+| `src/testing/`       | The public entry of the in-memory observability adapters                                       |
+| `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts      |
 
 ## Hard rules (the build enforces them — `make doctor`)
 
@@ -42,6 +46,11 @@ it says what this package is responsible for and what it is not. This file is ho
   and nowhere else; nothing an application runs imports `codegen/`.
 - **Self-imports, no extensions.** Inside `src/`, import `@sincpro/client-framework/<path>` —
   never a relative path, never `.ts`.
+- **Domain inward.** A `domain/` folder imports only other `domain/` folders: no adapter,
+  service, infrastructure or entrypoint.
+- **Vendors in their entry.** A vendor's SDK is imported only in its optional entry
+  (`observability/adapters/opentelemetry.ts`, `observability/adapters/sentry.ts`,
+  `client/adapters/parquet.ts`), and nothing in `src/` imports one.
 
 ## Conventions
 
@@ -55,17 +64,19 @@ it says what this package is responsible for and what it is not. This file is ho
 ## Known traps
 
 - **A run sees the instance through a view of its own.** Inside a method, each dependency
-  (`this.client`), `this.context` and `this.feature` are that run's — bound to its execution. So a
+  (`this.client`), `this.context` and `this.featureBus` are that run's — bound to its execution. So a
   service declares no `#private` fields (they refuse the view); use TypeScript's `private`.
-- **A service is a singleton of its bounded context.** What a method writes on `this` lands on the
-  instance, shared by the next call, the call beside it and every `with`/`scoped` variant — as in
+- **A service is a singleton of its generation.** What a method writes on `this` lands on the
+  instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
-- **A span is named by the registered name, not the class** (`register({ features: { Issues } })`
-  → `project/Issues.close`, identity `project.Issues.close`): a production build renames classes,
-  never the keys of an object.
-- **The dependencies are typed, not declared.** `BaseFeature<ProjectDependencies>` types
-  `this.client` from an interface, which does not exist at run time; the bounded context answers
-  whatever was added with `addDependency`. A dependency nobody added reads `undefined`.
+- **A span uses stable service metadata, not constructor.name.** `serviceName = "Cancel"` gives
+  `project/Cancel`, identity `project.Cancel`. Commands route by exact constructor identity.
+- **Dependency declarations do not register anything.** Service bases declare typed attributes
+  from a shared dependency interface. Only `addDependency` supplies runtime values; a missing
+  dependency fails explicitly.
+- **Decorators are optional.** Function registration must work without any decorator
+  transform. Standard and legacy (`experimentalDecorators`) fixtures are compiled explicitly in
+  tests; do not claim Metro (Babel) or web bundler support without testing those configurations.
 - **The trace reaches the wire through the dependencies.** A dependency is bound to the run when it
   is a `Transport` or carries `BIND` (every generated client does, through `bindable`); anything
   else is handed as it is. A client built elsewhere and closed over sends no trace.
@@ -76,20 +87,38 @@ it says what this package is responsible for and what it is not. This file is ho
 - **A store's `load` may answer a new object each time** (one that parses JSON does): `Context`
   keeps one object per `version`, so a screen can hand `values` to `useSyncExternalStore`. A store
   that changes without moving the version is a broken store.
+- **What is generated is types, never classes.** A generated DTO is the remote contract: a
+  class extending `Command` could be registered on the local bus, which is what keeps a remote
+  operation and a local use case apart. Runtime knowledge goes in data (`operations`, `events`);
+  validating or converting what arrives would be a generated reader, not a class.
+- **Events come only from the contract.** The generator writes event types and `DomainEvent`
+  only when the backend exported its contract with `--events`; a contract without them writes
+  the same bytes as before.
 - **What the generator writes is compared byte for byte** (`tests/support/forge-contract/`, out
   of prettier and eslint). After changing the generator on purpose, run `make codegen-fixtures`
   and read the diff.
-- **A module name the generator writes is built in parts** (`codegen/names.ts`, `FRAMEWORK`): the
+- **A module name the generator writes is built in parts** (`codegen/domain/names.ts`, `FRAMEWORK`): the
   build's `tsc-alias` rewrites this package's specifiers inside strings too.
 - **An adapter wraps what the application built, never builds it.** `openTelemetryTracer` takes
   the app's tracer, `sentryReporter` the app's client: no `register()`, no `Sentry.init()`, no
   endpoint or DSN here, nothing read from the environment. A vendor's SDK is imported only in
-  `src/adapters/`, and nothing else imports an adapter (`make doctor`).
+  its optional entry, and nothing else imports one (`make doctor`).
 - **A span nothing records claims no trace.** OpenTelemetry's API with no provider answers an
   all-zeros span: the adapter gives no ids, so no `traceparent` of zeros reaches the server.
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
-  an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
-  `ProcessOptions.outcomeOf`, never by catching in a Feature.
+  an `AbortError` is `aborted`; neither is reported (`outcomeOf`). A bounded context adds its own
+  with `expectErrors(...)`; a process replaces the rule with `ProcessOptions.outcomeOf`. Never
+  catch in a Feature to hide a failure.
+- **An error handler answers; it does not observe.** The failure is recorded where it happened —
+  span, log line, report — before the layer's handlers run, as in sincpro_framework. A handler
+  returns the answer or throws to the next; the global chain wraps only `execute` and `scoped`.
+- **The application layer imports no logger.** A bounded context has `project.logger`; a run
+  hands `this.logger`, bound to its execution. Only `logger` (infrastructure, the global one) and
+  `loggerAdapter` are predefined; injected as a dependency they bind to the run (`BIND`), imported
+  at module level they do not. No logger is predefined for an application layer. Console is the
+  default engine; `configureProcess({ logger })` and `configureLogger(...)` take the same
+  `LoggerConfiguration`. The host chooses production explicitly. Never log DTOs, results, full
+  session context or raw errors automatically.
 
 - **Only what is transversal comes here.** A value's wire form (a decimal as text, a day never
   an instant, a money with its currency) is the backend's contract, the same on every platform,

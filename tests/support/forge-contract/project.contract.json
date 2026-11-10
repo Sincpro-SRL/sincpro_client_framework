@@ -1421,44 +1421,6 @@
   },
   "alias": "project",
   "bindings": {
-    "mcp": {
-      "sincpro-forge-project.CommandAssignIssueSandbox": {
-        "tool": "assign_issue_sandbox"
-      },
-      "sincpro-forge-project.CommandCancelIssue": {
-        "tool": "cancel_issue"
-      },
-      "sincpro-forge-project.CommandDeliverIssue": {
-        "tool": "deliver_issue"
-      },
-      "sincpro-forge-project.CommandGetIssue": {
-        "tool": "get_issue"
-      },
-      "sincpro-forge-project.CommandGetProject": {
-        "tool": "get_project"
-      },
-      "sincpro-forge-project.CommandGetRun": {
-        "tool": "get_run"
-      },
-      "sincpro-forge-project.CommandListIssues": {
-        "tool": "list_issues"
-      },
-      "sincpro-forge-project.CommandListProjects": {
-        "tool": "list_projects"
-      },
-      "sincpro-forge-project.CommandOpenIssue": {
-        "tool": "open_issue"
-      },
-      "sincpro-forge-project.CommandQueueIssueRun": {
-        "tool": "queue_issue_run"
-      },
-      "sincpro-forge-project.CommandSendIssue": {
-        "tool": "send_issue"
-      },
-      "sincpro-forge-project.CommandStopIssue": {
-        "tool": "stop_issue"
-      }
-    },
     "rest": {
       "sincpro-forge-project.CommandAssignIssueSandbox": {
         "method": "PUT",
@@ -1516,6 +1478,13 @@
           "id"
         ]
       },
+      "sincpro-forge-project.CommandListIssueEvents": {
+        "method": "GET",
+        "path": "/v1/issues/{id}/events",
+        "path_fields": [
+          "id"
+        ]
+      },
       "sincpro-forge-project.CommandListIssues": {
         "method": "GET",
         "path": "/v1/issues",
@@ -1523,8 +1492,10 @@
       },
       "sincpro-forge-project.CommandListProjectEvents": {
         "method": "GET",
-        "path": "/v1/project-events",
-        "path_fields": []
+        "path": "/v1/projects/{id}/events",
+        "path_fields": [
+          "id"
+        ]
       },
       "sincpro-forge-project.CommandListProjects": {
         "method": "GET",
@@ -1869,6 +1840,22 @@
         }
       }
     },
+    "Count": {
+      "properties": {
+        "exact": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
     "ExecutionFailure": {
       "properties": {
         "message": {
@@ -1930,6 +1917,25 @@
     },
     "Issue": {
       "properties": {
+        "closed": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "computed": true,
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
+          }
+        },
         "created_at": {
           "format": "date-time",
           "title": "Created at",
@@ -2200,6 +2206,10 @@
           }
         },
         "resolution": {
+          "enum": [
+            "",
+            "cancelled"
+          ],
           "title": "Resolution",
           "type": "string",
           "x-sincpro": {
@@ -2209,6 +2219,16 @@
               "count",
               "count_distinct"
             ],
+            "choice_labels": {
+              "": {
+                "default": "Open",
+                "es": "Abierto"
+              },
+              "cancelled": {
+                "default": "Cancelled",
+                "es": "Cancelado"
+              }
+            },
             "groupable": true,
             "label": {
               "default": "Resolution",
@@ -2230,15 +2250,62 @@
               "operator": "!=",
               "value": ""
             },
-            "widget": "text"
+            "widget": "select"
+          }
+        },
+        "runnable": {
+          "type": "boolean",
+          "x-sincpro": {
+            "aggregates": [
+              "bool_and",
+              "bool_or",
+              "count"
+            ],
+            "computed": true,
+            "groupable": true,
+            "ops": [
+              "="
+            ],
+            "readonly": true,
+            "sortable": true,
+            "type": "boolean",
+            "widget": "checkbox"
           }
         },
         "runs": {
-          "items": {
-            "$ref": "#/models/Run"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/Run"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Runs",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "issue_id",
             "label": {
@@ -2248,6 +2315,7 @@
             "many": true,
             "navigable": true,
             "parent_field": "id",
+            "reference": true,
             "related_field": "issue_id",
             "relation": "Run",
             "type": "one2many",
@@ -2521,6 +2589,7 @@
         "default_order": "-created_at",
         "detail": {
           "specification": {
+            "closed": {},
             "created_at": {},
             "failure": {},
             "id": {},
@@ -2533,6 +2602,7 @@
             "request": {},
             "requester": {},
             "resolution": {},
+            "runnable": {},
             "runs": {
               "specification": {
                 "created_at": {},
@@ -2575,7 +2645,7 @@
         "title": {
           "default": "Issue"
         },
-        "version": "c14be10a9c98db88e308d3786240659d5eed986ead432480fd07c5b3921c110a"
+        "version": "e20e4153d42e48bc41a108418ac2cb1b4114aca4542cb0026c7f7ff23170c669"
       }
     },
     "Origin": {
@@ -2851,11 +2921,39 @@
           }
         },
         "issues": {
-          "items": {
-            "$ref": "#/models/Issue"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/Issue"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Issues",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "project_id",
             "label": {
@@ -2865,6 +2963,7 @@
             "many": true,
             "navigable": true,
             "parent_field": "id",
+            "reference": true,
             "related_field": "project_id",
             "relation": "Issue",
             "type": "one2many",
@@ -2872,11 +2971,39 @@
           }
         },
         "project_repositories": {
-          "items": {
-            "$ref": "#/models/ProjectRepository"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/ProjectRepository"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Repositories",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "project_ref",
             "judged_by": [
@@ -3048,6 +3175,7 @@
             "inventory": {},
             "issues": {
               "specification": {
+                "closed": {},
                 "created_at": {},
                 "failure": {},
                 "id": {},
@@ -3060,6 +3188,7 @@
                 "request": {},
                 "requester": {},
                 "resolution": {},
+                "runnable": {},
                 "runs": {
                   "specification": {
                     "created_at": {},
@@ -3110,7 +3239,7 @@
         "title": {
           "default": "Project"
         },
-        "version": "bce8800c5b97c34c4a52f19535a279eec7dc60cf5d035c9eeb99d95b6c9491ee"
+        "version": "95f15c394dde137e7a8c265cb8b40b1f2bff3e48624b9ad16fff4102c26a9987"
       }
     },
     "ProjectChannelSpec": {
@@ -4761,11 +4890,39 @@
           }
         },
         "steps": {
-          "items": {
-            "$ref": "#/models/RunStep"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/RunStep"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Steps",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "run_ref",
             "label": {
@@ -4968,7 +5125,7 @@
         "title": {
           "default": "Run"
         },
-        "version": "7f53164f26d5f0055f4261521571fb182f9ce242255164d96c206864802c591b"
+        "version": "b9bcfd4065b42a2e9332990b5d754742fa24d207c7682e6df1f294b29e284286"
       }
     },
     "RunStep": {
@@ -6220,12 +6377,156 @@
         "Run": "id"
       }
     },
+    "sincpro-forge-project.CommandListIssueEvents": {
+      "deprecated": false,
+      "description": "An issue's facts, oldest first; only the admin reads them.",
+      "dry_run": false,
+      "entities": [
+        "Issue"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": [],
+            "description": "Wire names to select (`name in names`); empty selects every event. A name no class\nrecords answers no rows — it is not checked against the classes imported, which may not be\nyet.",
+            "title": "Names"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandListIssueEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/ProjectEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListIssueEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "Issue",
+        "ProjectEvent"
+      ],
+      "replacement": null,
+      "role": "events",
+      "sunset": null,
+      "targets": {
+        "Issue": "id"
+      }
+    },
     "sincpro-forge-project.CommandListIssues": {
       "deprecated": false,
       "description": "The issues of a project, newest first, each with its status: idle, running, finished,\ncancelled. Filter by ``parent_id`` for the issues one belongs to.",
       "dry_run": false,
       "entities": [
         "Issue"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -6270,6 +6571,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           },
           "parent_id": {
             "anyOf": [
@@ -6351,6 +6663,7 @@
         "title": "ResponseListIssues",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Issue"
@@ -6362,10 +6675,10 @@
     },
     "sincpro-forge-project.CommandListProjectEvents": {
       "deprecated": false,
-      "description": "The facts of the project context — projects and issues — newest first.",
+      "description": "A project's facts, oldest first; only the admin reads them.",
       "dry_run": false,
       "entities": [
-        "ProjectEvent"
+        "Project"
       ],
       "input": {
         "properties": {
@@ -6405,13 +6718,31 @@
             "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
             "title": "Cursor"
           },
-          "drafts": {
-            "default": false,
-            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
-            "title": "Drafts",
-            "type": "boolean"
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": [],
+            "description": "Wire names to select (`name in names`); empty selects every event. A name no class\nrecords answers no rows — it is not checked against the classes imported, which may not be\nyet.",
+            "title": "Names"
           }
         },
+        "required": [
+          "id"
+        ],
         "title": "CommandListProjectEvents",
         "type": "object"
       },
@@ -6473,12 +6804,15 @@
       },
       "query": true,
       "reaches": [
+        "Project",
         "ProjectEvent"
       ],
       "replacement": null,
-      "role": "search",
+      "role": "events",
       "sunset": null,
-      "targets": {}
+      "targets": {
+        "Project": "id"
+      }
     },
     "sincpro-forge-project.CommandListProjects": {
       "deprecated": false,
@@ -6486,6 +6820,9 @@
       "dry_run": false,
       "entities": [
         "Project"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -6530,6 +6867,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           },
           "tenant_id": {
             "default": "",
@@ -6597,6 +6945,7 @@
         "title": "ResponseListProjects",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Project"
@@ -7212,5 +7561,5 @@
       }
     }
   },
-  "version": "457cd1a4fbe9ac4a3cd319ba20931bc6666fbdab9ad1f4f512096170caef0efc"
+  "version": "5a9473783e7d83ade46ed4972746d65db20404a63a305d2f5308baa9fc22cf69"
 }

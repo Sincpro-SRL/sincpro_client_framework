@@ -1358,6 +1358,22 @@
   "bounded_context": "sincpro-forge-sandbox",
   "format": "sincpro.client-contract/1",
   "models": {
+    "Count": {
+      "properties": {
+        "exact": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
     "Delivery": {
       "properties": {
         "branch": {
@@ -1384,10 +1400,38 @@
           }
         },
         "changes": {
-          "items": {
-            "$ref": "#/models/RepositoryChange"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/RepositoryChange"
+              },
+              "type": "array"
+            }
           },
-          "type": "array",
+          "required": [
+            "items"
+          ],
+          "type": "object",
           "x-sincpro": {
             "identified_by": "delivery_ref",
             "many": true,
@@ -1686,7 +1730,7 @@
         "title": {
           "default": "Delivery"
         },
-        "version": "04cf556062ed101c202e5d5d81a4c70dd6b90860cfb8903d546a03de0421c49b"
+        "version": "ac8cb7c1cc46193c297a93f5ae694f65a2fa5fd2d4f5580e0575dbe39a5dfdbe"
       }
     },
     "RepositoryChange": {
@@ -3827,6 +3871,9 @@
       "entities": [
         "Reservation"
       ],
+      "formats": [
+        "json"
+      ],
       "input": {
         "properties": {
           "criteria": {
@@ -3870,6 +3917,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           }
         },
         "title": "CommandListReservations",
@@ -3931,6 +3989,7 @@
         "title": "ResponseListReservations",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Reservation"
@@ -3946,6 +4005,9 @@
       "dry_run": false,
       "entities": [
         "SandboxEvent"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -3990,6 +4052,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           }
         },
         "title": "CommandListSandboxEvents",
@@ -4051,6 +4124,7 @@
         "title": "ResponseListSandboxEvents",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "SandboxEvent"
@@ -4221,5 +4295,5 @@
       }
     }
   },
-  "version": "e8726340e160b36073b426d9dad6e4107f590ccf548984491ea1a2f81bb59742"
+  "version": "838639fa62510d86c537a0188dc109e1b81f2f3944ca18a8fd5915e647a56250"
 }

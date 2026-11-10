@@ -154,7 +154,7 @@ export const facturas = entity<Factura>("ventas:factura", {
     confirmar: "POST /facturas/{id}/confirm",
     anular: "POST /facturas/{id}/cancel",
   },
-  history: { route: "/ventas-events", type: "Factura" },
+  history: "/facturas/{id}/events",
 });
 
 const CIUDADES = ["Santa Cruz", "La Paz", "Cochabamba", "Sucre", "Tarija"];

@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    },
     "./codegen": {
       "types": "./dist/codegen/index.d.ts",
       "default": "./dist/codegen/index.js"
@@ -18,21 +22,25 @@
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
     },
+    "./console": {
+      "types": "./dist/observability/adapters/console.d.ts",
+      "default": "./dist/observability/adapters/console.js"
+    },
     "./opentelemetry": {
-      "types": "./dist/adapters/opentelemetry.d.ts",
-      "default": "./dist/adapters/opentelemetry.js"
+      "types": "./dist/observability/adapters/opentelemetry.d.ts",
+      "default": "./dist/observability/adapters/opentelemetry.js"
     },
     "./sentry": {
-      "types": "./dist/adapters/sentry.d.ts",
-      "default": "./dist/adapters/sentry.js"
+      "types": "./dist/observability/adapters/sentry.d.ts",
+      "default": "./dist/observability/adapters/sentry.js"
     },
     "./parquet": {
-      "types": "./dist/adapters/parquet.d.ts",
-      "default": "./dist/adapters/parquet.js"
+      "types": "./dist/client/adapters/parquet.d.ts",
+      "default": "./dist/client/adapters/parquet.js"
     }
   },
   "bin": {
-    "sincpro-client": "./dist/codegen/cli.js"
+    "sincpro-client": "./dist/codegen/entrypoint/cli.js"
   },
   "files": [
     "dist",
