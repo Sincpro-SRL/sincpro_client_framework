@@ -27,6 +27,9 @@ Entrypoint -> BoundedContext.execute(Command) -> Feature or ApplicationService -
 | Use case           | One operation run through the bus, with one execution and span               | A registered DTO                                | A registered Command                                                           |
 | Error handler      | Answers a failure instead of raising it; throwing hands it to the next one   | `add_global_error_handler`, `add_feature_…`     | `addGlobalErrorHandler`, `addFeatureErrorHandler`, `addAppServiceErrorHandler` |
 | Expected error     | An error the bounded context declares the business answering: not reported   | `ignore_sentry_exceptions(*types)`              | `expectErrors(...types)`: the run ends `refused`                               |
+| Domain event       | A fact that already happened, executed by its subscriber through the bus     | `DomainEvent`, `name`, `bus(event)`             | `class X extends DomainEvent`, `static eventName`, `execute(event)`            |
+| Subscriber         | The Feature or ApplicationService registered for an event class, one per BC  | `feature(EventClass)(Service)`                  | `feature(EventClass)(Service)`                                                 |
+| Replacement        | A service that takes the place of the one registered for a class             | `feature(dto, replaces=Service)`                | `feature(dto, { replaces: Service })`, `handlerOf(dto)`                        |
 
 ## Remote contracts are not local services
 
@@ -99,8 +102,10 @@ A generic type annotation is not a reader, and a class constructor is not Pydant
 - Decorators (standard or legacy `experimentalDecorators`) need a compiler transform; function
   registration needs none.
 - Invalid dependency replacement is rejected here, unlike the backend's warning-and-replace
-  fallback. Multi-DTO registrations, service replacement (`replaces=`), handler placements
-  (`before=`) and `without_error_handler` are not yet implemented.
+  fallback. Multi-DTO registrations (`feature([CommandX, EventY])`), handler placements
+  (`before=`) and `without_error_handler` are not implemented.
+- An event's wire name is declared (`static eventName`); the backend defaults it to the class's
+  name, which a client's minifier would change. `name` is reserved on both sides.
 - Backend/client tracing attribute naming must evolve together when its canonical vocabulary
   changes; `sincpro.context` currently identifies the bounded context.
 - Web and mobile adopt it in their own releases. Mobile keeps SQLite, workers, outbox/DLQ,

@@ -32,7 +32,7 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["infrastructure/bounded_context.ts"]?.includes(
-      "export abstract class Feature<C extends Command<R>, R> extends BaseFeature<C, R>",
+      "export abstract class Feature<C extends Command<R> | DomainEvent, R> extends BaseFeature<C, R>",
     ),
   );
   assert.ok(

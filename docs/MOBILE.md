@@ -5,18 +5,19 @@ SQLite and repositories, migrations, durable delivery, lifecycle, UI and exporte
 how mobile adopts it — a plan, not a claim that it is adopted or device-tested. Mobile keeps no
 second implementation of application execution.
 
-| Responsibility          | Shared core                                                   | Mobile                                                              |
-| ----------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Application execution   | BoundedContext, Command, Feature, ApplicationService          | Compose contexts in the platform kernel/modules                     |
-| Dependencies            | Typed attributes registered with addDependency                | Supply repositories, session adapters, generated clients            |
-| Composition             | this.featureBus.execute(command)                              | No competing navigator/service bus                                  |
-| Context                 | Process/context/scope snapshot per execution                  | Implement/hydrate ContextStore before execution                     |
-| Traces/errors           | Tracer and ErrorReporter ports                                | Build provider/client, buffers, exporters and native integration    |
-| Logs                    | Logger port, `this.logger`, `project.logger`, console adapter | Adapt existing delivery to structured records; own buffering/export |
-| Error handling          | Global, feature and app-service handlers; `expectErrors`      | Register handlers per bounded context; no try/catch in Features     |
-| Domain events           | Generated types and `events` data, from a contract `--events` | Keep persistence, queue metadata, delivery and DLQ                  |
-| Remote operations       | Generated client and Transport contract                       | Inject only where remote work is required                           |
-| Offline synchronization | Not supplied by command execution                             | Explicit repository/sync/conflict policies                          |
+| Responsibility          | Shared core                                                    | Mobile                                                              |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Application execution   | BoundedContext, Command, Feature, ApplicationService           | Compose contexts in the platform kernel/modules                     |
+| Dependencies            | Typed attributes registered with addDependency                 | Supply repositories, session adapters, generated clients            |
+| Composition             | this.featureBus.execute(command)                               | No competing navigator/service bus                                  |
+| Context                 | Process/context/scope snapshot per execution                   | Implement/hydrate ContextStore before execution                     |
+| Traces/errors           | Tracer and ErrorReporter ports                                 | Build provider/client, buffers, exporters and native integration    |
+| Logs                    | Logger port, `this.logger`, `project.logger`, console adapter  | Adapt existing delivery to structured records; own buffering/export |
+| Error handling          | Global, feature and app-service handlers; `expectErrors`       | Register handlers per bounded context; no try/catch in Features     |
+| Domain events           | `DomainEvent` executed by its subscriber; remote ones as types | The queue: persist, deliver to each bounded context, retry, DLQ     |
+| Replacing pieces        | `feature(dto, { replaces })`, `addDependency(…, { replaces })` | An app's module declares what it replaces                           |
+| Remote operations       | Generated client and Transport contract                        | Inject only where remote work is required                           |
+| Offline synchronization | Not supplied by command execution                              | Explicit repository/sync/conflict policies                          |
 
 A command may execute locally or delegate remotely; registration does not choose authority.
 A generated remote client and a local repository are different dependencies.
@@ -112,13 +113,38 @@ The in-app debug switch maps onto `configureLogger({ mode, level, layers })`: it
 logging, never the tracer, the reporter or the context. A Loki delivery is mobile's `Logger`
 engine, combined with the console through `combineLoggers`.
 
-## Entity and event contracts
+## Events and their subscribers
 
-This package exports no entity or domain-event interface to implement. A backend's events reach
-mobile as generated types when its contract is exported with `--events`: each event a type with
-its wire `name`, `DomainEvent` their union, and `events` in `client.ts` as data — what mobile's
-queue matches names against. Entity identity, persisted events, queue status, attempts, DLQ
-policy and transport configuration stay in mobile.
+A subscriber of mobile's queue becomes a Feature (or ApplicationService) registered for the
+event class in its bounded context — observed, reported and answered by error handlers like any
+use case. The queue keeps what is mobile's: storing the event, delivering it, retrying, the DLQ.
+
+```ts
+class PrintRequested extends DomainEvent {
+  static readonly eventName = "common.print.v1.requested";
+  constructor(readonly document_id: string) {
+    super();
+  }
+}
+
+printing.feature(PrintRequested)(PrintImage); // was: a subscriber of "common.print.v1.requested"
+
+// the worker, for each stored event: every bounded context that hears its name executes it
+for (const context of boundedContexts) {
+  const Event = context.eventTypeOf(stored.name);
+  if (Event) await context.execute(rebuild(Event, stored.payload));
+}
+```
+
+`rebuild` is mobile's: how a stored payload becomes an instance of its class. One subscriber per
+bounded context; two modules that hear the same event are two bounded contexts, each with its
+own. Event interceptors around subscribers become the pipeline (spans, logs) and error handlers;
+`static replaces = CoreSubscriber` becomes `feature(PrintRequested, { replaces: PrintImage })`.
+
+The events a backend publishes reach mobile as generated types when its contract is exported
+with `--events`: each a type with its wire `name`, `DomainEvent` their union, `events` in
+`client.ts` as data. This package exports no entity interface to implement; entity identity,
+persisted events and queue metadata stay in mobile.
 
 ## Adoption order
 

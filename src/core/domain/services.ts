@@ -1,12 +1,13 @@
 import type { ContextValues } from "@sincpro/client-framework/context/domain/store";
 import type { FeatureBus } from "@sincpro/client-framework/core/domain/bus";
-import type { Command } from "@sincpro/client-framework/core/domain/dto";
+import type { Command, DomainEvent } from "@sincpro/client-framework/core/domain/dto";
 import type { LayerLogger } from "@sincpro/client-framework/observability/domain/logging";
 import type { Span } from "@sincpro/client-framework/observability/domain/tracing";
 
 /**
  * The services of the application layer, as sincpro_framework's: a Feature executes one
- * registered Command; an ApplicationService composes its context's Features.
+ * registered Command — or domain event, as its subscriber —; an ApplicationService composes its
+ * context's Features.
  *
  *     @project.feature(CommandCancelIssue)
  *     class CancelIssue extends Feature<CommandCancelIssue, ResponseCancelIssue> {
@@ -22,7 +23,7 @@ import type { Span } from "@sincpro/client-framework/observability/domain/tracin
  * `constructor.name`, which a minifier renames.
  */
 export abstract class Feature<
-  C extends Command<R>,
+  C extends Command<R> | DomainEvent,
   R,
   Context extends object = ContextValues,
 > {
@@ -36,7 +37,7 @@ export abstract class Feature<
 }
 
 export abstract class ApplicationService<
-  C extends Command<R>,
+  C extends Command<R> | DomainEvent,
   R,
   Context extends object = ContextValues,
 > extends Feature<C, R, Context> {

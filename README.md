@@ -7,6 +7,7 @@ the same way, and a typed client generated from a service's contract. No React, 
 platform storage: what a platform must give, it gives through a port.
 
 - [A bounded context](#a-bounded-context)
+- [Domain events](#domain-events)
 - [Errors](#errors)
 - [Observability](#observability)
 - [Context](#context)
@@ -102,6 +103,60 @@ The same functions work as standard decorators and as legacy ones (`experimental
 without a decorator transform, call them: `sales.feature(CommandTotal)(Total)`. No DI library
 and no `reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's
 transform (Vite, Metro/Babel) is each application's to configure and test.
+
+### Replacing a service
+
+An application takes the place of a service a module registered, as the backend's `replaces=`:
+
+```ts
+class PrintOnBixolon extends Print {
+  static override readonly serviceName = "PrintOnBixolon";
+  override execute(command: CommandPrint) { … }
+}
+printing.feature(CommandPrint, { replaces: Print })(PrintOnBixolon);
+printing.handlerOf(CommandPrint); // PrintOnBixolon
+```
+
+`replaces` names the service registered now for that class, or the registration is refused. The
+next call answers with the new one; its spans say which it replaced (`sincpro.replaces`). A
+service meant to be replaced by a subclass widens its name — `static readonly serviceName:
+string = "Print"` —, or TypeScript keeps the literal and the subclass cannot rename itself. A
+dependency is replaced the same way: `addDependency(name, next, { replaces: previous })`.
+
+## Domain events
+
+A fact that already happened — `OrderPaid` — is executed as a Command is: by the Feature or
+ApplicationService registered for its class, its subscriber in this bounded context, through
+the same pipeline (span, log lines, error handlers, report):
+
+```ts
+class OrderPaid extends DomainEvent {
+  static readonly eventName = "shop.order.v1.paid"; // its wire name, as the backend's `name`
+  constructor(readonly order_id: string) {
+    super();
+  }
+}
+
+class ThankCustomer extends Feature<OrderPaid, void> {
+  static readonly serviceName = "ThankCustomer";
+  async execute(event: OrderPaid) { … }
+}
+
+shop.feature(OrderPaid)(ThankCustomer);
+await shop.execute(new OrderPaid("o-1")); // span shop/ThankCustomer, sincpro.event = its name
+```
+
+- **`eventName` is declared**, as `serviceName` is: a minifier renames classes. `event.name`
+  reads it; `name` is reserved, and a subclass cannot make it a field.
+- **One subscriber per bounded context.** Another context that hears the event registers its
+  own. Carrying the event to each — a queue, an outbox, the server — is the platform's: it asks
+  each bounded context `eventTypeOf(name)`, rebuilds the event as that class and executes it.
+- An ApplicationService can subscribe too, and compose Features — of Commands or of events —
+  through `featureBus`. `execute(event)` answers whatever the subscriber returns (`unknown`).
+
+The events a remote service publishes arrive as generated types (`DomainEvent` in
+`generated/domain.ts`, a union narrowed by `name`); a local event is a class, like a local
+Command.
 
 ## Errors
 

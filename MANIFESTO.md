@@ -62,8 +62,9 @@ server-side render, in a script and in a test, unchanged.**
 10. **The command core (`./core`).** The single model matching the backend's application
     abstractions: class DTOs and Responses, a bounded context that is a bus, Features and
     ApplicationServices registered for DTO classes, attribute-injected dependencies and a
-    feature bus for composition, and the backend's error handlers — global, feature and
-    application service — with the errors a bounded context expects. The internal engine uses
+    feature bus for composition, domain events executed by their subscribers, replacements,
+    and the backend's error handlers — global, feature and application service — with the
+    errors a bounded context expects. The internal engine uses
     the injected process ports. Remote clients and mapping remain distinct.
 
 ## What it is not
@@ -84,8 +85,9 @@ server-side render, in a script and in a test, unchanged.**
 - **Not where application-specific business rules live.** The package supplies execution
   abstractions; a registered use case may delegate to a server or use a local domain. A remote
   adapter does not authorize reimplementing the server's rules.
-- **Not an event delivery system.** The command dispatcher in `./core` executes use cases.
-  An event contract does not supply a publisher, queue, outbox, broker or synchronization engine.
+- **Not an event delivery system.** A bounded context executes a domain event by its
+  subscriber, as the backend does; carrying it to every bounded context that hears it — a
+  publisher, a queue, an outbox, a broker, synchronization — is the platform's.
 
 ## What we believe
 

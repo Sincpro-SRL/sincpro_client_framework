@@ -1,4 +1,4 @@
-import { BoundedContext } from "@sincpro/client-framework/core";
+import { BoundedContext, DomainEvent, Response } from "@sincpro/client-framework/core";
 
 import {
   CancelIssue,
@@ -69,4 +69,42 @@ export class WrongDecoratedFeature extends ProjectFeature<
   execute(command: CommandSendIssue): ResponseSendIssue {
     return new ResponseSendIssue(command.issue_id, "run-1", command.message);
   }
+}
+
+class TicketClosed extends DomainEvent {
+  static readonly eventName = "desk.ticket.v1.closed";
+  constructor(readonly ticket_id: string) {
+    super();
+  }
+}
+
+class ResponseNamed extends Response {
+  constructor(readonly name: string) {
+    super();
+  }
+}
+
+class CloseWatcher extends ProjectFeature<CommandCancelIssue, ResponseCancelIssue> {
+  static readonly serviceName = "CloseWatcher";
+  execute(command: CommandCancelIssue): ResponseCancelIssue {
+    return new ResponseCancelIssue(command.issue_id, "watched");
+  }
+}
+
+export async function eventTypes(context: BoundedContext<ProjectDependencies>) {
+  const answer = await context.execute(new TicketClosed("t-1"));
+  // @ts-expect-error An event names no Response: what its subscriber returns is unknown.
+  const typed: ResponseCancelIssue = answer;
+  void typed;
+  // @ts-expect-error A Response with a `name` is still not a domain event.
+  await context.execute(new ResponseNamed("x"));
+  // @ts-expect-error A replacement is a class.
+  context.feature(CommandCancelIssue, { replaces: "CancelIssue" });
+  context.feature(CommandCancelIssue, { replaces: CancelIssue })(CloseWatcher);
+}
+
+export class RenamedTicket extends DomainEvent {
+  static readonly eventName = "desk.ticket.v1.renamed";
+  // @ts-expect-error `name` is reserved: an event's wire name, never a field of its own.
+  readonly name: string = "x";
 }

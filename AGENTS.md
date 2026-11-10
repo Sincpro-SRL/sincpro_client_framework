@@ -70,7 +70,15 @@ module has only the layers it needs, and says what it offers in its own `index.t
   instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
 - **A span uses stable service metadata, not constructor.name.** `serviceName = "Cancel"` gives
-  `project/Cancel`, identity `project.Cancel`. Commands route by exact constructor identity.
+  `project/Cancel`, identity `project.Cancel`. Commands and events route by exact constructor
+  identity. An event declares `static eventName` (its wire name) for the same reason; `name` is
+  reserved for it.
+- **A replacement names what it replaces.** `feature(dto, { replaces: Service })` is refused
+  unless `Service` is registered now for `dto`; its spans carry `sincpro.replaces`. A service
+  meant to be subclassed declares `static readonly serviceName: string = "…"`, or the literal
+  type stops a subclass from renaming itself.
+- **An event is executed, never delivered, here.** One subscriber per bounded context; the
+  platform's queue asks `eventTypeOf(name)`, rebuilds the event and calls `execute`.
 - **Dependency declarations do not register anything.** Service bases declare typed attributes
   from a shared dependency interface. Only `addDependency` supplies runtime values; a missing
   dependency fails explicitly.

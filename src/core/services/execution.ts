@@ -28,6 +28,8 @@ export interface ExecutionOptions {
   readonly boundedContext: string;
   readonly name: string;
   readonly layer: Layer;
+  /** What else its span says: the event it executes, the service it replaced. */
+  readonly attributes?: Attributes;
   readonly dependencies: ReadonlyMap<string, unknown>;
   readonly context: () => ContextValues;
   readonly parent?: Execution;
@@ -127,6 +129,7 @@ export async function executeService(
     "sincpro.layer": options.layer,
     "sincpro.context": options.boundedContext,
     "sincpro.execution_id": id,
+    ...options.attributes,
   };
   const span: Span = observe(
     () =>
