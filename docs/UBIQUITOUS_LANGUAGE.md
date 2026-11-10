@@ -1,137 +1,102 @@
 # Ubiquitous language
 
-One vocabulary for every Sincpro framework: **sincpro_framework** (Python, the backend),
-**@sincpro/client-framework** (TypeScript, every client), **@sincpro/web-framework** (the
-browser) and **@sincpro/mobile** (React Native). Whoever knows a word in one knows it in the
-others: the same thing has the same name, and one name means one thing.
+One vocabulary for sincpro_framework (Python), @sincpro/client-framework (TypeScript),
+@sincpro/web-framework and @sincpro/mobile. The backend is the semantic reference; a language
+limitation must be named and tested rather than hidden behind a different architecture.
 
-The backend is the source of the words. When it renames one (sincpro_framework#245: the
-framework instance _is_ a bounded context), every client follows, in the same release train.
+## Application execution
 
-## The words, in one picture
-
-```mermaid
-flowchart LR
-  caller["Entrypoint<br/>a screen · a subscriber · a test"]
-
-  subgraph bc["Bounded context · project"]
-    deps["Dependencies<br/>this.client · this.session"]
-    app["ApplicationService<br/>CancelAndNotify"]
-    feature["Feature<br/>Issues"]
-  end
-
-  subgraph process["Process · configureProcess, once in main"]
-    tracer["Tracer"]
-    reporter["ErrorReporter"]
-    store[("ContextStore")]
-  end
-
-  server["sincpro_framework<br/>the same bounded context:<br/>CommandCancelIssue → ResponseCancelIssue"]
-
-  caller -->|"use case<br/>project.CancelAndNotify.execute(dto)"| app
-  app -->|"this.feature.Issues.cancel(dto)"| feature
-  feature -->|"this.client.cancelIssue(dto)"| deps
-  deps -->|"Transport<br/>traceparent · sincpro-context"| server
-  bc -.->|"each use case runs as an Execution:<br/>span · context · outcome"| process
+```text
+Entrypoint -> BoundedContext.execute(Command) -> Feature or ApplicationService -> Response
+                                                       |
+                                        featureBus.execute(Command)
+                                                       |
+                                                    Feature
 ```
 
-## The words
+| Word               | Meaning                                                                      | Backend                                         | Client core                                                                |
+| ------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------- |
+| Bounded context    | Owns one model, dependencies and use-case registrations; it is a bus         | `UseFramework(name)`                            | `new BoundedContext<Dependencies>(name)`                                   |
+| Command            | A request for work, not a fact already confirmed                             | DTO class                                       | `class Request extends Command<Result>`                                    |
+| Response           | The result of that execution, not of all later event consumers               | DTO, object, list or None                       | DTO, object, page, primitive or void; `Response` is an optional class base |
+| Feature            | Executes one registered operation                                            | `feature(Command)(Service)`                     | `feature(Command)(Service)` or standard decorator syntax                   |
+| ApplicationService | Composes Features of its own context                                         | `app_service(Command)(Service)`                 | `appService(Command)(Service)`                                             |
+| Feature bus        | Executes only Features in the current generation, under its parent execution | `self.feature_bus`                              | `this.featureBus`                                                          |
+| Dependencies       | Registered adapters, available as typed service attributes                   | `add_dependency`, `self.client`                 | `addDependency`, `this.client`                                             |
+| Generation         | One snapshot of registrations, adapters and service instances                | Built lazily; in-flight work keeps its snapshot | Same; `buildRootBus()` and `fresh()` are explicit                          |
+| Use case           | One operation run through the bus, with one execution and span               | A registered DTO                                | A registered Command                                                       |
 
-| Word                   | What it is                                                                                                                                                                                                                                                                   | sincpro_framework                                                                       | @sincpro/client-framework                                                                     | @sincpro/web-framework                                     | @sincpro/mobile (today)                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Bounded context**    | The unit of the model: its language, its services, its dependencies. Named once (`"project"`); everything it holds is reached through it.                                                                                                                                    | `UseFramework("project")` (#245: `bounded_context`), its folder `domains/project/`      | `new UseBoundedContext("project")` → `project`                                                | the folder `domains/project/`, its `index.ts`              | `DomainModule`                                                       |
-| **Dependencies**       | What the services of a bounded context can count on, typed once and added once.                                                                                                                                                                                              | `ProjectDependencyContextType`, `add_dependency` in `infrastructure/dependencies.py`    | `interface ProjectDependencies`, `addDependency` in `infrastructure/dependencies.ts`          | the same                                                   | `repositories()`                                                     |
-| **Service**            | A `Feature` or an `ApplicationService`: where all of a bounded context's logic lives.                                                                                                                                                                                        | the same                                                                                | the same                                                                                      | the same — screens only run them                           | the same                                                             |
-| **Feature**            | One part of the domain, traced and reported by its bounded context.                                                                                                                                                                                                          | one Command: `@bus.feature(CommandX)`, `execute(dto)`                                   | a facade: each public method one use case (`Issues.cancel`, `Issues.send`)                    | —                                                          | `Feature`                                                            |
-| **ApplicationService** | Composes the Features of its own bounded context — never another ApplicationService.                                                                                                                                                                                         | `@bus.app_service(CommandX)`, `self.feature_bus.execute(...)`                           | `this.feature.Issues.cancel(dto)`                                                             | —                                                          | `ApplicationService`                                                 |
-| **Use case**           | One operation a person or a system asks for. The unit of a span and of an error report. Reusing one is calling it through its bounded context, never a helper.                                                                                                               | a Command executed on the bus                                                           | a public method of a service: `project.Issues.cancel(dto)`                                    | `useService(project.Issues.cancel)`                        | a Feature's method                                                   |
-| **Entity reads**       | What a screen reads and writes of an entity, each request a use case of its own: traced, with the context, reported when it failed.                                                                                                                                          | the built-in `EntityReads[Entity]` Feature                                              | `screensTransport(transport)`: `screens/EntityReads.list`, `…/EntityWrites.send`              | `FrameworkProvider` reads and writes through it            | —                                                                    |
-| **Command, Response**  | A use case's input and its answer: the contract (DTOs).                                                                                                                                                                                                                      | `CommandCancelIssue`, `ResponseCancelIssue`                                             | generated `dto.CommandCancelIssue`, `dto.ResponseCancelIssue`                                 | —                                                          | —                                                                    |
-| **Client contract**    | What a service publishes about itself: operations, models, bindings. The generator's input.                                                                                                                                                                                  | `export-client-contract`                                                                | `sincpro-client generate` → `domain.ts`, `client.ts`, `entities.ts`                           | —                                                          | —                                                                    |
-| **Transport**          | The seam with a server.                                                                                                                                                                                                                                                      | —                                                                                       | `Transport`: `restTransport`, `memoryTransport`                                               | `cachedTransport`                                          | its own REST and SQLite                                              |
-| **Process**            | What every bounded context of a program runs with: who traces, who reports, where the context lives. Set once, in `main`.                                                                                                                                                    | `sincpro_framework.observability.process`, `store_context_in` in `main()`               | `configureProcess({ tracer, reporter, context })`                                             | `entrypoints/<app>/main.tsx`                               | `Kernel`, `AppConfig`                                                |
-| **Context**            | The values every use case runs with and sends to the server: the tenant, the company. Only this: never a bounded context's name.                                                                                                                                             | `use_context()`, `self.context`, `ContextKey`                                           | `processContext`, `project.context`, `project.scoped(…)`, `this.context`                      | `useContextValues(level)`                                  | `ContextManager`, `ContextKey`                                       |
-| **Context store**      | Where the context lives — the platform's technology behind one port.                                                                                                                                                                                                         | `ContextStore`: `InMemoryContexts`, `KeyValueContexts`                                  | `ContextStore`: `memoryContexts`, or the platform's                                           | memory, `sessionStorage`, the screens' store               | MMKV, memory over AsyncStorage                                       |
-| **Execution**          | One run of a use case: its id, its span, its context read once, its parent.                                                                                                                                                                                                  | `Execution`, `Chain`                                                                    | `Execution` (handed to dependencies through `BIND`)                                           | —                                                          | an entry of the context stack                                        |
-| **Span, trace**        | One span per use case, named `<bounded context>/<Name>`; the trace continues from the client to the database.                                                                                                                                                                | `project/CommandCancelIssue`, `sincpro.use_case` `project.CommandCancelIssue`           | `project/Issues.cancel`, `sincpro.use_case` `project.Issues.cancel`                           | —                                                          | per Feature                                                          |
-| **Outcome**            | How a use case ended: `ok`, `refused` (the business said no — shown, never reported), `aborted`, `failed` (reported once).                                                                                                                                                   | `sincpro.outcome`                                                                       | `Outcome`, `outcomeOf`                                                                        | `Refused` draws a refusal                                  | —                                                                    |
-| **Problem**            | The server's explanation of a refusal (RFC 9457): kind, reason, next step, errors by JSON pointer.                                                                                                                                                                           | `Problem`                                                                               | `TransportError.problem`                                                                      | `Refused`, `explain`, `errorsByField`                      | —                                                                    |
-| **Entrypoint**         | Where the outside comes in. Composes; holds no logic.                                                                                                                                                                                                                        | `entrypoints/` (http, mcp, cron, subscriber)                                            | —                                                                                             | `entrypoints/<app>/`, a bounded context's views and `live` | screens                                                              |
-| **Adapter**            | A wrapper of something external that is part of the business problem — or, inside a framework, a port's implementation.                                                                                                                                                      | `adapters/`                                                                             | `./opentelemetry`, `./sentry` (a port's implementation)                                       | `./telemetry`, `./errors`                                  | —                                                                    |
-| **Infrastructure**     | Wiring and the non-functional: what can be swapped without changing the business.                                                                                                                                                                                            | `infrastructure/`                                                                       | `infrastructure/dependencies.ts`, `infrastructure/bounded_context.ts`                         | the same                                                   | `infrastructure/`                                                    |
-| **Domain**             | The `domain/` layer: the bounded context's vocabulary and pure rules. Never the name of a bounded context.                                                                                                                                                                   | `domain/`                                                                               | generated `domain.ts`, the app's `domain/`                                                    | the same                                                   | `domain/`                                                            |
-| **Entity, aggregate**  | A thing with an identity that a screen lists and opens; an aggregate is the one its changes go through.                                                                                                                                                                      | `ddd`: entities and aggregates; the metamodel                                           | `entity()`, `Meta`, `defineMeta`                                                              | `EntityList`, `EntityRecord`                               | entities over SQLite                                                 |
-| **Entity id**          | A record's key, minted where the record is born — the client names a new record before the server sees it. A UUID v7 as 32 hex: it sorts by when it was minted.                                                                                                              | `new_entity_id()` (`common/ids/uuid7.py`)                                               | `newEntityId()`, `isEntityId()`; also each execution's id                                     | `useRecord` mints it for a new record                      | `generateUUID()`, over `newEntityId()`                               |
-| **Values on the wire** | How any value is written as JSON and read back: a decimal as text, a day as a day, bytes tagged. A typed read is asked for, never imposed.                                                                                                                                   | `values_of`, `read_values`, `rebuilt`, `pack`, `unpack` (`common/serialization`)        | `valuesOf`, `readValues`, `rebuilt`, `pack`, `unpack`                                         | the same                                                   | `serializer.ts` over `valuesOf`; `JsonSerializerAdapter` (see below) |
-| **Decimal**            | An exact number: travels as text, never a float; rounds only when asked, half up.                                                                                                                                                                                            | `Decimal`                                                                               | `Decimal`                                                                                     | a field `number` with `exact`                              | `Decimal`, answered as a float (see below)                           |
-| **Money**              | An amount and its currency: `{"amount": "10.50", "currency": "BOB"}`; two currencies never add.                                                                                                                                                                              | `Money`, `MultiCurrency`, `ExchangeRate`                                                | `Money`                                                                                       | —                                                          | `monetary.ts` answers numbers (see below)                            |
-| **Day, instant**       | A day of the calendar (`"2026-10-02"`, never converted) and an instant (ISO, read on the company's zone).                                                                                                                                                                    | `date`, `datetime`                                                                      | `isDay`, `dayOf`, `wallTimeOf`, `instantOf`, `installTimeZone`                                | `FrameworkProvider timeZone`; web-ui `DatePicker today`    | `isDay`, `dayOf` in `date.ts`; `dayjs` formats                       |
-| **Codec**              | How a context is written to text: only what travels.                                                                                                                                                                                                                         | `ContextCodec`: `PlainCodec`, `TypedCodec`, `PickleCodec`                               | `ContextCodec`: `plainCodec`                                                                  | —                                                          | —                                                                    |
-| **Collection**         | A to-many as a reading answers it: a page of its records, how many there are (exact, or «at least»), and the cursor to go on inside its parent. Immutable: `append`, `extend`, `remove`, `replace` answer a new one. The type a to-many is declared with — a list works too. | `EntityCollection[Line]` (`is_partial`, `Count`, `append` …)                            | `EntityCollection<T>`, `collectionOf` → `HeldCollection` (`append` …), `isPartial`, `countOf` | `relatedOf`, `RelatedList`, «1000+»                        | —                                                                    |
-| **Part, reference**    | A to-many the record holds and saves whole (the lines of an invoice), or other aggregates it points to (the invoices of a customer): read a page at a time, never written through it. The relation's declaration, not its type.                                              | `owned=False` on the relation; `reference: true` on its definition                      | `reference: true` on the field; `relatedCriteria`                                             | lines to edit, or a list to search                         | —                                                                    |
-| **Export**             | Every record of a criteria as a file — Parquet, an Arrow stream, JSON Lines —, read a page at a time from one snapshot, streamed as it is written.                                                                                                                           | `Export[Entity, Streamed]`, `exported`, `write_parquet`                                 | `downloadRoute`, `exportRoute`, `Download`; the entity's `export` route                       | —                                                          | —                                                                    |
-| **Format**             | How a page travels: JSON, or Parquet when it is large — chosen by the caller, or by the search past its `parquet_above` for a caller that reads Parquet. The same records, cursor and count either way.                                                                      | `Search.format` (`auto`, `json`, `parquet`), `parquet_above`, `collection_from_parquet` | `restTransport({ decoders: [parquetDecoder] })` (`./parquet`)                                 | —                                                          | —                                                                    |
+The facade service API is removed. There is no service-map registry, direct service-method
+entrypoint, second execution pipeline or compatibility alias.
 
-## Words we do not use
+## Remote contracts are not local services
 
-| Instead of                                 | Say                               | Why                                                                                    |
-| ------------------------------------------ | --------------------------------- | -------------------------------------------------------------------------------------- |
-| runtime (the concept)                      | process, execution                | The process is set once in `main`; an execution is one run. «Runtime» named both.      |
-| framework, framework instance, bus, module | bounded context                   | sincpro_framework#245. The bus is the backend's dispatch mechanism, not a client word. |
-| domain, for a bounded context              | bounded context                   | `domain/` is a layer inside it.                                                        |
-| deps, `this.deps.x`                        | dependencies, `this.x`            | A dependency is a property of the service, typed by the bounded context.               |
-| context, for a bounded context's name      | bounded context                   | `context` alone is only the values a use case runs with (#245).                        |
-| helper, `existing_*`, `*_command(…)`       | the use case, called by its name  | A wrapper skips the trace and the report.                                              |
-| shared state, a global store               | the context (a handful of values) | Screens' state is the platform's; the context is not a state manager.                  |
+| Word             | Meaning                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| Client contract  | What a remote service publishes: models, operations, input/output schemas and bindings   |
+| Generated client | A typed remote adapter made over a Transport; injectable into a local Feature            |
+| Generated DTO    | A compile-time type from that contract; not currently a runtime class or validator       |
+| Mapping Entity   | The remote descriptor exported as `Entity`, used for routes, fields and commands         |
+| IEntity          | Minimal local domain identity contract; unrelated to the mapping descriptor              |
+| IDomainEvent     | A fact's id, stable name and creation instant; no delivery or persistence implementation |
+| Transport        | The remote boundary: REST, memory, or a separately implemented platform adapter          |
 
-## Where the words still differ
+Local classes may implement generated DTO types, but a generated client is not automatically
+an ApplicationService or registered local executor. A history response containing event records
+is not an event bus. Authority of local/remote rules is explicit; synchronization is separate.
 
-Each of these is a real divergence today. They are listed so that nobody adds a third name.
+## Process, context and telemetry
 
-1. ~~**The answer: `Response` or `Answer`.**~~ Done in 0.5: the generator writes the backend's
-   own name (`ResponseCancelIssue`, the output's title) and keeps `CommandCancelIssueAnswer` as a
-   deprecated alias; an answer with no name of its own (a model, a list, `null`) is still
-   `<Name>Answer`.
-2. **The bounded context's name on a span.** The backend writes it in `sincpro.context` today,
-   and the client does the same so their spans group together; #245 says `context` alone is only
-   the runtime context. Proposed: `sincpro.bounded_context` in both, in the same release.
-   Owner: sincpro_framework#245, then client-framework.
-3. **A Feature's shape.** On the backend a Feature handles one Command (`execute(dto)`); on the
-   client it is a facade whose methods are the use cases, each calling one Command of its server.
-   The words agree — a Feature is traced, reported, and composed only by an ApplicationService —
-   but a person reading both should know the shape differs. Proposed: keep it, and let the
-   backend's docs say a client groups Commands this way.
-4. **`domain` where a bounded context is meant.** An entity key (`project:issue`), composer's
-   `ResourceRef.domain`, `EntityRef.domain` and the generator's `--domain` flag name the bounded
-   context `domain`. Proposed: `bounded_context` (and `alias` where it is the published name, as
-   the client contract says them apart), changed together. Owner: composer (`ResourceRef`), then
-   client-framework and web-framework.
-5. **`common/` or `shared/`.** forge and web-framework's architecture use `common/`;
-   `sincpro_architecture_guidelines` forbids `common/` and says `shared/`. Owner: the guideline
-   (the architecture page chose `common`, as the backend has it).
-6. **mobile's own words.** `DomainModule`, `Kernel` and a `ContextManager` with a global stack are
-   the bounded context, the process and the context under other names. Proposed: mobile adopts
-   this package and its words. Owner: @sincpro/mobile. The way there: [`MOBILE.md`](MOBILE.md).
-7. ~~**mobile's ids.**~~ Done in @sincpro/mobile (#23): `generateUUID()` mints with
-   `newEntityId()` — 32 hex, the backend's form — and mobile re-exports `isEntityId` and
-   `momentOf` from here.
-8. **mobile's values on the wire.** Half done in @sincpro/mobile (#23): `serializer.ts` writes
-   and reads with `valuesOf` / `readValues`, `date.ts` tells a day with `isDay` and the company's
-   today with `dayOf`, and `monetary.ts` computes with `Decimal`. What still differs:
-   `parseToMonetaryNumber` and `calculateDiscountedTotal` answer a JavaScript `number`, so an
-   amount ends as the float the backend sends text to avoid; and `JsonSerializerAdapter.cleanData`
-   — the canonical JSON its SHA-256 is taken over — keeps rules of its own (`JSON.stringify` with
-   a `Date` replacer) instead of `valuesOf`: bytes are written there unlike on the wire, and a
-   `bigint` throws. Proposed: an amount stays a `Decimal` (or a `Money`) until it is shown —
-   `formatTwoDecimals` fed with text —, `cleanData` is `valuesOf`, and a day is held as text
-   (`"2026-10-02"`), never in a `Date`: `valuesOf` writes a `Date` as the instant it is. `big.js`
-   and `dayjs` stay for what is mobile's own (formatting, pickers). Owner: @sincpro/mobile.
-9. **`UseFramework` or `UseBoundedContext`.** #245 leaves open whether the backend's class is
-   renamed; the client already says `UseBoundedContext`. Whichever the backend decides, both end
-   with the same word.
+| Word          | Meaning                                                                                     |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| Process       | Ports configured once at application startup through `configureProcess`                     |
+| Context       | Values an execution runs with: process, bounded context, then explicit scope                |
+| ContextStore  | Synchronous values/version/subscription port; persistence belongs to the platform           |
+| Execution     | One run: id, service identity, context snapshot, span and parent                            |
+| Tracer        | Opens a span; the application supplies/export configures its implementation                 |
+| ErrorReporter | Reports unexpected failures with trace/execution correlation                                |
+| Outcome       | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident               |
+| Logger        | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter |
 
-## How a word changes
+Span names use `<bounded context>/<serviceName>` and use-case identity
+`<bounded context>.<serviceName>`. Stable metadata is required because a production build can
+rename JavaScript classes. Wire identities for persisted messages are a separate future contract.
 
-A new word, or a word that changes, is written here first — in the same pull request as the code
-that uses it — and in the backend's docs when it is the backend's. A word that exists here is
-never translated in code; Spanish prose keeps it as it is (_el bounded context_, _una Feature_).
+Context travels per call, never in a global async stack. An injected generated client is bound
+through `BIND` and propagates trace/context headers; an unrelated direct call has no automatic
+execution span. The generator does not add an independent HTTP span.
+
+Predefined core loggers share one configurable engine. Console is the default:
+all development layers/levels by default, no production output,
+and per-layer INFO/DEBUG masks that do not hide development WARN/ERROR. Other destinations have
+their own policies. A LayerLogger is an execution-bound facade over the process Logger port.
+Standalone predefined loggers carry their layer; execution correlation requires explicit
+binding. configureLogger updates the engine without replacing other process ports.
+Automatic lifecycle records include outcome and duration, never DTOs or full session context.
+Loki, buffers, endpoints, credentials and flush guarantees remain platform responsibilities.
+
+## Values and serialization
+
+`Decimal`, `Money`, ids, a day, an instant, bytes and paginated collections have one wire form.
+`valuesOf`/`pack` serialize; `readValues` restores tagged values; `rebuilt`/`unpack` use an explicit
+reader. Schema validation, class construction and business validation are distinct steps.
+A generic type annotation is not a reader, and a class constructor is not Pydantic.
+
+## Explicit differences and adoption work
+
+- Python's callable bus is expressed as `.execute(...)` in TypeScript.
+- The core's generic Command result is erased at runtime. Structurally identical TS classes can
+  be assignable even though dispatch uses exact constructors.
+- Standard decorators need a compiler transform; function registration needs none.
+- Invalid dependency replacement is rejected here, unlike the backend's warning-and-replace
+  fallback. Multi-DTO registrations and handler replacement are not yet implemented.
+- Backend/client tracing attribute naming must evolve together when its canonical vocabulary
+  changes; `sincpro.context` currently identifies the bounded context.
+- Mobile/web must migrate their consumers in their own releases. Mobile keeps SQLite, workers,
+  outbox/DLQ, lifecycle and telemetry delivery. DomainModule and the platform kernel compose
+  bounded contexts; they are not competing application-service cores.
+- Remaining mobile wire-value adoption includes preserving exact amounts until presentation and
+  using shared serialization before canonicalization/hashing. It is not part of this core change.
+
+New vocabulary is written here in the same change that introduces it. Follow the
+[README](../README.md) for executable API examples and [MOBILE.md](MOBILE.md) for platform adoption.

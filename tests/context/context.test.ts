@@ -9,7 +9,8 @@ import {
 } from "@sincpro/client-framework";
 import { beforeEach, test } from "vitest";
 
-import { project } from "./support/project";
+import { project } from "../support/project";
+import { RunningWith } from "../support/project/domain";
 
 beforeEach(() => configureProcess());
 
@@ -107,11 +108,11 @@ test("a screen that listens keeps listening when the process is configured after
   assert.equal(heard, 2);
 });
 
-test("configuring the process again starts from its own store: a test never sees another's context", () => {
+test("configuring the process again starts from its own store: a test never sees another's context", async () => {
   processContext.set({ tenant_id: "acme" });
   project.context.set({ company_id: 2 });
   configureProcess();
   assert.deepEqual(processContext.values, {});
   assert.deepEqual(project.context.values, {});
-  assert.deepEqual(project.Issues.runningWith(), {});
+  assert.deepEqual(await project.execute(new RunningWith()), {});
 });

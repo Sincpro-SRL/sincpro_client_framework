@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 
 import {
+  BoundedContext,
+  Command,
   configureProcess,
   Feature,
   processContext,
   reportError,
   TransportError,
-  UseBoundedContext,
 } from "@sincpro/client-framework";
 import { memoryReporter } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
@@ -30,17 +31,20 @@ test("an error a use case already reported is not reported again by the screen i
   const reporter = memoryReporter();
   configureProcess({ reporter });
   const broken = new TypeError("undefined is not a function");
-  class Fails extends Feature {
-    async now() {
+  class Fail extends Command<never> {}
+  class Fails extends Feature<Fail, never> {
+    static readonly serviceName = "Fails";
+    async execute(): Promise<never> {
       throw broken;
     }
   }
-  const failing = new UseBoundedContext("project").register({ features: { Fails } });
-  await assert.rejects(failing.Fails.now(), broken);
+  const failing = new BoundedContext("project");
+  failing.feature(Fail)(Fails);
+  await assert.rejects(failing.execute(new Fail()), broken);
   reportError(broken, "view project:issue/acme-3");
   assert.deepEqual(
     reporter.reports.map(({ about }) => about.useCase),
-    ["project.Fails.now"],
+    ["project.Fails"],
   );
 });
 

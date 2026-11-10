@@ -15,7 +15,11 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: /^@sincpro\/client-framework$/, replacement: `${src}/index.ts` },
-      // The optional entries live in adapters/, as package.json's `exports` says.
+      {
+        find: /^@sincpro\/client-framework\/console$/,
+        replacement: `${src}/observability/console.ts`,
+      },
+      // Vendor entries live in adapters/, as package.json's `exports` says.
       {
         find: /^@sincpro\/client-framework\/(opentelemetry|sentry|parquet)$/,
         replacement: `${src}/adapters/$1.ts`,

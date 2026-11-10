@@ -4,9 +4,9 @@ import { pathFor, restTransport, TransportError } from "@sincpro/client-framewor
 import { criteria, plain } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { restServer } from "./support/rest";
-import { servidorVentas } from "./support/servidor";
-import { facturas } from "./support/ventas";
+import { restServer } from "../support/rest";
+import { servidorVentas } from "../support/servidor";
+import { facturas } from "../support/ventas";
 
 function wire() {
   const servidor = servidorVentas();

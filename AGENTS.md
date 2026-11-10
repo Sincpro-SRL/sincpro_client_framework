@@ -25,12 +25,13 @@ it says what this package is responsible for and what it is not. This file is ho
 | `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt` |
 | `src/client/`        | The seam with a server: `Transport`, REST, memory, `entity()`, the client contract            |
 | `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                  |
-| `src/services/`      | `UseBoundedContext`, `Feature`, `ApplicationService`, the process, the execution              |
+| `src/core/`          | Class DTOs, command bus, services, execution and predefined layer loggers                     |
+| `src/services/`      | Process configuration, execution binding, error reporting and screen transport                |
 | `src/context/`       | The `ContextStore` port, `memoryContexts`, and `Context` — one level of it                    |
-| `src/observability/` | The ports a platform plugs: `Tracer`, `ErrorReporter`                                         |
+| `src/observability/` | Tracer/ErrorReporter/Logger ports and the built-in console engine                             |
 | `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed        |
 | `src/adapters/`      | Optional entries over a vendor (`./opentelemetry`, `./sentry`): the only place one is named   |
-| `src/testing/`       | `memoryTracer`, `memoryReporter` — the ports in memory, for tests                             |
+| `src/testing/`       | `memoryTracer`, `memoryReporter`, `memoryLogger` — the ports in memory                        |
 | `tests/`             | vitest in Node; `tests/support/` holds the fake domains and forge's real contracts            |
 
 ## Hard rules (the build enforces them — `make doctor`)
@@ -55,17 +56,19 @@ it says what this package is responsible for and what it is not. This file is ho
 ## Known traps
 
 - **A run sees the instance through a view of its own.** Inside a method, each dependency
-  (`this.client`), `this.context` and `this.feature` are that run's — bound to its execution. So a
+  (`this.client`), `this.context` and `this.featureBus` are that run's — bound to its execution. So a
   service declares no `#private` fields (they refuse the view); use TypeScript's `private`.
-- **A service is a singleton of its bounded context.** What a method writes on `this` lands on the
-  instance, shared by the next call, the call beside it and every `with`/`scoped` variant — as in
+- **A service is a singleton of its generation.** What a method writes on `this` lands on the
+  instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
-- **A span is named by the registered name, not the class** (`register({ features: { Issues } })`
-  → `project/Issues.close`, identity `project.Issues.close`): a production build renames classes,
-  never the keys of an object.
-- **The dependencies are typed, not declared.** `BaseFeature<ProjectDependencies>` types
-  `this.client` from an interface, which does not exist at run time; the bounded context answers
-  whatever was added with `addDependency`. A dependency nobody added reads `undefined`.
+- **A span uses stable service metadata, not constructor.name.** `serviceName = "Cancel"` gives
+  `project/Cancel`, identity `project.Cancel`. Commands route by exact constructor identity.
+- **Dependency declarations do not register anything.** Service bases declare typed attributes
+  from a shared dependency interface. Only `addDependency` supplies runtime values; a missing
+  dependency fails explicitly. Do not restore facade service maps or compatibility exports.
+- **Standard decorators are optional.** Function registration must work without any decorator
+  transform. Decorator fixtures are compiled explicitly in tests; do not claim Metro or web
+  bundler support without testing those actual configurations.
 - **The trace reaches the wire through the dependencies.** A dependency is bound to the run when it
   is a `Transport` or carries `BIND` (every generated client does, through `bindable`); anything
   else is handed as it is. A client built elsewhere and closed over sends no trace.
@@ -90,6 +93,11 @@ it says what this package is responsible for and what it is not. This file is ho
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
   an `AbortError` is `aborted`; neither is reported (`outcomeOf`). Change that with
   `ProcessOptions.outcomeOf`, never by catching in a Feature.
+- **Logging follows layers, not platform globals.** `this.logger` is execution-bound;
+  predefined loggers such as `loggerRepositories` are importable anywhere and bind through
+  injection. Console is the default engine; configureLogger changes logging without resetting
+  other process ports. The host chooses production explicitly. Never log DTOs, results, full
+  session context or raw errors automatically.
 
 - **Only what is transversal comes here.** A value's wire form (a decimal as text, a day never
   an instant, a money with its currency) is the backend's contract, the same on every platform,

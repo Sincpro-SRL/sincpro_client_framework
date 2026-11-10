@@ -65,7 +65,7 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  *       save: "PUT /invoices/{id}",
  *       preview: "POST /invoices/preview",
  *       commands: { confirm: "POST /invoices/{id}/confirm", cancel: "POST /invoices/{id}/cancel" },
- *       history: { route: "/billing-events", type: "Invoice" },
+ *       history: "/invoices/{id}/events",
  *     });
  *
  * Its Commands may be typed too — what each one is sent with, by name (`CommandBodies`), and
@@ -112,8 +112,9 @@ export type Entity<
    *  `action`. Declared, a save sends the record whole as the form holds it — not the fields
    *  that changed under `save` — and it is also where the draft is kept. */
   edit?: WriteRoute;
-  /** Its business events: the context's events route, and the `entity_type` they carry. */
-  history?: { route: string; type: string };
+  /** Its business events: where ONE record's events are read (sincpro_framework's
+   *  `DomainEvents`), `{id}` where its key goes — a page of them, as a list answers. */
+  history?: string;
   /** Every record of a criteria as a file: the route `exportRoute` fills, `downloadRoute` asks. */
   export?: string;
   /** Which fields are its description, state, picture… when they are not the conventional
@@ -226,7 +227,8 @@ export type EntityRoutes<C extends CommandBodies = CommandBodies> = CommandRoute
   draft?: string;
   /** `"PUT /invoices/{id}/edit"`: the use case that answers sincpro_framework's `Edit`. */
   edit?: string;
-  history?: { route: string; type: string };
+  /** `"/invoices/{id}/events"`: a record's events (`DomainEvents[Invoice, …]`), oldest first. */
+  history?: string;
   /** `"/invoices/export"`: every record of a criteria as a file (`Export[Invoice, Streamed]`),
    *  asked through `exportRoute` and `downloadRoute`. */
   export?: string;

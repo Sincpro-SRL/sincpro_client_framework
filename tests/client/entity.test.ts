@@ -11,7 +11,7 @@ import {
 import type { Expression } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { VENTAS } from "./support/ventas";
+import { VENTAS } from "../support/ventas";
 
 const projects = entity("forge:project", {
   list: "/projects",

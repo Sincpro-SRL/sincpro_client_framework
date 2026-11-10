@@ -102,7 +102,7 @@ build:
 	@npx tsc-alias -p tsconfig.build.json
 	@echo "✓ Build ready in ./dist (JS + .d.ts, $(PACKAGE) resolved to relative)"
 
-# What tests/codegen.test.ts compares the generator with: forge's client contracts
+# What tests/codegen/generation.test.ts compares the generator with: forge's client contracts
 # (tests/support/forge-contract/<context>.contract.json, copied from a real
 # `export-client-contract`) through the built `sincpro-client`, as forge's console runs it
 # (`--domain <context> --base /v1`). Run it after changing the generator ON PURPOSE, and read

@@ -1289,15 +1289,24 @@
           "tenant_id"
         ]
       },
-      "sincpro-forge-auth.CommandListAuthEvents": {
+      "sincpro-forge-auth.CommandListGroupEvents": {
         "method": "GET",
-        "path": "/v1/auth-events",
-        "path_fields": []
+        "path": "/v1/groups/{id}/events",
+        "path_fields": [
+          "id"
+        ]
       },
       "sincpro-forge-auth.CommandListGroups": {
         "method": "GET",
         "path": "/v1/groups",
         "path_fields": []
+      },
+      "sincpro-forge-auth.CommandListTenantEvents": {
+        "method": "GET",
+        "path": "/v1/tenants/{id}/events",
+        "path_fields": [
+          "id"
+        ]
       },
       "sincpro-forge-auth.CommandListTenantMembers": {
         "method": "GET",
@@ -1310,6 +1319,13 @@
         "method": "GET",
         "path": "/v1/tenants",
         "path_fields": []
+      },
+      "sincpro-forge-auth.CommandListUserEvents": {
+        "method": "GET",
+        "path": "/v1/users/{id}/events",
+        "path_fields": [
+          "id"
+        ]
       },
       "sincpro-forge-auth.CommandListUsers": {
         "method": "GET",
@@ -1655,6 +1671,22 @@
         "version": "f2619d67c089c98cc7d6e36448f0e4f7fed13689b2e2e919e30b52ecab375083"
       }
     },
+    "Count": {
+      "properties": {
+        "exact": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "exact"
+      ],
+      "title": "Count",
+      "type": "object"
+    },
     "Group": {
       "properties": {
         "created_at": {
@@ -1767,11 +1799,39 @@
           }
         },
         "members": {
-          "items": {
-            "$ref": "#/models/User"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/User"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Members",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "member_ids",
             "label": {
@@ -1933,7 +1993,7 @@
         "title": {
           "default": "Group"
         },
-        "version": "9b5f49ac8804fc7e86917d5f934e8e2b8e3f8d6a2deb58c61a72c9e9cbc42b4b"
+        "version": "8005e312c9d6afbe9767950301beb401e13731651ed3b4afaf6300a875a0a660"
       }
     },
     "Membership": {
@@ -2271,11 +2331,39 @@
           }
         },
         "groups": {
-          "items": {
-            "$ref": "#/models/Group"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/Group"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Groups",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "tenant_id",
             "label": {
@@ -2285,6 +2373,7 @@
             "many": true,
             "navigable": true,
             "parent_field": "id",
+            "reference": true,
             "related_field": "tenant_id",
             "relation": "Group",
             "type": "one2many",
@@ -2321,11 +2410,39 @@
           }
         },
         "members": {
-          "items": {
-            "$ref": "#/models/Membership"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/Membership"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Members",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "tenant_id",
             "label": {
@@ -2335,6 +2452,7 @@
             "many": true,
             "navigable": true,
             "parent_field": "id",
+            "reference": true,
             "related_field": "tenant_id",
             "relation": "Membership",
             "type": "one2many",
@@ -2463,7 +2581,7 @@
         "title": {
           "default": "Tenant"
         },
-        "version": "b89e13c7eb008233cb14f5a23cb0aa9a893c87d952f7657e27f984cd75cc144c"
+        "version": "15fe75ab9da231c233377011aa6f7b45e2514494046a713f149022f1f713171b"
       }
     },
     "User": {
@@ -2557,11 +2675,39 @@
           }
         },
         "memberships": {
-          "items": {
-            "$ref": "#/models/Membership"
+          "properties": {
+            "count": {
+              "anyOf": [
+                {
+                  "$ref": "#/models/Count"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "items": {
+                "$ref": "#/models/Membership"
+              },
+              "type": "array"
+            }
           },
+          "required": [
+            "items"
+          ],
           "title": "Tenants",
-          "type": "array",
+          "type": "object",
           "x-sincpro": {
             "identified_by": "user_ref",
             "label": {
@@ -2684,7 +2830,7 @@
         "title": {
           "default": "User"
         },
-        "version": "cb9a7153e32de217af91b288e707bbcd34f9bac45662bccd8b7a2e3eb67746b1"
+        "version": "e3dd5a1a68450a539b32c54f2ac6c207d14a7312e75c0ef500221e933dc7c127"
       }
     }
   },
@@ -3930,12 +4076,12 @@
         "Tenant": "tenant_id"
       }
     },
-    "sincpro-forge-auth.CommandListAuthEvents": {
+    "sincpro-forge-auth.CommandListGroupEvents": {
       "deprecated": false,
-      "description": "The facts of the auth context — tenants, users and groups — newest first.",
+      "description": "A group's facts, oldest first; only the admin reads them.",
       "dry_run": false,
       "entities": [
-        "AuthEvent"
+        "Group"
       ],
       "input": {
         "properties": {
@@ -3975,14 +4121,32 @@
             "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
             "title": "Cursor"
           },
-          "drafts": {
-            "default": false,
-            "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
-            "title": "Drafts",
-            "type": "boolean"
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": [],
+            "description": "Wire names to select (`name in names`); empty selects every event. A name no class\nrecords answers no rows — it is not checked against the classes imported, which may not be\nyet.",
+            "title": "Names"
           }
         },
-        "title": "CommandListAuthEvents",
+        "required": [
+          "id"
+        ],
+        "title": "CommandListGroupEvents",
         "type": "object"
       },
       "output": {
@@ -4038,17 +4202,20 @@
         "required": [
           "events"
         ],
-        "title": "ResponseListAuthEvents",
+        "title": "ResponseListGroupEvents",
         "type": "object"
       },
       "query": true,
       "reaches": [
-        "AuthEvent"
+        "AuthEvent",
+        "Group"
       ],
       "replacement": null,
-      "role": "search",
+      "role": "events",
       "sunset": null,
-      "targets": {}
+      "targets": {
+        "Group": "id"
+      }
     },
     "sincpro-forge-auth.CommandListGroups": {
       "deprecated": false,
@@ -4056,6 +4223,9 @@
       "dry_run": false,
       "entities": [
         "Group"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -4100,6 +4270,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           },
           "tenant_id": {
             "anyOf": [
@@ -4174,6 +4355,7 @@
         "title": "ResponseListGroups",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Group"
@@ -4183,12 +4365,156 @@
       "sunset": null,
       "targets": {}
     },
+    "sincpro-forge-auth.CommandListTenantEvents": {
+      "deprecated": false,
+      "description": "A tenant's facts, oldest first; only the admin reads them.",
+      "dry_run": false,
+      "entities": [
+        "Tenant"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": [],
+            "description": "Wire names to select (`name in names`); empty selects every event. A name no class\nrecords answers no rows — it is not checked against the classes imported, which may not be\nyet.",
+            "title": "Names"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandListTenantEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/AuthEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListTenantEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "AuthEvent",
+        "Tenant"
+      ],
+      "replacement": null,
+      "role": "events",
+      "sunset": null,
+      "targets": {
+        "Tenant": "id"
+      }
+    },
     "sincpro-forge-auth.CommandListTenantMembers": {
       "deprecated": false,
       "description": "Who belongs to one tenant, with their role there.",
       "dry_run": false,
       "entities": [
         "Membership"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -4233,6 +4559,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           },
           "tenant_id": {
             "title": "Tenant Id",
@@ -4301,6 +4638,7 @@
         "title": "ResponseListTenantMembers",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Membership"
@@ -4316,6 +4654,9 @@
       "dry_run": false,
       "entities": [
         "Tenant"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -4360,6 +4701,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           }
         },
         "title": "CommandListTenants",
@@ -4421,6 +4773,7 @@
         "title": "ResponseListTenants",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "Tenant"
@@ -4430,12 +4783,156 @@
       "sunset": null,
       "targets": {}
     },
+    "sincpro-forge-auth.CommandListUserEvents": {
+      "deprecated": false,
+      "description": "A user's facts, oldest first; only the admin reads them.",
+      "dry_run": false,
+      "entities": [
+        "User"
+      ],
+      "input": {
+        "properties": {
+          "criteria": {
+            "$ref": "#/$defs/Criteria",
+            "default": {
+              "count": "capped",
+              "grouping": {
+                "group_by": [],
+                "measures": {},
+                "order": [],
+                "pagination": null,
+                "where_measures": null
+              },
+              "order": [],
+              "pagination": {
+                "limit": 50,
+                "strategy": {
+                  "token": null
+                }
+              },
+              "selection": null,
+              "specification": null
+            },
+            "description": "Everything being asked: the filter, the ordering, the page and what to bring along.\n\nOne field rather than a parameter per filter, because a filter *is* a criteria — what the\ninterface calls a saved reading is the same object, merged."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "The `cursor` the previous answer came with, sent back as it is, to read the page after\nit — none for the first page.",
+            "title": "Cursor"
+          },
+          "id": {
+            "description": "The value of the entity's `DEFAULT_GET_ID` field: its identity unless it names a key.",
+            "title": "Id",
+            "type": "string"
+          },
+          "names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": [],
+            "description": "Wire names to select (`name in names`); empty selects every event. A name no class\nrecords answers no rows — it is not checked against the classes imported, which may not be\nyet.",
+            "title": "Names"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CommandListUserEvents",
+        "type": "object"
+      },
+      "output": {
+        "properties": {
+          "count": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Count"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How many match in total, capped unless the criteria asked for the exact number.\n`exact=False` means *at least* that many."
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the next page starts. `None` means there is no next one.",
+            "title": "Cursor"
+          },
+          "dropped": {
+            "default": [],
+            "description": "Conditions the model could not answer — an unknown field, an operator its type does not\ntake. Reported rather than raised: a shared link outlives the schema it was written\nagainst, and a dropped filter always widens the result.",
+            "items": {
+              "$ref": "#/$defs/Dropped"
+            },
+            "title": "Dropped",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/models/AuthEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "model_version": {
+            "default": "",
+            "description": "The version of the model of the records — the fingerprint its published contract carries\n(`x-sincpro.version`). What may be filtered, ordered and shown is described once, in the\ndiscovery document; a client that holds another version loads the document again.",
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "ResponseListUserEvents",
+        "type": "object"
+      },
+      "query": true,
+      "reaches": [
+        "AuthEvent",
+        "User"
+      ],
+      "replacement": null,
+      "role": "events",
+      "sunset": null,
+      "targets": {
+        "User": "id"
+      }
+    },
     "sincpro-forge-auth.CommandListUsers": {
       "deprecated": false,
       "description": "Every user forge knows, newest first.",
       "dry_run": false,
       "entities": [
         "User"
+      ],
+      "formats": [
+        "json"
       ],
       "input": {
         "properties": {
@@ -4480,6 +4977,17 @@
             "description": "The caller's drafts instead of the stored records: filtered and ordered by the same\ncriteria, the most recently saved first when it names no order — one page, an owner's\ndrafts being few. What a client asks after it lost its state: what was I editing?",
             "title": "Drafts",
             "type": "boolean"
+          },
+          "format": {
+            "default": "auto",
+            "description": "How the page travels. `json`, or `parquet`: the same records, cursor and count, as a\nParquet file (the cursor and the count in its footer). `auto`, the default: JSON, unless more\nthan `parquet_above` records are asked for, over a wire whose caller reads Parquet, with\npyarrow installed — inside the process an answer is always objects.",
+            "enum": [
+              "auto",
+              "json",
+              "parquet"
+            ],
+            "title": "Format",
+            "type": "string"
           }
         },
         "title": "CommandListUsers",
@@ -4541,6 +5049,7 @@
         "title": "ResponseListUsers",
         "type": "object"
       },
+      "parquet_above": null,
       "query": true,
       "reaches": [
         "User"
@@ -4607,5 +5116,5 @@
       }
     }
   },
-  "version": "3e8928c6507301da2ff31e1e4afaf5d592160e28adfbb7340421f1192d5213fc"
+  "version": "008a5966d192c1c3b1b6606ba3fb913c765f61ef732a74d49ba267333c71dbd2"
 }

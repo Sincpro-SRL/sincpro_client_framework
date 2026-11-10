@@ -1,116 +1,164 @@
 import type {
   CallOptions,
   Download,
+  Method,
   One,
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/transport";
-import { UseBoundedContext } from "@sincpro/client-framework/services/bounded-context";
-import { Feature } from "@sincpro/client-framework/services/feature";
+import { BoundedContext, Command, Feature } from "@sincpro/client-framework/core";
 import type { Criteria, Page } from "@sincpro/criteria";
 
-type Through = { transport: Transport };
-
-/**
- * What a screen reads of an entity — a page, a record, a read of its own: sincpro_framework's
- * built-in `EntityReads`, on the client.
- */
-class EntityReads extends Feature<Through> {
-  list<T>(route: string, criteria: Criteria<T>, signal?: AbortSignal, options?: CallOptions) {
-    this.span.set({ "http.route": route });
-    return this.transport.list<T>(route, criteria, signal, options);
-  }
-
-  one<T>(route: string, signal?: AbortSignal, options?: CallOptions): Promise<One<T>> {
-    this.span.set({ "http.route": route });
-    return this.transport.one<T>(route, signal, options);
-  }
-
-  read<T>(route: string, signal?: AbortSignal, options?: CallOptions): Promise<T> {
-    this.span.set({ "http.route": route });
-    const read = this.transport.read;
-    if (read === undefined)
-      return Promise.reject(
-        new Error(`this transport cannot read ${route}: it has no read()`),
-      );
-    return read.call(this.transport, route, signal, options) as Promise<T>;
-  }
-
-  download(route: string, signal?: AbortSignal, options?: CallOptions): Promise<Download> {
-    this.span.set({ "http.route": route });
-    const download = this.transport.download;
-    if (download === undefined)
-      return Promise.reject(
-        new Error(`this transport cannot download ${route}: it has no download()`),
-      );
-    return download.call(this.transport, route, signal, options);
+class List<T> extends Command<Page<T>> {
+  constructor(
+    readonly route: string,
+    readonly criteria: Criteria<T>,
+    readonly signal?: AbortSignal,
+    readonly options?: CallOptions,
+  ) {
+    super();
   }
 }
 
-/** What a screen writes — a save, a draft, a preview, a Command: each request a use case. */
-class EntityWrites extends Feature<Through> {
-  send<T>(
-    method: Parameters<Transport["send"]>[0],
-    route: string,
-    body: unknown,
-    signal?: AbortSignal,
-    options?: SendOptions,
-  ): Promise<T> {
-    this.span.set({ "http.method": method, "http.route": route });
-    return this.transport.send<T>(method, route, body, signal, options);
+class Get<T> extends Command<One<T>> {
+  constructor(
+    readonly route: string,
+    readonly signal?: AbortSignal,
+    readonly options?: CallOptions,
+  ) {
+    super();
   }
 }
 
-/**
- * The transport, every call a use case of a bounded context of its own — `screens` unless named:
- * what a platform hands the screens it draws.
- *
- *     const screens = screensTransport(restTransport({ base: "/v1" }));
- *     await screens.list("/facturas", criteria);   // span screens/EntityReads.list
- *
- * Context: a use case is traced, carries its context and reports what nobody expected; a list a
- * screen reads through the transport was none of that — no span, no `traceparent` (the backend's
- * trace started there, with no client in it), no company, and a 500 reported to nobody. Here
- * each read and write runs as a use case of `screens` — `EntityReads.list`, `.one`, `.read`,
- * `.download`, `EntityWrites.send` —, so it gets all three the way any other does: the span (its route said
- * on it), the trace and the process's context on the request, and a report only when it failed
- * (a 4xx the server explained is the screen's to show). A bounded context's own dependencies are
- * never given this: there its use case is the one that runs.
- */
-/** The transports this made: given one again, it is answered as it is — wrapped twice, each
- *  request would be two unrelated use cases, and the server would see only the outer's trace. */
+class Read<T> extends Command<T> {
+  constructor(
+    readonly route: string,
+    readonly signal?: AbortSignal,
+    readonly options?: CallOptions,
+  ) {
+    super();
+  }
+}
+
+class Export extends Command<Download> {
+  constructor(
+    readonly route: string,
+    readonly signal?: AbortSignal,
+    readonly options?: CallOptions,
+  ) {
+    super();
+  }
+}
+
+class Send<T> extends Command<T> {
+  constructor(
+    readonly method: Method,
+    readonly route: string,
+    readonly body: unknown,
+    readonly signal?: AbortSignal,
+    readonly options?: SendOptions,
+  ) {
+    super();
+  }
+}
+
+class EntityList extends Feature<List<unknown>, Page<unknown>> {
+  static readonly serviceName = "EntityReads.list";
+  declare readonly transport: Transport;
+  execute<T>(dto: List<T>): Promise<Page<T>> {
+    this.span.set({ "http.route": dto.route });
+    return this.transport.list<T>(dto.route, dto.criteria, dto.signal, dto.options);
+  }
+}
+
+class EntityGet extends Feature<Get<unknown>, One<unknown>> {
+  static readonly serviceName = "EntityReads.one";
+  declare readonly transport: Transport;
+  execute<T>(dto: Get<T>): Promise<One<T>> {
+    this.span.set({ "http.route": dto.route });
+    return this.transport.one<T>(dto.route, dto.signal, dto.options);
+  }
+}
+
+class EntityRead extends Feature<Read<unknown>, unknown> {
+  static readonly serviceName = "EntityReads.read";
+  declare readonly transport: Transport;
+  execute<T>(dto: Read<T>): Promise<T> {
+    this.span.set({ "http.route": dto.route });
+    const transport = this.transport;
+    if (!transport.read) {
+      return Promise.reject(
+        new Error(`this transport cannot read ${dto.route}: it has no read()`),
+      );
+    }
+    return transport.read<T>(dto.route, dto.signal, dto.options);
+  }
+}
+
+class EntityExport extends Feature<Export, Download> {
+  static readonly serviceName = "EntityReads.download";
+  declare readonly transport: Transport;
+  execute(dto: Export): Promise<Download> {
+    this.span.set({ "http.route": dto.route });
+    const transport = this.transport;
+    if (!transport.download) {
+      return Promise.reject(
+        new Error(`this transport cannot download ${dto.route}: it has no download()`),
+      );
+    }
+    return transport.download(dto.route, dto.signal, dto.options);
+  }
+}
+
+class EntitySend extends Feature<Send<unknown>, unknown> {
+  static readonly serviceName = "EntityWrites.send";
+  declare readonly transport: Transport;
+  execute<T>(dto: Send<T>): Promise<T> {
+    this.span.set({ "http.method": dto.method, "http.route": dto.route });
+    return this.transport.send<T>(dto.method, dto.route, dto.body, dto.signal, dto.options);
+  }
+}
+
 const MADE = new WeakSet<Transport>();
 
+/**
+ * Screen requests enter the same command pipeline as application services. A generated
+ * client injected into a Feature uses its raw transport instead, continuing that execution.
+ */
 export function screensTransport(transport: Transport, name = "screens"): Transport {
   if (MADE.has(transport)) return transport;
-  const screens = new UseBoundedContext<Through>(name)
-    .addDependency("transport", transport)
-    .register({ features: { EntityReads, EntityWrites } });
-  const reads = screens.EntityReads;
-  const writes = screens.EntityWrites;
+  const screens = new BoundedContext<{ transport: Transport }>(name);
+  screens.addDependency("transport", transport);
+  screens.feature(List)(EntityList);
+  screens.feature(Get)(EntityGet);
+  screens.feature(Read)(EntityRead);
+  screens.feature(Export)(EntityExport);
+  screens.feature(Send)(EntitySend);
   const through: Transport = {
     list: <T>(
       route: string,
       criteria: Criteria<T>,
       signal?: AbortSignal,
       options?: CallOptions,
-    ) => reads.list<T>(route, criteria, signal, options) as Promise<Page<T>>,
+    ) => screens.execute(new List(route, criteria, signal, options)),
     one: <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
-      reads.one<T>(route, signal, options),
+      screens.execute(new Get<T>(route, signal, options)),
     send: <T>(
-      method: Parameters<Transport["send"]>[0],
+      method: Method,
       route: string,
       body: unknown,
       signal?: AbortSignal,
       options?: SendOptions,
-    ) => writes.send<T>(method, route, body, signal, options),
+    ) => screens.execute(new Send<T>(method, route, body, signal, options)),
   };
-  if (transport.read !== undefined)
+  if (transport.read) {
     through.read = <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
-      reads.read<T>(route, signal, options);
-  if (transport.download !== undefined)
-    through.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
-      reads.download(route, signal, options);
+      screens.execute(new Read<T>(route, signal, options));
+  }
+  if (transport.download) {
+    through.download = (route, signal, options) =>
+      screens.execute(new Export(route, signal, options));
+  }
   MADE.add(through);
   return through;
 }

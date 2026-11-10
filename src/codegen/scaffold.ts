@@ -9,7 +9,7 @@ import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/names";
  *       generated/                         `sincpro-client generate` — regenerated, never edited
  *       infrastructure/dependencies.ts     what the services can count on: the generated client
  *       infrastructure/bounded_context.ts  its Feature and ApplicationService, and how it is made
- *       services/index.ts                  the services, by the name each is reached by
+ *       services/index.ts                  registers command classes and their services
  *       index.ts                           `export const project` — ready to use
  *
  * Context: the layout sincpro_framework gives a service (`dependencies.py`, `framework.py`,
@@ -27,8 +27,7 @@ export type ScaffoldOptions = {
 /** Names the skeleton's `index.ts` cannot give its constant. */
 const TAKEN = new Set([
   "transport",
-  "features",
-  "applicationServices",
+  "registerServices",
   ..."break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield let static implements interface package private protected public await".split(
     " ",
   ),
@@ -67,7 +66,8 @@ export function scaffoldFilesOf(
   const dependencies = [
     HEADER(`What the services of «${alias}» can count on`),
     "",
-    `import type { Transport, UseBoundedContext } from "${FRAMEWORK}";`,
+    `import type { Transport } from "${FRAMEWORK}";`,
+    `import type { BoundedContext } from "${at(FRAMEWORK, "core")}";`,
     ...(client ? ["", `import { clientOf } from "${at("..", "generated", "client")}";`] : []),
     "",
     `/** What every service of «${alias}» finds on \`this\`${client ? ": `this.client`, the service's operations" : ""}. */`,
@@ -80,7 +80,7 @@ export function scaffoldFilesOf(
     "}",
     "",
     "export function registerDependencies(",
-    `  bc: UseBoundedContext<${Dependencies}>,`,
+    `  bc: BoundedContext<${Dependencies}>,`,
     `  ${client ? "transport" : "_transport"}: Transport,`,
     ") {",
     ...(client ? [`  bc.addDependency("client", clientOf(transport));`] : []),
@@ -95,24 +95,25 @@ export function scaffoldFilesOf(
     "import {",
     "  ApplicationService as BaseApplicationService,",
     "  Feature as BaseFeature,",
-    "  type Transport,",
-    "  UseBoundedContext,",
-    `} from "${FRAMEWORK}";`,
+    "  BoundedContext,",
+    "  type Command,",
+    `} from "${at(FRAMEWORK, "core")}";`,
+    `import type { Transport } from "${FRAMEWORK}";`,
     "",
-    `import type { ${Name}Features } from "${at("..", "services")}";`,
     `import { type ${Dependencies}, registerDependencies } from "${at(".", "dependencies")}";`,
     "",
     `/** A Feature of «${alias}»: its dependencies typed on \`this\`, and \`this.context\`. */`,
-    `export class Feature extends BaseFeature<${Dependencies}> {}`,
+    "export abstract class Feature<C extends Command<R>, R> extends BaseFeature<C, R> {",
+    ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
+    "}",
     "",
-    `/** An ApplicationService of «${alias}»: the same, and \`this.feature.<Name>\` for each Feature. */`,
-    "export class ApplicationService extends BaseApplicationService<",
-    `  ${Dependencies},`,
-    `  ${Name}Features`,
-    "> {}",
+    `/** An ApplicationService of «${alias}»: the same, and \`this.featureBus.execute(dto)\`. */`,
+    "export abstract class ApplicationService<C extends Command<R>, R> extends BaseApplicationService<C, R> {",
+    ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
+    "}",
     "",
     `export function config${Name}BoundedContext(name: string, transport: Transport) {`,
-    `  return registerDependencies(new UseBoundedContext<${Dependencies}>(name), transport);`,
+    `  return registerDependencies(new BoundedContext<${Dependencies}>(name), transport);`,
     "}",
     "",
   ].join("\n");
@@ -120,21 +121,15 @@ export function scaffoldFilesOf(
   const services = [
     HEADER(`What «${alias}» offers`),
     "",
-    "/**",
-    ` * Each service by the name it is reached by — \`${name}.Issues.close(…)\`. A Feature groups the`,
-    " * operations of one part of the domain; an ApplicationService composes the Features:",
-    " *",
-    " *     // services/issues.ts",
-    ` *     export class Issues extends Feature {`,
-    " *       close(input: dto.CommandCloseIssue) {",
-    " *         return this.client.closeIssue(input);",
-    " *       }",
-    " *     }",
-    " */",
-    "export const features = {};",
-    "export const applicationServices = {};",
+    `import type { BoundedContext } from "${at(FRAMEWORK, "core")}";`,
+    `import type { ${Dependencies} } from "${at("..", "infrastructure", "dependencies")}";`,
     "",
-    `export type ${Name}Features = typeof features;`,
+    "/** Register local Command classes with their Features and ApplicationServices.",
+    " * Generated DTO types are remote contracts, not runtime command constructors.",
+    " * Register with context.feature(CommandClass)(FeatureClass) or",
+    " * context.appService(CommandClass)(ApplicationServiceClass).",
+    " */",
+    `export function registerServices(_context: BoundedContext<${Dependencies}>): void {}`,
     "",
   ].join("\n");
 
@@ -144,13 +139,11 @@ export function scaffoldFilesOf(
     `import { transport } from "${transport}";`,
     "",
     `import { config${Name}BoundedContext } from "${at(".", "infrastructure", "bounded_context")}";`,
-    `import { applicationServices, features } from "${at(".", "services")}";`,
+    `import { registerServices } from "${at(".", "services")}";`,
     "",
-    `/** «${alias}»: \`${name}.<Service>.<method>(…)\` — from a screen, a test, another bounded context. */`,
-    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, transport).register({`,
-    "  features,",
-    "  applicationServices,",
-    "});",
+    `/** «${alias}»: \`${name}.execute(new Command(...))\`. */`,
+    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, transport);`,
+    `registerServices(${name});`,
     "",
   ].join("\n");
 

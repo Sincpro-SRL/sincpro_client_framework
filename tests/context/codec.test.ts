@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 
 import {
+  BoundedContext,
+  Command,
   configureProcess,
   Feature,
   plainCodec,
   processContext,
   restTransport,
-  UseBoundedContext,
 } from "@sincpro/client-framework";
 import { memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
@@ -32,16 +33,18 @@ test("what is held in the context but does not travel stays in this process: nev
   }) as typeof globalThis.fetch;
   configureProcess({ tracer: memoryTracer() });
   processContext.set({ tenant_id: "acme", printer: { print: () => undefined } });
-  class Asks extends Feature<{ transport: ReturnType<typeof restTransport> }> {
-    send() {
+  class Ask extends Command<unknown> {}
+  class Asks extends Feature<Ask, unknown> {
+    static readonly serviceName = "Asks";
+    declare readonly transport: ReturnType<typeof restTransport>;
+    execute() {
       return this.transport.send("POST", "/issues", {});
     }
   }
-  const asking = new UseBoundedContext<{ transport: ReturnType<typeof restTransport> }>(
+  const asking = new BoundedContext<{ transport: ReturnType<typeof restTransport> }>(
     "asking",
-  )
-    .addDependency("transport", restTransport({ document: null, fetch }))
-    .register({ features: { Asks } });
-  await asking.Asks.send();
+  ).addDependency("transport", restTransport({ document: null, fetch }));
+  asking.feature(Ask)(Asks);
+  await asking.execute(new Ask());
   assert.equal(sent[0]?.["sincpro-context"], '{"tenant_id":"acme"}');
 });

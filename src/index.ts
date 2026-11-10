@@ -12,8 +12,8 @@
  *   client/   the seam with a server: the transport and its REST and in-memory implementations,
  *             entities with typed commands, the service's client contract
  *   model/    model definitions: written by hand, read from a JSON Schema, kept once known
- *   services/ the bounded context (`UseBoundedContext`), its `Feature` and `ApplicationService`,
- *             the process they run in (`configureProcess`), what each run carries
+ *   core/     class Commands, BoundedContext, Feature, ApplicationService and execution
+ *   services/ the process (`configureProcess`), execution binding and error reporting
  *   context/  the context: one door (`Context`) over the store each platform plugs
  *   observability/  the ports a platform plugs: a tracer and an error reporter
  *
@@ -127,6 +127,32 @@ export {
   memoryContexts,
 } from "@sincpro/client-framework/context/store";
 export {
+  ApplicationService,
+  BoundedContext,
+  Command,
+  type CommandBus,
+  DataTransferObject,
+  Feature,
+  FeatureBus,
+  type IDomainEvent,
+  type IEntity,
+  Response,
+} from "@sincpro/client-framework/core";
+export {
+  combineLoggers,
+  type LayerLogger,
+  logger,
+  loggerAdapter,
+  loggerApplicationService,
+  loggerCronJobs,
+  loggerFeature,
+  loggerFor,
+  loggerQueueProcessor,
+  loggerRepositories,
+  loggerTransport,
+  loggerUseCases,
+} from "@sincpro/client-framework/core/logger";
+export {
   defineMeta,
   field,
   type FieldOptions,
@@ -144,15 +170,15 @@ export {
   type Attributes,
   type ErrorAbout,
   type ErrorReporter,
+  type Logger,
+  type LogLayer,
+  type LogLevel,
+  type LogRecord,
   NO_TRACER,
   type Outcome,
   type Span,
   type Tracer,
 } from "@sincpro/client-framework/observability/ports";
-export {
-  type BoundedContext,
-  UseBoundedContext,
-} from "@sincpro/client-framework/services/bounded-context";
 export {
   BIND,
   type Bindable,
@@ -163,14 +189,9 @@ export {
   headersOf,
 } from "@sincpro/client-framework/services/execution";
 export {
-  ApplicationService,
-  Feature,
-  type ServiceClasses,
-  type ServiceMethods,
-  type Services,
-} from "@sincpro/client-framework/services/feature";
-export {
+  configureLogger,
   configureProcess,
+  type LoggerConfiguration,
   outcomeOf,
   processContext,
   type ProcessOptions,

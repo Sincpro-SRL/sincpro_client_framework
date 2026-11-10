@@ -1,5 +1,5 @@
 /**
- * What a platform plugs so every use case is traced and every unexpected error reported.
+ * What a platform plugs for execution traces, error reports and structured layer logs.
  *
  * Context: sincpro_framework opens one span per use case and reports what nobody expected; a
  * client has to do the same, and continue the backend's trace. The vendor — OpenTelemetry in a
@@ -7,7 +7,7 @@
  * defines the contract and calls it, and bundles none. Two implementations at least (a
  * platform's and a test's) are why these are ports.
  *
- * Nothing here may break a use case: a tracer or a reporter that throws is ignored, and the use
+ * Nothing here may break a use case: a tracer, reporter or logger that fails is ignored, and the use
  * case answers as it would have.
  */
 
@@ -24,6 +24,40 @@ export type Attributes = Readonly<Record<string, string | number | boolean>>;
  * - `failed`: anything else — a bug, a server that broke, a server nobody could reach. Reported.
  */
 export type Outcome = "ok" | "refused" | "aborted" | "failed";
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLayer =
+  | "global"
+  | "use_cases"
+  | "application_service"
+  | "feature"
+  | "adapter"
+  | "repositories"
+  | "transport"
+  | "event_bus"
+  | "cron";
+
+/** Structured logging never implicitly includes a DTO, response, error body or session context. */
+export type LogRecord = {
+  readonly timestamp: string;
+  readonly level: LogLevel;
+  readonly layer: LogLayer;
+  readonly message: string;
+  readonly attributes?: Attributes;
+  readonly event?: "execution.started" | "execution.finished";
+  readonly boundedContext?: string;
+  readonly useCase?: string;
+  readonly executionId?: string;
+  readonly traceId?: string;
+  readonly spanId?: string;
+  readonly outcome?: Outcome;
+  readonly durationMs?: number;
+};
+
+/** A sink owns filtering and delivery. Logging is best-effort and never awaited by business work. */
+export interface Logger {
+  log(record: LogRecord): void | Promise<void>;
+}
 
 /** One span: a use case, open while it runs. */
 export interface Span {

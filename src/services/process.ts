@@ -6,7 +6,12 @@ import {
 } from "@sincpro/client-framework/context/context";
 import { type ContextStore, memoryContexts } from "@sincpro/client-framework/context/store";
 import {
+  consoleLogger,
+  type ConsoleLoggerOptions,
+} from "@sincpro/client-framework/observability/console";
+import {
   type ErrorReporter,
+  type Logger,
   NO_TRACER,
   type Outcome,
   type Tracer,
@@ -20,11 +25,12 @@ import {
  *     configureProcess({
  *       tracer: browserTracer({ endpoint: settings.otlp, service: "forge-web" }),
  *       reporter: glitchtipReporter({ dsn: settings.glitchtip }),
+ *       logger: applicationLogger,
  *       context: memoryContexts(),
  *     });
  *
  * Context: everything is optional, and nothing breaks without it. A process that never configures
- * runs every use case untraced, unreported, with its context in memory — so a bounded context is
+ * runs untraced and unreported, with memory context and development console logging — so a bounded context is
  * usable the moment it is imported, and `main` adds what it watches with. The bounded contexts
  * read the process on every call, never at import: `project` may be defined before `main` runs.
  *
@@ -36,16 +42,41 @@ export type ProcessOptions = {
   tracer?: Tracer;
   /** The platform's (GlitchTip, Sentry, memory in a test). Only what nobody expected reaches it. */
   reporter?: ErrorReporter;
+  /** Defaults to the console engine. False disables logging; a supplied engine owns its policy. */
+  logger?: Logger | false;
+  /** Mode for the default console engine; the host selects production explicitly. */
+  mode?: ConsoleLoggerOptions["mode"];
   /** Where the context lives (`memoryContexts()` by default). */
   context?: ContextStore;
   /** How an error ended a use case (`outcomeOf` by default). Only `failed` is reported. */
   outcomeOf?: (error: unknown) => Outcome;
 };
 
+export type LoggerConfiguration = Omit<ConsoleLoggerOptions, "mode"> & {
+  mode?: ConsoleLoggerOptions["mode"];
+  engine?: Logger | false;
+};
+
+function loggingEngine(options: LoggerConfiguration): Logger | undefined {
+  if (options.engine === false) return undefined;
+  if (options.engine !== undefined) {
+    if (!options.engine || typeof options.engine.log !== "function") {
+      throw new TypeError("Logger engine must implement log(record)");
+    }
+    return options.engine;
+  }
+  return consoleLogger({
+    mode: options.mode ?? "development",
+    level: options.level,
+    layers: options.layers,
+  });
+}
+
 /** The process as a use case reads it. Not public: `configureProcess` is the way in. */
 export type Process = {
   readonly tracer: Tracer;
   readonly reporter: ErrorReporter | undefined;
+  readonly logger: Logger | undefined;
   readonly store: ContextStore;
   readonly outcomeOf: (error: unknown) => Outcome;
 };
@@ -54,6 +85,7 @@ function settled(options: ProcessOptions): Process {
   return {
     tracer: options.tracer ?? NO_TRACER,
     reporter: options.reporter,
+    logger: loggingEngine({ engine: options.logger, mode: options.mode }),
     store: options.context ?? memoryContexts(),
     outcomeOf: options.outcomeOf ?? outcomeOf,
   };
@@ -66,6 +98,11 @@ export function configureProcess(options: ProcessOptions = {}): void {
   const before = current.store;
   current = settled(options);
   if (current.store !== before) for (const listener of [...replacing]) listener();
+}
+
+/** Replace logging only; existing tracing, reporting and context remain untouched. */
+export function configureLogger(options: LoggerConfiguration = {}): void {
+  current = { ...current, logger: loggingEngine(options) };
 }
 
 /** The process's store as every level of the context reads it — the process's and each bounded context's. */

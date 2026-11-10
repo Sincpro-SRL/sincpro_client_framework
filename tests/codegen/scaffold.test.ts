@@ -8,7 +8,7 @@ import { scaffoldFilesOf } from "@sincpro/client-framework/codegen";
 import ts from "typescript";
 import { test } from "vitest";
 
-import contract from "./support/forge-contract/project.contract.json";
+import contract from "../support/forge-contract/project.contract.json";
 
 const project = contract as unknown as Metamodel;
 
@@ -32,12 +32,12 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["infrastructure/bounded_context.ts"]?.includes(
-      "export class Feature extends BaseFeature<ProjectDependencies> {}",
+      "export abstract class Feature<C extends Command<R>, R> extends BaseFeature<C, R>",
     ),
   );
   assert.ok(
     files["index.ts"]?.includes(
-      'export const project = configProjectBoundedContext("project", transport).register({',
+      'export const project = configProjectBoundedContext("project", transport);',
     ),
   );
   assert.ok(

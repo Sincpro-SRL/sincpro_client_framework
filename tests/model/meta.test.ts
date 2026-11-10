@@ -4,8 +4,8 @@ import { defineMeta, field } from "@sincpro/client-framework";
 import { fieldsThatFilter, fieldsThatSort, labelOf, searchOver } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { tenantMeta } from "./support/forge";
-import { facturaMeta } from "./support/ventas";
+import { tenantMeta } from "../support/forge";
+import { facturaMeta } from "../support/ventas";
 
 test("a hand-written definition takes the same operators the framework publishes", () => {
   const forgeText = tenantMeta.fields["display_name"];

@@ -13,8 +13,8 @@ import {
 } from "@sincpro/client-framework";
 import { test } from "vitest";
 
-import { servidorVentas } from "./support/servidor";
-import { facturas } from "./support/ventas";
+import { servidorVentas } from "../support/servidor";
+import { facturas } from "../support/ventas";
 test("an entity declares where a new record goes, and the references of «new» and «pick»", () => {
   const invoices = entity("billing:invoice", { list: "/invoices", create: "POST /invoices" });
   assert.deepEqual(invoices.create, { method: "POST", path: "/invoices" });

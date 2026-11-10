@@ -2,18 +2,20 @@ import type {
   Attributes,
   ErrorAbout,
   ErrorReporter,
+  Logger,
+  LogRecord,
   Outcome,
   Span,
   Tracer,
 } from "@sincpro/client-framework/observability/ports";
 
 /**
- * A tracer and a reporter that keep what they were told, so a test reads it back.
+ * Observability adapters that keep what they were told, so a test reads it back.
  *
  *     const tracer = memoryTracer();
  *     configureProcess({ tracer });
- *     await project.CloseIssue.execute(input);
- *     tracer.spans.map((one) => one.name);   // ["project/CloseIssue", "project/Issues.close", …]
+ *     await project.execute(new CommandCloseIssue("issue-1"));
+ *     tracer.spans.map((one) => one.name);   // ["project/CloseIssue", "project/Store", …]
  *
  * Context: a use case is proven in Node with nothing of a platform; these are the platform's
  * part, held in memory. Not test doubles of this package — real implementations of its ports.
@@ -77,4 +79,19 @@ export type MemoryReporter = ErrorReporter & {
 export function memoryReporter(): MemoryReporter {
   const reports: { error: unknown; about: ErrorAbout }[] = [];
   return { reports, report: (error, about) => void reports.push({ error, about }) };
+}
+
+export type MemoryLogger = Logger & { readonly records: LogRecord[] };
+
+export function memoryLogger(): MemoryLogger {
+  const records: LogRecord[] = [];
+  return {
+    records,
+    log(record) {
+      records.push({
+        ...record,
+        ...(record.attributes ? { attributes: { ...record.attributes } } : {}),
+      });
+    },
+  };
 }

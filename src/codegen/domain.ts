@@ -71,13 +71,21 @@ type Scope = {
   refer: (ref: string) => string;
   reached: Set<string>;
   imports: Set<string>;
+  /** The models written in an operation's body, each typed as its `<Name>Input`. */
+  inputs: Set<string>;
 };
 
-function scopeOf(metamodel: Metamodel): Scope {
+/**
+ * What each reference of a rendering names. `input`: the rendering is what a caller SENDS — an
+ * operation's input —, so a model there is its `<Name>Input`, whose fields follow the contract's
+ * `required`, not the record a read answers whole.
+ */
+function scopeOf(metamodel: Metamodel, shared?: Scope, input = false): Scope {
   const definitions = metamodel.$defs ?? {};
   const scope: Scope = {
-    reached: new Set(),
-    imports: new Set(),
+    reached: shared?.reached ?? new Set(),
+    imports: shared?.imports ?? new Set(),
+    inputs: shared?.inputs ?? new Set(),
     refer: (ref) => {
       const model = ref.startsWith(MODELS);
       if (!model && !ref.startsWith(DEFINITIONS))
@@ -87,7 +95,9 @@ function scopeOf(metamodel: Metamodel): Scope {
       if (model || name in metamodel.models) {
         if (!(name in metamodel.models))
           throw new Error(`"${ref}" names no model of ${contextOf(metamodel)}`);
-        return identifierOf(name);
+        if (!input) return identifierOf(name);
+        scope.inputs.add(name);
+        return `${identifierOf(name)}Input`;
       }
       const imported = IMPORTED[name];
       if (imported !== undefined) {
@@ -227,9 +237,11 @@ function operationDoc(metamodel: Metamodel, local: string, operation: Operation)
  *
  * 1. The models, by name: an entity's contract, a related model by its own name.
  * 2. Each operation, by its local name (its identity without `<context>.`): its input as
- *    `<Name>` and its answer by the backend's own name for it (`answerOf`: `ResponseX`), with
- *    `<Name>Answer` kept as a deprecated alias — or as `<Name>Answer` when it has no name.
- * 3. The shared definitions those reach — and the ones those reach, until none is new —, but
+ *    `<Name>` and its answer by the backend's own name for it (`answerOf`: `ResponseX`) — or as
+ *    `<Name>Answer` when it has no name.
+ * 3. A model an input carries — and the ones it carries, until none is new — as `<Name>Input`:
+ *    what a caller sends follows the contract's `required`; the server fills the rest.
+ * 4. The shared definitions those reach — and the ones those reach, until none is new —, but
  *    never one a package of the stack already types (`Criteria`).
  * Final: a header that says where it came from and not to edit it, the imports, then models,
  *    definitions and operations, each sorted by name; two of them with one TypeScript name are
@@ -237,6 +249,7 @@ function operationDoc(metamodel: Metamodel, local: string, operation: Operation)
  */
 export function domainFileOf(metamodel: Metamodel): string {
   const scope = scopeOf(metamodel);
+  const sent = scopeOf(metamodel, scope, true);
   const definitions = metamodel.$defs ?? {};
   const claim = claimed();
 
@@ -256,20 +269,30 @@ export function domainFileOf(metamodel: Metamodel): string {
         ? "unknown"
         : (streamed(operation.output, scope) ?? typeOf(operation.output, scope, 0, false));
     const written = [
-      `${operationDoc(metamodel, local, operation)}export type ${local} = ${typeOf(operation.input, scope, 0, false)};`,
+      `${operationDoc(metamodel, local, operation)}export type ${local} = ${typeOf(operation.input, sent, 0, false)};`,
     ];
     if (!answered.has(named)) {
       answered.add(named);
       claim(named, `the answer of ${identity}`);
       written.push(`/** What \`${local}\` answers. */\nexport type ${named} = ${answer};`);
     }
-    if (named !== `${local}Answer`) {
-      claim(`${local}Answer`, `the old name of the answer of ${identity}`);
-      written.push(
-        `/** @deprecated The backend calls it \`${named}\`: use that name. */\nexport type ${local}Answer = ${named};`,
+    return written;
+  });
+
+  const inputs = new Map<string, string>();
+  for (let pending = [...scope.inputs]; pending.length > 0;) {
+    for (const name of pending) {
+      const schema = metamodel.models[name]!;
+      inputs.set(
+        name,
+        `${docOf([`What a caller sends of a \`${name}\`: what the contract requires; the server fills the rest.`], "")}export type ${identifierOf(name)}Input = ${typeOf(schema, sent, 0, false)};`,
       );
     }
-    return written;
+    pending = [...scope.inputs].filter((name) => !inputs.has(name));
+  }
+  const sentModels = [...inputs.keys()].sort().map((name) => {
+    claim(`${identifierOf(name)}Input`, `what a caller sends of model ${name}`);
+    return inputs.get(name)!;
   });
 
   const written = new Map<string, string>();
@@ -298,5 +321,5 @@ export function domainFileOf(metamodel: Metamodel): string {
     .sort()
     .map((from) => `import type { ${byPackage.get(from)!.join(", ")} } from "${from}";`);
 
-  return `${[headerOf("The DTOs", metamodel), ...(imports.length === 0 ? [] : [imports.join("\n")]), ...models, ...shared, ...operations].join("\n\n")}\n`;
+  return `${[headerOf("The DTOs", metamodel), ...(imports.length === 0 ? [] : [imports.join("\n")]), ...models, ...sentModels, ...shared, ...operations].join("\n\n")}\n`;
 }

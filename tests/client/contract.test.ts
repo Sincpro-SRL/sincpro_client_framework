@@ -10,11 +10,11 @@ import {
 import { labelOf } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { entities } from "./support/forge-contract/project/entities";
+import { entities } from "../support/forge-contract/project/entities";
 
 const project = JSON.parse(
   readFileSync(
-    new URL("./support/forge-contract/project.contract.json", import.meta.url),
+    new URL("../support/forge-contract/project.contract.json", import.meta.url),
     "utf8",
   ),
 ) as ClientContract;

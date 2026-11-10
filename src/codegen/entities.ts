@@ -138,6 +138,18 @@ function entitySourceOf(
     routes.push(`  ${role}: ${JSON.stringify(route)},`);
   }
 
+  // A record's events (sincpro_framework's `DomainEvents`): its history, read by the record's key.
+  const events = oneOf(reads("events", isGet), "events");
+  if (events !== undefined) {
+    if ("missing" in events) missing.push(`history: ${events.missing}`);
+    else {
+      const field = events.found.operation.targets[model];
+      if (field !== undefined && events.found.rest.fields.length === 1)
+        routes.push(`  history: ${JSON.stringify(recordPath(events.found.rest, field))},`);
+      else missing.push(`history: \`${events.found.local}\` is at ${events.found.rest.path}`);
+    }
+  }
+
   const exported = oneOf(reads("export", isGet), "export");
   if (exported !== undefined) {
     if ("missing" in exported) missing.push(`export: ${exported.missing}`);
@@ -198,8 +210,9 @@ function entitySourceOf(
  *
  * 1. Per model, by name: the one `search` a transport reads for it (`own` when there are
  *    several) — none, and the model gets no entity, said in the file's own doc.
- * 2. Its `get`, `edit` and `preview` the same way, the record's field written `{id}`, and its
- *    `export` — every record of a criteria as a file — by its path.
+ * 2. Its `get`, `edit` and `preview` the same way, the record's field written `{id}`; its
+ *    `events` — a record's `DomainEvents` — as `history`, the same way; and its `export` — every
+ *    record of a criteria as a file — by its path.
  * 3. Every write of role `command` that concerns it: with `target` when its body names the
  *    record, as it is when it creates one; its body typed without that field.
  * Final: an `entity<T, C>()` per model listed, keyed `<domain>:<kind>`, and `entities`, all of

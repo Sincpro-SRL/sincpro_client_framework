@@ -17,6 +17,7 @@
     "paths": {
       "@sincpro/client-framework": ["./src/index.ts"],
       "@sincpro/client-framework/opentelemetry": ["./src/adapters/opentelemetry.ts"],
+      "@sincpro/client-framework/console": ["./src/observability/console.ts"],
       "@sincpro/client-framework/sentry": ["./src/adapters/sentry.ts"],
       "@sincpro/client-framework/parquet": ["./src/adapters/parquet.ts"],
       "@sincpro/client-framework/*": ["./src/*"]

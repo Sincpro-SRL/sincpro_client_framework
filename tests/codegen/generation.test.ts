@@ -11,12 +11,12 @@ import {
 } from "@sincpro/client-framework/codegen";
 import { test } from "vitest";
 
-import { clientOf } from "./support/forge-contract/project/client";
-import type { CommandSendIssue, Issue } from "./support/forge-contract/project/domain";
+import { clientOf } from "../support/forge-contract/project/client";
+import type { CommandSendIssue, Issue } from "../support/forge-contract/project/domain";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const forge = (context: string) =>
-  JSON.parse(read(`./support/forge-contract/${context}.contract.json`)) as Metamodel;
+  JSON.parse(read(`../support/forge-contract/${context}.contract.json`)) as Metamodel;
 
 /** The same JSON with every object's keys in reverse order. */
 function reversed(value: unknown): unknown {
@@ -214,7 +214,7 @@ test("forge's contexts are written as the committed files, byte for byte", () =>
     for (const [file, source] of Object.entries(written))
       assert.equal(
         source,
-        read(`./support/forge-contract/${context}/${file}.ts`),
+        read(`../support/forge-contract/${context}/${file}.ts`),
         `${context}/${file}.ts: the generator changed; if on purpose, make codegen-fixtures`,
       );
   }
@@ -264,6 +264,27 @@ test("an operation's input requires what its DTO requires, and its answer is its
     source.includes(
       "@deprecated It stops being served on 2027-01-01. Use `CommandSettleOrder`.",
     ),
+  );
+});
+
+test("a model a caller sends is its Input: what the contract requires, the server fills the rest", () => {
+  const source = domainFileOf(forge("project"));
+  // A read answers the specification whole; registering a project sends what it chooses.
+  assert.ok(source.includes("  specification: ProjectSpecification;\n"));
+  assert.ok(source.includes("  specification?: ProjectSpecificationInput;\n"));
+  assert.ok(
+    source.includes("export type ProjectSpecificationInput = {\n  agent_binary?: string;"),
+  );
+  // A model inside one is its Input too.
+  assert.ok(source.includes("  preparation?: ProjectPreparationInput;\n"));
+});
+
+test("a record's events (DomainEvents) are its entity's history, read by its key", () => {
+  const project = entitiesFileOf(forge("project"), options);
+  assert.ok(project.includes('  history: "/issues/{id}/events",'));
+  assert.ok(project.includes('  history: "/projects/{id}/events",'));
+  assert.ok(
+    entitiesFileOf(forge("auth"), options).includes('  history: "/tenants/{id}/events",'),
   );
 });
 
@@ -561,15 +582,11 @@ function titled(titles: Readonly<Record<string, string>>): Metamodel {
   };
 }
 
-test("an answer goes by the backend's own name, and the old <Name>Answer stays as a deprecated alias", () => {
+test("an answer goes by the backend's own name, never under a second one", () => {
   const named = titled({ "shop.CommandPlaceOrder": "ResponsePlaceOrder" });
   const domain = domainFileOf(named);
   assert.ok(domain.includes("export type ResponsePlaceOrder = {\n  order_id?: string;\n};"));
-  assert.ok(
-    domain.includes(
-      "/** @deprecated The backend calls it `ResponsePlaceOrder`: use that name. */\nexport type CommandPlaceOrderAnswer = ResponsePlaceOrder;",
-    ),
-  );
+  assert.ok(!domain.includes("CommandPlaceOrderAnswer"));
   assert.ok(
     entitiesFileOf(named, options).includes("    placeOrder: dto.ResponsePlaceOrder;"),
   );
@@ -585,8 +602,8 @@ test("a Response two Commands answer with is one type, written once; a name two 
   });
   const domain = domainFileOf(shared);
   assert.equal(domain.split("export type ResponseOrder = {").length - 1, 1);
-  assert.ok(domain.includes("export type CommandPlaceOrderAnswer = ResponseOrder;"));
-  assert.ok(domain.includes("export type CommandPayOrderAnswer = ResponseOrder;"));
+  assert.ok(!domain.includes("CommandPlaceOrderAnswer"));
+  assert.ok(!domain.includes("CommandPayOrderAnswer"));
   // Two different shapes under one title are two types: neither takes the name.
   const differ: Metamodel = {
     ...shared,

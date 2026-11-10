@@ -9,12 +9,13 @@ import {
 } from "@opentelemetry/sdk-trace";
 import {
   ApplicationService,
+  BoundedContext,
+  Command,
   configureProcess,
   Feature,
   processContext,
   restTransport,
   TransportError,
-  UseBoundedContext,
 } from "@sincpro/client-framework";
 import { openTelemetryTracer } from "@sincpro/client-framework/opentelemetry";
 import { type ExceptionClient, sentryReporter } from "@sincpro/client-framework/sentry";
@@ -32,41 +33,55 @@ function applicationProvider(options: { sampler?: AlwaysOffSampler } = {}) {
 
 beforeEach(() => configureProcess());
 
-class Wait extends Feature {
-  async for(ms: number) {
-    await new Promise((done) => setTimeout(done, ms));
-    return ms;
+class WaitCommand extends Command<number> {
+  constructor(readonly ms: number) {
+    super();
+  }
+}
+class FailCommand extends Command<never> {}
+class RefuseCommand extends Command<never> {}
+class BothCommand extends Command<number> {}
+
+class Wait extends Feature<WaitCommand, number> {
+  static readonly serviceName = "Wait.for";
+  async execute(command: WaitCommand) {
+    await new Promise((done) => setTimeout(done, command.ms));
+    return command.ms;
   }
 }
 
-class Fail extends Feature {
-  async execute() {
+class Fail extends Feature<FailCommand, never> {
+  static readonly serviceName = "Fail";
+  async execute(): Promise<never> {
     throw new TypeError("undefined is not a function");
   }
 }
 
-class Refuse extends Feature {
-  async execute() {
+class Refuse extends Feature<RefuseCommand, never> {
+  static readonly serviceName = "Refuse";
+  async execute(): Promise<never> {
     throw new TransportError("/issues/1", 409, null);
   }
 }
 
-class Both extends ApplicationService<Record<never, never>, { Wait: typeof Wait }> {
+class Both extends ApplicationService<BothCommand, number> {
+  static readonly serviceName = "Both";
   async execute() {
-    await this.feature.Wait.for(1);
-    return this.feature.Wait.for(1);
+    await this.featureBus.execute(new WaitCommand(1));
+    return this.featureBus.execute(new WaitCommand(1));
   }
 }
 
-const project = new UseBoundedContext("project").register({
-  features: { Wait, Fail, Refuse },
-  applicationServices: { Both },
-});
+const project = new BoundedContext("project");
+project.feature(WaitCommand)(Wait);
+project.feature(FailCommand)(Fail);
+project.feature(RefuseCommand)(Refuse);
+project.appService(BothCommand)(Both);
 
 test("an ApplicationService and its Features are one OpenTelemetry trace, parent to children", async () => {
   const { exporter, tracer } = applicationProvider();
   configureProcess({ tracer });
-  await project.Both.execute();
+  await project.execute(new BothCommand());
   const spans = exporter.getFinishedSpans();
   const parent = spans.find((one) => one.name === "project/Both");
   const children = spans.filter((one) => one.name !== "project/Both");
@@ -85,8 +100,8 @@ test("an ApplicationService and its Features are one OpenTelemetry trace, parent
 test("a failure is an error with its exception; a refusal is an outcome, never an error", async () => {
   const { exporter, tracer } = applicationProvider();
   configureProcess({ tracer });
-  await assert.rejects(project.Fail.execute());
-  await assert.rejects(project.Refuse.execute());
+  await assert.rejects(project.execute(new FailCommand()));
+  await assert.rejects(project.execute(new RefuseCommand()));
   const [failed, refused] = exporter.getFinishedSpans();
   assert.equal(failed?.status.code, 2); // ERROR
   assert.equal(failed?.events[0]?.name, "exception");
@@ -103,7 +118,10 @@ const recording = (sent: Sent[]): typeof fetch =>
 
 type Asking = { transport: ReturnType<typeof restTransport> };
 
-class Ask extends Feature<Asking> {
+class AskCommand extends Command<unknown> {}
+class Ask extends Feature<AskCommand, unknown> {
+  static readonly serviceName = "Ask";
+  declare readonly transport: Asking["transport"];
   execute() {
     return this.transport.send("POST", "/issues", {});
   }
@@ -111,16 +129,19 @@ class Ask extends Feature<Asking> {
 
 /** A bounded context whose one service asks a server that keeps what each request carried. */
 function asking(sent: Sent[]) {
-  return new UseBoundedContext<Asking>("project")
-    .addDependency("transport", restTransport({ document: null, fetch: recording(sent) }))
-    .register({ features: { Ask } });
+  const context = new BoundedContext<Asking>("project").addDependency(
+    "transport",
+    restTransport({ document: null, fetch: recording(sent) }),
+  );
+  context.feature(AskCommand)(Ask);
+  return context;
 }
 
 test("the request carries the span OpenTelemetry recorded — the id the backend continues", async () => {
   const sent: Sent[] = [];
   const { exporter, tracer } = applicationProvider();
   configureProcess({ tracer });
-  await asking(sent).Ask.execute();
+  await asking(sent).execute(new AskCommand());
   const [span] = exporter.getFinishedSpans();
   const ids = span?.spanContext();
   assert.equal(sent[0]?.["traceparent"], `00-${ids?.traceId}-${ids?.spanId}-01`);
@@ -131,7 +152,7 @@ test("with OpenTelemetry's API and no provider, nothing is claimed: no ids, no t
   configureProcess({
     tracer: openTelemetryTracer(trace.getTracer("nobody-registered-a-provider")),
   });
-  await asking(sent).Ask.execute();
+  await asking(sent).execute(new AskCommand());
   assert.equal(sent[0]?.["traceparent"], undefined);
 });
 
@@ -139,7 +160,7 @@ test("a trace the application's sampler drops is said dropped, so the backend dr
   const sent: Sent[] = [];
   const { exporter, tracer } = applicationProvider({ sampler: new AlwaysOffSampler() });
   configureProcess({ tracer });
-  await asking(sent).Ask.execute();
+  await asking(sent).execute(new AskCommand());
   assert.equal(exporter.getFinishedSpans().length, 0);
   assert.match(sent[0]?.["traceparent"] ?? "", /^00-[0-9a-f]{32}-[0-9a-f]{16}-00$/);
 });
@@ -152,8 +173,8 @@ test("an unexpected error reaches the application's Sentry-compatible client wit
   const { tracer } = applicationProvider();
   configureProcess({ tracer, reporter: sentryReporter(client) });
   processContext.set({ tenant_id: "acme" });
-  await assert.rejects(project.Fail.execute());
-  await assert.rejects(project.Refuse.execute());
+  await assert.rejects(project.execute(new FailCommand()));
+  await assert.rejects(project.execute(new RefuseCommand()));
   assert.equal(captured.length, 1); // the refusal was the business answering
   const hint = captured[0]?.hint as {
     captureContext: {

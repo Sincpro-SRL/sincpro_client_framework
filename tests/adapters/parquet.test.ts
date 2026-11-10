@@ -9,7 +9,7 @@ import { test } from "vitest";
  *  store that declares no scale (the amount travels as its text), and postings from a column
  *  declared `Numeric(14, 2)` (a decimal128). */
 const fixture = (name: string): ArrayBuffer => {
-  const bytes = readFileSync(new URL(`./support/${name}`, import.meta.url));
+  const bytes = readFileSync(new URL(`../support/${name}`, import.meta.url));
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 };
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { metaFromSchema, type SchemaComponents } from "@sincpro/client-framework";
 import { test } from "vitest";
 
-import forge from "./support/forge-openapi.json" with { type: "json" };
+import forge from "../support/forge-openapi.json" with { type: "json" };
 
 const components = forge.components as unknown as SchemaComponents;
 test("a value object's enums and lists come out of the schema", () => {

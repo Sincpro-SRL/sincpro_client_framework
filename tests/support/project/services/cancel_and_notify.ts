@@ -1,11 +1,13 @@
-import type * as dto from "../../forge-contract/project/domain";
+import type { ResponseCancelIssue } from "../../forge-contract/project/domain";
+import type { CancelAndNotify as Request } from "../domain";
+import { CancelIssue, TellNotice } from "../domain";
 import { ApplicationService } from "../infrastructure/bounded_context";
 
-/** Cancel an issue and say so. */
-export class CancelAndNotify extends ApplicationService {
-  async execute(input: dto.CommandCancelIssue) {
-    const answer = await this.feature.Issues.cancel(input);
-    this.feature.Notices.tell(`${answer.issue_id} ${answer.resolution}`);
+export class CancelAndNotify extends ApplicationService<Request, ResponseCancelIssue> {
+  static readonly serviceName = "CancelAndNotify";
+  async execute(command: Request) {
+    const answer = await this.featureBus.execute(new CancelIssue(command.issue_id));
+    await this.featureBus.execute(new TellNotice(`${answer.issue_id} ${answer.resolution}`));
     return answer;
   }
 }

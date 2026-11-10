@@ -8,7 +8,11 @@ import {
   screensTransport,
   TransportError,
 } from "@sincpro/client-framework";
-import { memoryReporter, memoryTracer } from "@sincpro/client-framework/testing";
+import {
+  memoryLogger,
+  memoryReporter,
+  memoryTracer,
+} from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
 
 type Sent = { url: string; headers: Record<string, string> };
@@ -21,6 +25,19 @@ function recording(sent: Sent[]): typeof fetch {
 }
 
 beforeEach(() => configureProcess());
+
+test("only direct screen requests use the screen wrapper; plain adapters add no executions", async () => {
+  const logger = memoryLogger();
+  configureProcess({ logger });
+  const raw = memoryTransport({}, { handle: () => ({ ok: true }) });
+  await raw.send("POST", "/x", {});
+  assert.equal(logger.records.length, 0);
+  const screens = screensTransport(raw);
+  assert.equal(screensTransport(screens), screens);
+  await screens.send("POST", "/x", {});
+  assert.equal(logger.records.length, 2);
+  assert.ok(logger.records.every((record) => record.useCase === "screens.EntityWrites.send"));
+});
 
 test("what a screen reads and writes is a use case of `screens`: traced, its route said, the trace and the context on the request", async () => {
   const sent: Sent[] = [];

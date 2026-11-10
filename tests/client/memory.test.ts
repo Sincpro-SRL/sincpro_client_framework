@@ -4,7 +4,7 @@ import { memoryTransport, TransportError } from "@sincpro/client-framework";
 import { criteria, plain } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { FACTURAS, facturas, VENTAS } from "./support/ventas";
+import { FACTURAS, facturas, VENTAS } from "../support/ventas";
 
 const transport = memoryTransport(VENTAS);
 

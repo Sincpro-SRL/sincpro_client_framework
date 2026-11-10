@@ -1,19 +1,27 @@
-import type * as dto from "../../forge-contract/project/domain";
+import type {
+  ResponseCancelIssue,
+  ResponseSendIssue,
+} from "../../forge-contract/project/domain";
+import type { CancelIssue, RunningWith, SendIssue } from "../domain";
 import { Feature } from "../infrastructure/bounded_context";
+import type { ProjectContext } from "../infrastructure/dependencies";
 
-/** What can be done to an issue. */
-export class Issues extends Feature {
-  cancel(input: dto.CommandCancelIssue) {
+export class Cancel extends Feature<CancelIssue, ResponseCancelIssue> {
+  static readonly serviceName = "Cancel";
+  execute(input: CancelIssue) {
     this.session.require();
-    return this.client.cancelIssue(input);
+    return this.client.cancelIssue({ issue_id: input.issue_id });
   }
-
-  send(input: dto.CommandSendIssue) {
-    return this.client.sendIssue(input);
+}
+export class Send extends Feature<SendIssue, ResponseSendIssue> {
+  static readonly serviceName = "Send";
+  execute(input: SendIssue) {
+    return this.client.sendIssue({ issue_id: input.issue_id, message: input.message });
   }
-
-  /** What this run executes with. */
-  runningWith() {
+}
+export class CurrentContext extends Feature<RunningWith, Readonly<Partial<ProjectContext>>> {
+  static readonly serviceName = "CurrentContext";
+  execute() {
     return this.context;
   }
 }
