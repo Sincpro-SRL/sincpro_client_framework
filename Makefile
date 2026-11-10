@@ -52,6 +52,9 @@ lint:
 SCAN := grep -rnE --include=*.ts
 NOT_COMMENT := grep -vE ':[0-9]+: *(\*|//|/\*)'
 NOT_CODEGEN := grep -v '^src/codegen/'
+# The optional entries over a vendor's SDK: each in the adapters/ of the module it serves.
+VENDOR_ENTRIES := src/(observability/adapters/(opentelemetry|sentry)|client/adapters/parquet)\.ts
+VENDOR_IMPORTS := observability/adapters/(opentelemetry|sentry)|client/adapters/parquet
 
 doctor:
 	@echo "🩺 Checking the rules..."
@@ -71,11 +74,14 @@ doctor:
 	if $(SCAN) 'from "node:|(^|[^.A-Za-z_])(process|Buffer)\.' src | $(NOT_CODEGEN) | $(NOT_COMMENT); then \
 		echo >&2 "✘ Node outside codegen/ — the runtime runs in a browser and on a phone"; found=1; \
 	fi; \
-	if $(SCAN) 'from "@opentelemetry/|from "@sentry/|from "hyparquet' src | grep -v '^src/adapters/' | $(NOT_COMMENT); then \
-		echo >&2 "✘ a vendor's SDK outside adapters/ — the runtime knows only its ports"; found=1; \
+	if $(SCAN) 'from "@opentelemetry/|from "@sentry/|from "hyparquet' src | grep -vE '^$(VENDOR_ENTRIES):' | $(NOT_COMMENT); then \
+		echo >&2 "✘ a vendor's SDK outside its optional entry — the runtime knows only its ports"; found=1; \
 	fi; \
-	if $(SCAN) 'from "$(PACKAGE)/adapters/' src | grep -v '^src/adapters/' | $(NOT_COMMENT); then \
-		echo >&2 "✘ an adapter imported by the runtime — an adapter is an optional entry an application picks"; found=1; \
+	if $(SCAN) 'from "$(PACKAGE)/($(VENDOR_IMPORTS))"' src | $(NOT_COMMENT); then \
+		echo >&2 "✘ a vendor entry imported by the runtime — it is an optional entry an application picks"; found=1; \
+	fi; \
+	if $(SCAN) 'from "$(PACKAGE)/[a-z]+/(adapters|services|infrastructure|entrypoint)/' src/*/domain | $(NOT_COMMENT); then \
+		echo >&2 "✘ a domain/ importing an outer layer — domain/ depends only on domain/"; found=1; \
 	fi; \
 	if $(SCAN) 'from "$(PACKAGE)/codegen' src | $(NOT_CODEGEN) | $(NOT_COMMENT); then \
 		echo >&2 "✘ codegen/ imported by the runtime — the generator is a build step"; found=1; \
@@ -110,7 +116,7 @@ build:
 FORGE_CONTRACT := tests/support/forge-contract
 codegen-fixtures: build
 	@for one in project auth sandbox; do \
-		node dist/codegen/cli.js generate $(FORGE_CONTRACT)/$$one.contract.json \
+		node dist/codegen/entrypoint/cli.js generate $(FORGE_CONTRACT)/$$one.contract.json \
 			--out $(FORGE_CONTRACT)/$$one --domain $$one --base /v1 >/dev/null && \
 		rm $(FORGE_CONTRACT)/$$one/contract.json; \
 	done

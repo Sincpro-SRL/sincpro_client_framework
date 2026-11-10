@@ -38,7 +38,11 @@ function contextOf() {
 
 beforeEach(() => configureProcess());
 
-for (const style of ["function", "decorator"] satisfies RegistrationStyle[]) {
+for (const style of [
+  "function",
+  "decorator",
+  "legacy-decorator",
+] satisfies RegistrationStyle[]) {
   describe(`${style} registration contract`, () => {
     test("executes a Feature with injected dependencies and a class Response", async () => {
       const { context, calls } = contextOf();

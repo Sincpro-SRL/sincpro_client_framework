@@ -70,8 +70,12 @@ const shop: Metamodel = {
           "x-sincpro": { type: "text", relation: "crm.Customer" },
         },
         lines: {
-          type: "array",
-          items: { $ref: "#/$defs/Line" },
+          type: "object",
+          properties: {
+            items: { type: "array", items: { $ref: "#/$defs/Line" } },
+            count: { type: "integer" },
+            cursor: { anyOf: [{ type: "string" }, { type: "null" }] },
+          },
           "x-sincpro": { type: "one2many", relation: "Line" },
         },
         delivery: { $ref: "#/models/Address", "x-sincpro": { type: "embedded" } },
@@ -235,8 +239,7 @@ test("a record brings every field but a related one, which comes when the read e
   assert.ok(source.includes("  id: string;\n"));
   assert.ok(source.includes('  state: "draft" | "paid";\n'));
   assert.ok(source.includes("  note: string | null;\n"));
-  // A to-many is a page of its records, as the read answers it — even from a contract that
-  // still writes it as an array.
+  // A to-many is a page of its records, as the read answers it.
   assert.ok(source.includes("  lines?: EntityCollection<Line>;\n"));
   assert.ok(
     source.includes('import type { EntityCollection } from "@sincpro/client-framework";'),
@@ -485,17 +488,14 @@ test("a list of keys as a Command's target is the screen's to send: no `target`"
   assert.ok(source.includes('    archiveOrders: "POST /orders/archive",'));
 });
 
-test("the context is named by its alias; a 3.32 contract, by its `context`", () => {
+test("the context is named by its alias, else by its bounded context; a contract that names neither is refused", () => {
   const aliased: Metamodel = { ...shop, alias: "ventas" };
   assert.ok(domainFileOf(aliased).startsWith("// The DTOs of «ventas» (shop), generated"));
   assert.ok(entitiesFileOf(aliased, options).includes('>("ventas:order", {'));
-  const { bounded_context: _, alias: __, ...rest } = shop;
-  const legacy: Metamodel = { ...rest, context: "shop" };
-  assert.ok(domainFileOf(legacy).startsWith("// The DTOs of «shop», generated"));
-  assert.ok(entitiesFileOf(legacy, options).includes('>("shop:order", {'));
-  assert.ok(
-    clientFileOf(legacy, options).includes("    payOrder: (body: dto.CommandPayOrder"),
-  );
+  const { alias: _, ...own } = shop;
+  assert.ok(domainFileOf(own).startsWith("// The DTOs of «shop», generated"));
+  const { bounded_context: __, ...nameless } = own;
+  assert.throws(() => domainFileOf(nameless), /names no bounded context/);
 });
 
 test("two searches for one model and none `own`: no entity, and the file says which", () => {

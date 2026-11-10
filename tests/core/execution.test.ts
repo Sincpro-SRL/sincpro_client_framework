@@ -409,10 +409,8 @@ test("instance state persists in a generation, never becoming request-local impl
   assert.equal(await context.scoped({ company_id: 2 }).execute(new CountCommand()), 2);
 });
 
-test("only the class-based command API is available", () => {
+test("scope values and Command arguments stay typed", () => {
   const typeChecks = () => {
-    // @ts-expect-error A bounded context does not expose a facade's service methods.
-    void project.Issues;
     // @ts-expect-error Context scope values remain typed.
     project.scoped({ company_id: "two" });
     // @ts-expect-error DTO constructor arguments remain typed.

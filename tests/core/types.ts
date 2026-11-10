@@ -1,4 +1,4 @@
-import { BoundedContext, type IDomainEvent } from "@sincpro/client-framework/core";
+import { BoundedContext } from "@sincpro/client-framework/core";
 
 import {
   CancelIssue,
@@ -14,7 +14,6 @@ import {
 export async function coreTypes(
   context: BoundedContext<ProjectDependencies>,
   dependencies: ProjectDependencies,
-  event: IDomainEvent,
 ) {
   const response = await context.execute(new CommandCancelIssue("issue-1"));
   const exact: ResponseCancelIssue = response;
@@ -40,8 +39,6 @@ export async function coreTypes(
   await context.execute(new CommandCancelIssue("x"), ResponseSendIssue);
   // @ts-expect-error Responses are not Commands.
   await context.execute(new ResponseCancelIssue("x", "cancelled"));
-  // @ts-expect-error A domain event contract does not silently become an executable command.
-  await context.execute(event);
   context.addDependency("client", dependencies.client);
   context.feature(CommandCancelIssue)(CancelIssue);
 }

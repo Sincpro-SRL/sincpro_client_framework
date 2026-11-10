@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 
 import {
+  BoundedContext,
   combineLoggers,
   configureProcess,
-  loggerFor,
+  type LayerLogger,
+  logger as infrastructure,
+  loggerAdapter,
   type LogLayer,
   type LogLevel,
 } from "@sincpro/client-framework";
@@ -28,34 +31,28 @@ afterEach(() => {
 
 test("development prints every level and layer by default", () => {
   const calls = capture();
-  configureProcess({ logger: consoleLogger({ mode: "development" }) });
-  const layers: LogLayer[] = [
-    "global",
-    "use_cases",
-    "feature",
-    "application_service",
-    "adapter",
-    "repositories",
-    "transport",
-    "event_bus",
-    "cron",
+  configureProcess({ logger: { engine: consoleLogger({ mode: "development" }) } });
+  const loggers: [LogLayer, LayerLogger][] = [
+    ["infrastructure", infrastructure],
+    ["adapter", loggerAdapter],
+    ["bounded_context", new BoundedContext("catalog").logger],
   ];
-  for (const layer of layers) {
-    const logger = loggerFor(layer);
+  for (const [, logger] of loggers) {
     logger.debug("detail");
     logger.info("information");
     logger.warn("warning");
     logger.error("failure");
   }
   for (const method of Object.values(calls))
-    assert.equal(method.mock.calls.length, layers.length);
-  assert.match(String(calls.info.mock.calls[0]?.[0]), /\[global\] INFO/);
+    assert.equal(method.mock.calls.length, loggers.length);
+  assert.match(String(calls.info.mock.calls[0]?.[0]), /\[infrastructure\] INFO/);
+  assert.match(String(calls.info.mock.calls[2]?.[0]), /\[bounded_context\] INFO/);
 });
 
 test("production silences all console levels, like mobile", () => {
   const calls = capture();
-  configureProcess({ logger: consoleLogger({ mode: "production" }) });
-  const logger = loggerFor("feature");
+  configureProcess({ logger: { engine: consoleLogger({ mode: "production" }) } });
+  const logger = loggerAdapter;
   logger.debug("detail");
   logger.info("information");
   logger.warn("warning");
@@ -66,19 +63,14 @@ test("production silences all console levels, like mobile", () => {
 test("layer and level masks hide INFO/DEBUG without hiding WARN/ERROR", () => {
   const calls = capture();
   configureProcess({
-    logger: consoleLogger({
-      mode: "development",
-      level: "info",
-      layers: { repositories: false },
-    }),
+    logger: { mode: "development", level: "info", layers: { adapter: false } },
   });
-  const repositories = loggerFor("repositories");
-  repositories.debug("SQL detail");
-  repositories.info("SQL activity");
-  repositories.warn("slow query");
-  repositories.error("query failed");
-  loggerFor("feature").debug("verbose");
-  loggerFor("feature").info("completed");
+  loggerAdapter.debug("SQL detail");
+  loggerAdapter.info("SQL activity");
+  loggerAdapter.warn("slow query");
+  loggerAdapter.error("query failed");
+  infrastructure.debug("verbose");
+  infrastructure.info("completed");
   assert.equal(calls.debug.mock.calls.length, 0);
   assert.equal(calls.info.mock.calls.length, 1);
   assert.equal(calls.warn.mock.calls.length, 1);
@@ -89,12 +81,14 @@ test("console mode and masks never filter another destination", () => {
   const calls = capture();
   const destination = memoryLogger();
   configureProcess({
-    logger: combineLoggers(
-      consoleLogger({ mode: "production", layers: { repositories: false } }),
-      destination,
-    ),
+    logger: {
+      engine: combineLoggers(
+        consoleLogger({ mode: "production", layers: { adapter: false } }),
+        destination,
+      ),
+    },
   });
-  const logger = loggerFor("repositories");
+  const logger = loggerAdapter;
   logger.debug("detail");
   logger.info("activity");
   logger.warn("warning");
@@ -129,9 +123,9 @@ test("logger mode is explicit rather than inferred from a platform global", () =
 test("all level thresholds retain the development WARN/ERROR safety policy", () => {
   const calls = capture();
   for (const level of ["debug", "info", "warn", "error"] satisfies LogLevel[]) {
-    configureProcess({ logger: consoleLogger({ mode: "development", level }) });
-    loggerFor("adapter").warn("warning");
-    loggerFor("adapter").error("failure");
+    configureProcess({ logger: { mode: "development", level } });
+    loggerAdapter.warn("warning");
+    loggerAdapter.error("failure");
   }
   assert.equal(calls.warn.mock.calls.length, 4);
   assert.equal(calls.error.mock.calls.length, 4);
