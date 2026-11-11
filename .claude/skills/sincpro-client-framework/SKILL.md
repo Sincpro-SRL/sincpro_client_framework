@@ -37,30 +37,31 @@ piece; give it the tool and let it adopt it.
 
 ## Abstractions
 
-| Term                                                                                     | What it is                                                                                                                             | Import                                        |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `BoundedContext`                                                                         | The bus of one bounded context: dependencies, services, handlers, interceptors, listeners. `execute(new Command(...))`.                | `@sincpro/client-framework`                   |
-| `Command<R>` / `Response`                                                                | Class DTOs. A Command names its Response by type; `execute` infers it.                                                                 | same                                          |
-| `DomainEvent`                                                                            | A fact N buses hear. `static eventName` is its wire name; registering a use case for it is the subscription.                           | same                                          |
-| `eventName` / a Command's identity                                                       | An event's wire name (`<context>.<aggregate>.vN.<fact>`): required. A Command's: `<context>.<Command>`, given at registration.         | same                                          |
-| `Feature` / `ApplicationService`                                                         | A use case for one DTO or N (`feature([CommandX, EventY])`). Its name is the framework's, taken at registration.                       | same                                          |
-| `servicesWith<Dependencies>()`                                                           | The context's bases: every dependency typed on `this`, declared nowhere else (the backend's `framework.py`).                           | same                                          |
-| `commandOf` / `RemoteEvent` / `RemoteCommand`                                            | A generated Command or event executed on the bus, registered by its `operations.X` / `events.X` entry.                                 | same                                          |
-| `commandMessageOf` / `eventMessageOf` / `commandFrom` / `eventFrom`                      | How a Command (by identity, to one bus) and an event (by name, to N) are written and read.                                             | same                                          |
-| `this.context` / `this.span` / `this.logger` / `this.signal` / `this.execution`          | What a run sees: its context, span, bound logger, cancellation, and identity (`correlationId`, `causationId`).                         | —                                             |
-| Error handlers / `expectErrors`                                                          | `addFeatureErrorHandler`, `addAppServiceErrorHandler`, `addGlobalErrorHandler`; expected errors end `refused`.                         | —                                             |
-| `failureOf(error)`                                                                       | What any error is in the backend's words: `kind`, `nextStep`, `retryable`, `retryAfter`, `permanent`, `fault`, `aborted`.              | `@sincpro/client-framework`                   |
-| `kindOfHttpStatus` / `kindOfGrpcCode` / `kindOfJsonRpcCode`                              | The backend's tables, for an adapter to declare `failureKind` on its errors.                                                           | same                                          |
-| `CircuitBreaker` / `guardedTransport`                                                    | The backend's breaker; guard any transport. `CircuitOpen` is `unavailable` with its wait.                                              | same                                          |
-| `OperationTransport`                                                                     | `call(operation, input, options)`: the port a generated client is made over.                                                           | same                                          |
-| `restOperations` / `jsonRpcOperations`                                                   | Adapters for REST (over a `Transport`) and JSON-RPC. gRPC is a platform's.                                                             | same                                          |
-| `Transport`                                                                              | REST's own port (`restTransport`, `memoryTransport`): what `restOperations` and entity screens stand on.                               | same                                          |
-| `Publisher` / `Subscriber`                                                               | Publish from a Feature (bound to its run); the queue's only entrypoint: recognize, rebuild, execute — events heard, Commands declared. | same                                          |
-| `syncQueue` / `storedQueue` / `EventStore`                                               | In-call delivery; store-and-forward delivery over a store the platform plugs (`memoryEventStore` here).                                | same                                          |
-| `interceptor` / `onStart` / `onCompletion` / `onFailure` / `processListeners` / `extend` | Extension points of the pipeline: control, observation, composition.                                                                   | `BoundedContext`, `@sincpro/client-framework` |
-| `configureProcess` / `configureLogger`                                                   | Plug the tracer, reporter, logger engine, context store and outcome rule once, in `main`.                                              | same                                          |
-| `logger` / `loggerAdapter`                                                               | The only predefined loggers: infrastructure and adapters. The application layer uses `this.logger` and `projectBoundedContext.logger`. | same                                          |
-| `memoryTracer` / `memoryReporter` / `memoryLogger`                                       | The ports in memory, for tests.                                                                                                        | `@sincpro/client-framework/testing`           |
+| Term                                                                                     | What it is                                                                                                                                                                                           | Import                                        |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `BoundedContext`                                                                         | The bus of one bounded context: dependencies, services, handlers, interceptors, listeners. `execute(new Command(...))`.                                                                              | `@sincpro/client-framework`                   |
+| `Command<R>` / `Response`                                                                | Class DTOs. A Command names its Response by type; `execute` infers it.                                                                                                                               | same                                          |
+| `DomainEvent`                                                                            | A fact N buses hear. `static eventName` is its wire name; registering a use case for it is the subscription.                                                                                         | same                                          |
+| `eventName` / a Command's identity                                                       | An event's wire name (`<context>.<aggregate>.vN.<fact>`): required. A Command's: `<context>.<Command>`, given at registration.                                                                       | same                                          |
+| `Feature` / `ApplicationService`                                                         | A use case for one DTO or N (`feature([CommandX, EventY])`). Its name is the framework's, taken at registration.                                                                                     | same                                          |
+| `servicesWith<Dependencies>()`                                                           | The context's bases: every dependency typed on `this`, declared nowhere else (the backend's `framework.py`).                                                                                         | same                                          |
+| `commandOf` / `RemoteEvent` / `RemoteCommand`                                            | A generated Command or event executed on the bus, registered by its `operations.X` / `events.X` entry.                                                                                               | same                                          |
+| `commandMessageOf` / `eventMessageOf` / `commandFrom` / `eventFrom`                      | How a Command (by identity, to one bus) and an event (by name, to N) are written and read.                                                                                                           | same                                          |
+| `this.context` / `this.span` / `this.logger` / `this.signal` / `this.execution`          | What a run sees: its context, span, bound logger, cancellation, and identity (`correlationId`, `causationId`).                                                                                       | —                                             |
+| Error handlers / `expectErrors`                                                          | `addFeatureErrorHandler`, `addAppServiceErrorHandler`, `addGlobalErrorHandler`; expected errors end `refused`.                                                                                       | —                                             |
+| `failureOf(error)`                                                                       | What any error is in the backend's words: `kind`, `nextStep`, `retryable`, `retryAfter`, `permanent`, `fault`, `aborted`.                                                                            | `@sincpro/client-framework`                   |
+| `kindOfHttpStatus` / `kindOfGrpcCode` / `kindOfJsonRpcCode`                              | The backend's tables, for an adapter to declare `failureKind` on its errors.                                                                                                                         | same                                          |
+| `CircuitBreaker` / `guardedTransport`                                                    | The backend's breaker; guard any transport. `CircuitOpen` is `unavailable` with its wait.                                                                                                            | same                                          |
+| `OperationTransport`                                                                     | `call(operation, input, options)`: the port a generated client is made over.                                                                                                                         | same                                          |
+| `restOperations` / `jsonRpcOperations`                                                   | Adapters for REST (over a `Transport`) and JSON-RPC. gRPC is a platform's.                                                                                                                           | same                                          |
+| `Transport`                                                                              | REST's own port (`restTransport`, `memoryTransport`): what `restOperations` and entity screens stand on.                                                                                             | same                                          |
+| `Publisher` / `Subscriber`                                                               | Publish from a Feature (bound to its run); the queue's composite entrypoint: its event handlers and the buses added (`addBus`), Commands only declared.                                              | same                                          |
+| `EventHandler` / `handlersWith<D>()`                                                     | The entrypoint an event reaches — on a bus (`@bus.handler([...])`: its dependencies and `this.boundedContext`) or on a `Subscriber` (its explicit dependencies). Executes Commands, decides nothing. | same                                          |
+| `syncQueue` / `storedQueue` / `EventStore`                                               | In-call delivery; store-and-forward delivery over a store the platform plugs (`memoryEventStore` here).                                                                                              | same                                          |
+| `interceptor` / `onStart` / `onCompletion` / `onFailure` / `processListeners` / `extend` | Extension points of the pipeline: control, observation, composition.                                                                                                                                 | `BoundedContext`, `@sincpro/client-framework` |
+| `configureProcess` / `configureLogger`                                                   | Plug the tracer, reporter, logger engine, context store and outcome rule once, in `main`.                                                                                                            | same                                          |
+| `logger` / `loggerAdapter`                                                               | The only predefined loggers: infrastructure and adapters. The application layer uses `this.logger` and `projectBoundedContext.logger`.                                                               | same                                          |
+| `memoryTracer` / `memoryReporter` / `memoryLogger`                                       | The ports in memory, for tests.                                                                                                                                                                      | `@sincpro/client-framework/testing`           |
 
 ## How an application is laid out
 
@@ -89,8 +90,9 @@ src/
   holding related entities with use cases of their own (the payments of a sale order) gives each
   a folder inside it, with its Features and ApplicationServices grouped by what they are about.
 - **Entrypoints translate.** A screen and a cron build a Command and execute it. What a queue
-  carries goes through one `Subscriber`, in `entrypoints/main.ts`; nobody writes a subscriber
-  per event. Several use cases with decisions between them are an ApplicationService.
+  carries goes through one `Subscriber` — composite, created once in `entrypoints/queue/` —, which
+  delivers each event to its event handlers and to the buses added to it; never one subscriber
+  per handler. Several use cases with decisions between them are an ApplicationService.
 - **A cron exists only where the platform has a scheduler** — mobile's `CronWorker`. A browser
   has none (a closed tab runs nothing): on the web, refreshing a screen is the screen's (a query's
   refetch interval) and scheduled work is the backend's `Crons`. This package has no cron.
@@ -221,9 +223,18 @@ class OrderPaid extends DomainEvent {
   }
 }
 
-// Registering a use case for the event IS the subscription — one per bounded context:
+// 1. A use case whose input is the event — one per bounded context:
 @mailBoundedContext.feature(OrderPaid)
 export class SendReceipt extends Feature<OrderPaid, void> { … }
+
+// 2. An event handler of a bus — a layer above its use cases; N events; it decides nothing:
+export const { Feature, ApplicationService, EventHandler } = servicesWith<StockDependencies>();
+@stockBoundedContext.handler([OrderPaid, OrderCancelled])
+export class OnOrderChanged extends EventHandler<OrderPaid | OrderCancelled> {
+  async handle(event: OrderPaid | OrderCancelled) {
+    await this.boundedContext.execute(new CommandRecount(event.order_id)); // its own bus
+  }
+}
 
 // A use case a screen executes AND the event triggers: one service, N DTOs
 @stockBoundedContext.feature([CommandReleaseReservation, OrderPaid])
@@ -233,12 +244,23 @@ export class ReleaseReservation extends Feature<CommandReleaseReservation | Orde
 @stockBoundedContext.feature(events.OrderShipped)
 export class Ship extends Feature<remote.OrderShipped, void> { … }
 
-// entrypoints/main.ts — the queue's ONE entrypoint
-const subscriber = new Subscriber({
-  boundedContexts: [mailBoundedContext, stockBoundedContext], // every event they registered…
-  commands: [CommandReleaseReservation], // …and the Commands consumed from the queue: only declared
+// 3. The queue's ONE entrypoint — entrypoints/queue/framework.ts, created once:
+export const { EventHandler: AppHandler } = handlersWith<AppSubscriberDependencies>();
+export const appSubscriber = new Subscriber<AppSubscriberDependencies>("app", {
+  commands: [CommandReleaseReservation], // Commands consumed from the queue: only declared
 });
-const queue = storedQueue({ store, subscriber, ready, onSettled });
+appSubscriber.addDependency("invoicingBoundedContext", invoicingBoundedContext); // to call it
+appSubscriber.addBus(mailBoundedContext); // to deliver to its use cases and handlers
+appSubscriber.addBus(stockBoundedContext);
+
+@appSubscriber.handler([OrderPaid]) // or appSubscriber.handler([OrderPaid])(Invoice)
+export class Invoice extends AppHandler<OrderPaid> {
+  async handle(event: OrderPaid) {
+    await this.invoicingBoundedContext.execute(new CommandIssueInvoice(event.order_id));
+  }
+}
+
+const queue = storedQueue({ store, subscriber: appSubscriber, ready, onSettled });
 shopBoundedContext.addDependency("publisher", new Publisher(queue)); // a Feature: this.publisher.publish(…)
 // a socket, a push, another tab: await subscriber.receive(message)
 ```
@@ -251,7 +273,10 @@ shopBoundedContext.addDependency("publisher", new Publisher(queue)); // a Featur
   the Subscriber declared it (`CommandNotConsumed` otherwise). `subscriber.receive(message)` takes
   one structured or in binary mode (`{ headers, body }`, `ce_` headers). Its `correlationid` and
   `traceparent` continue: the run is a child of the backend's trace.
-- Two bounded contexts never share a name: the queue keeps who heard a message by it.
+- Every consumer is acknowledged apart — `mail` (its use case), `stock/OnOrderChanged`,
+  `app/Invoice` —: a retry runs only the one that failed. `addDependency("x", value)` injects
+  (a bus to call is a dependency); `addBus(bus)` delivers to it, by its namespace — the same bus
+  again changes nothing, another of the same name is delivered to too (`stock#2`).
 - Delivery is **at least once**: the use case keys its effect by `this.execution.causationId` (the
   message's id) or by the entity the event names.
 - An event carrying `Money`, `Decimal` or dates declares `static fromJSON`.
@@ -298,9 +323,11 @@ backend; `memoryEventStore()` with `await queue.drain()` for events.
 - **A circuit breaker inside a Feature.** Put it on the transport or the adapter (`guardedTransport`).
 - **Assuming an event runs once.** Key effects by the envelope's id (`this.execution.causationId`
   in the use case that received it) or by the entity's own id.
-- **A subscriber per event, or a dependency declared in a Feature.** The queue has one
-  `Subscriber`; a service inherits its context's dependencies (`servicesWith`) and its name is
-  taken at registration — a Feature declares neither.
+- **A subscriber per handler, or a dependency declared in a Feature.** The queue has one
+  `Subscriber`; handlers register on it or on their bus. A service inherits its context's
+  dependencies (`servicesWith`) and its name is taken at registration — a Feature declares neither.
+- **Logic in an event handler.** It is an entrypoint: it executes Commands; the decision is a
+  Feature's, the workflow an ApplicationService's.
 - **Logic in a cron.** It is an entrypoint: build the Command, execute it. A
   workflow is an ApplicationService; a decision is a Feature.
 - **Abbreviating a bounded context** (`ctx`, `bc`) or naming it like an entity (`sales`). Write
@@ -316,8 +343,9 @@ backend; `memoryEventStore()` with `await queue.drain()` for events.
 - [ ] Does the piece belong here, in the platform's framework, or in the application (the rule)?
 - [ ] Every use case is registered (a decorator) for its DTOs and executed through its bounded context; no `serviceName`, no declared dependency.
 - [ ] Failures declare or carry their kind; screens decide with `failureOf`.
-- [ ] Events: `eventName`, `fromJSON` when they carry values, idempotent use cases. Commands that
-      travel get their identity at registration. Crons only translate into Commands.
+- [ ] Events: `eventName`, `fromJSON` when they carry values, idempotent consumers. Handlers on
+      their bus or on the one `Subscriber`, never logic in them. Commands that travel get their
+      identity at registration. Crons only translate into Commands.
 - [ ] Services grouped by aggregate, a related entity's use cases in its own folder inside it.
 - [ ] The wire is injected (`operations`), never written into the code.
 - [ ] Tests run on the memory ports, in Node.

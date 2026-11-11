@@ -13,6 +13,10 @@ import {
   FeatureBus,
   optionsOf,
 } from "@sincpro/client-framework/core/domain/bus";
+import type {
+  EventConsumer,
+  EventKey,
+} from "@sincpro/client-framework/core/domain/consumers";
 import {
   type Answer,
   type AnyCommand,
@@ -44,9 +48,11 @@ import type {
 import {
   ApplicationService,
   Feature,
+  type HandledEvent,
   RESERVED_MEMBERS,
 } from "@sincpro/client-framework/core/domain/services";
 import { processHearing } from "@sincpro/client-framework/core/infrastructure/listeners";
+import { bindDependency } from "@sincpro/client-framework/core/services/binding";
 import {
   describeDto,
   identityOf,
@@ -56,6 +62,15 @@ import {
   keyIdentity,
 } from "@sincpro/client-framework/core/services/dto-keys";
 import { handled } from "@sincpro/client-framework/core/services/error-handlers";
+import {
+  eventKeysOf,
+  type HandlerClass,
+  type HandlerRegistrar,
+  handlerRegistrar,
+  type HandlerRegistration,
+  handles,
+  runHandler,
+} from "@sincpro/client-framework/core/services/event-handlers";
 import { executeService, failedAt } from "@sincpro/client-framework/core/services/execution";
 import {
   announceTo,
@@ -125,6 +140,8 @@ type Generation = {
     scope: Readonly<object>,
     options: RootOptions,
   ) => Promise<unknown>;
+  /** Who consumes an event here: its use case, then its event handlers, in registration order. */
+  consumersOf: (event: DomainEvent | RemoteEvent) => readonly EventConsumer[];
 };
 
 function isExecutor(value: unknown): value is Executor<Executable, unknown> {
@@ -172,6 +189,7 @@ export class BoundedContext<
   /** Its own logger, named after it: for what it does outside a use case. */
   readonly logger: LayerLogger;
   private readonly registrations = new Map<DtoKey, Registration>();
+  private readonly eventHandlers: HandlerRegistration[] = [];
   private readonly dependencyValues = new Map<string, unknown>();
   private readonly handlers: Record<"global" | Layer, ErrorHandler[]> = {
     global: [],
@@ -308,6 +326,30 @@ export class BoundedContext<
     return this.registrar(dto, "application_service", options);
   }
 
+  /**
+   * Registers an event handler of this bounded context for one event or N — the layer above its
+   * use cases: it finds this context's dependencies and the context itself
+   * (`this.boundedContext`), whose Features and ApplicationServices it executes as children of
+   * its run. As a decorator, or called with the class:
+   *
+   *     @salesBoundedContext.handler([SalePaid, SaleCancelled])
+   *     export class OnSaleChanged extends EventHandler<SalePaid | SaleCancelled> { … }
+   *
+   *     salesBoundedContext.handler([SalePaid, SaleCancelled])(OnSaleChanged);
+   *
+   * An event may have its use case and N handlers here; each is its own consumer
+   * (`sales/OnSaleChanged`), acknowledged apart by the queue.
+   */
+  handler<const K extends readonly EventKey[]>(
+    events: K,
+  ): HandlerRegistrar<ExecutableOf<K[number]> & HandledEvent>;
+  handler<E extends DomainEvent>(event: EventClass<E>): HandlerRegistrar<E>;
+  handler<E extends RemoteEvent = RemoteEvent>(event: EventDescriptor): HandlerRegistrar<E>;
+  handler(events: EventKey | readonly EventKey[]): HandlerRegistrar<HandledEvent> {
+    const keys = eventKeysOf(events);
+    return handlerRegistrar((Handler, name) => this.registerHandler(Handler, name, keys));
+  }
+
   /** The service registered now for a DTO — what a `replaces` names. */
   handlerOf(dto: DtoKey): (abstract new (...args: never[]) => object) | undefined {
     return this.registrations.get(dto)?.Service;
@@ -324,7 +366,20 @@ export class BoundedContext<
       if (known.kind === "event" && known.wire === name)
         return dto as EventClass<DomainEvent> | EventDescriptor;
     }
+    for (const registration of this.eventHandlers) {
+      for (const key of registration.events) {
+        if (keyIdentity(key).wire === name) return key;
+      }
+    }
     return undefined;
+  }
+
+  /**
+   * @internal — who consumes `event` here, for the `Subscriber` that delivers it: its use case
+   * (keyed by this context's name) and each of its event handlers (`<context>/<Handler>`).
+   */
+  consumersOf(event: DomainEvent | RemoteEvent): readonly EventConsumer[] {
+    return this.generation().consumersOf(event);
   }
 
   /**
@@ -484,6 +539,7 @@ export class BoundedContext<
     for (const [name, dependency] of this.dependencyValues) {
       fresh.dependencyValues.set(name, dependency);
     }
+    fresh.eventHandlers.push(...this.eventHandlers);
     for (const where of ["global", "feature", "application_service"] as const) {
       fresh.handlers[where].push(...this.handlers[where]);
     }
@@ -624,6 +680,9 @@ export class BoundedContext<
         "A service is a named class: its name is its use case in spans and logs",
       );
     }
+    if (this.eventHandlers.some((one) => one.name === name)) {
+      throw new Error(`Service name already registered: ${name}`);
+    }
     for (const [other, registration] of this.registrations) {
       if (
         registration !== current &&
@@ -648,6 +707,27 @@ export class BoundedContext<
       Service,
       ...(current ? { replaces: current.name } : {}),
     });
+    this.revision++;
+  }
+
+  /**
+   * 1. A class registered once, for the events listed: register it for N in one call.
+   * 2. Its name is no other handler's or service's here: both are said `<context>/<Name>`.
+   * Final: registered; the next delivery reaches it.
+   */
+  private registerHandler(
+    Handler: HandlerClass,
+    name: string,
+    events: readonly EventKey[],
+  ): void {
+    if (this.eventHandlers.some((one) => one.Handler === Handler)) {
+      throw new Error(`Event handler already registered: ${name} — list all its events once`);
+    }
+    const taken =
+      this.eventHandlers.some((one) => one.name === name) ||
+      [...this.registrations.values()].some((one) => one.name === name);
+    if (taken) throw new Error(`Service name already registered: ${name}`);
+    this.eventHandlers.push({ name, Handler, events });
     this.revision++;
   }
 
@@ -753,25 +833,70 @@ export class BoundedContext<
         announce,
       });
     };
-    return {
-      root: async (executable, scope, options) => {
-        try {
-          return await dispatch(executable, undefined, false, scope, options);
-        } catch (error) {
-          let escaping = error;
-          if (handlers.global.length > 0) {
-            try {
-              const answer = await handled(handlers.global, error);
-              logHandled("bounded_context", { boundedContext: this.name });
-              return answer;
-            } catch (thrown) {
-              escaping = thrown;
-            }
+    const root: Generation["root"] = async (executable, scope, options) => {
+      try {
+        return await dispatch(executable, undefined, false, scope, options);
+      } catch (error) {
+        let escaping = error;
+        if (handlers.global.length > 0) {
+          try {
+            const answer = await handled(handlers.global, error);
+            logHandled("bounded_context", { boundedContext: this.name });
+            return answer;
+          } catch (thrown) {
+            escaping = thrown;
           }
-          this.escaped(executable, escaping, expected);
-          throw escaping;
         }
-      },
+        this.escaped(executable, escaping, expected);
+        throw escaping;
+      }
     };
+    // The event handlers of this generation: one instance each, a singleton like a service.
+    const eventHandlers = this.eventHandlers.map((registration) => ({
+      registration,
+      instance: new registration.Handler(),
+    }));
+    const context = () => ({ ...processContext.values, ...this.context.values });
+    const consumersOf = (event: DomainEvent | RemoteEvent): readonly EventConsumer[] => {
+      const known = identityOf(event);
+      if (known?.kind !== "event") return [];
+      const consumers: EventConsumer[] = [];
+      const useCase =
+        known.type !== undefined
+          ? registrations.get(known.type as DtoKey)
+          : generated.get(`event:${known.wire}`);
+      if (useCase) {
+        consumers.push({
+          key: this.name,
+          consume: (heard, cause) => root(heard, {}, cause ? { cause } : {}),
+        });
+      }
+      for (const { registration, instance } of eventHandlers) {
+        if (!registration.events.some((key) => handles(key, known))) continue;
+        consumers.push({
+          key: `${this.name}/${registration.name}`,
+          consume: (heard, cause) =>
+            runHandler(instance, heard, {
+              owner: this.name,
+              name: registration.name,
+              dependencies,
+              context,
+              ...(cause ? { cause } : {}),
+              boundedContextOf: (execution) => bindDependency(this, execution) as object,
+              expected,
+              interceptors: interceptors
+                .filter((one) => concerns(one.dtos, heard))
+                .map((one) => one.what),
+              announce,
+              failed: (failure) => {
+                announceTo(this.listeners.failed, failure);
+                announceTo(everyContext.failed, failure);
+              },
+            }),
+        });
+      }
+      return consumers;
+    };
+    return { root, consumersOf };
   }
 }

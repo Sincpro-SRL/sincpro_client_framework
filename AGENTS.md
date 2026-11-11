@@ -89,17 +89,29 @@ module has only the layers it needs, and says what it offers in its own `index.t
   dependency typed — the backend's `class Feature(_Feature, DependencyContextType)` —; a service
   never declares one. A scaffold writes `dependencies.ts` and `framework.ts`; the instance lives in
   `framework.ts` because ES modules run their imports first.
-- **How events are carried is here; where they are kept is the platform's.** One use case of an
-  event per bounded context; the queue's one `Subscriber` executes an event in each. `storedQueue` holds the rules — store first, deliver in order,
-  retry what may succeed, set aside what never will, never run one who heard it twice — over an
-  `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store only keeps records; it
-  never decides.
-- **The Subscriber is the queue's only entrypoint.** It hears a list of events or every event its
-  bounded contexts registered, recognizes a message (an event by name, a Command by identity),
-  rebuilds and executes it — as the backend's `Subscriber(*buses)` / `QueueGateway`. Nobody
-  writes a subscriber per event: registering a use case for the event is the subscription. A
-  Command from a queue runs only when declared (`commands`), in the one bus that registered it;
-  `CommandNotConsumed` otherwise. Two bounded contexts never share a name.
+- **How events are carried is here; where they are kept is the platform's.** An event's
+  consumers are acknowledged apart: a bounded context's use case for it (one per bounded context,
+  keyed by its name), its event handlers and a subscriber's (`<owner>/<Handler>`). `storedQueue`
+  holds the rules — store first, deliver in order, retry what may succeed, set aside what never
+  will, never run one consumer twice — over an `EventStore` the platform plugs (SQLite,
+  IndexedDB, memory). A store only keeps records; it never decides.
+- **The Subscriber is the queue's entrypoint, and it is composite.** One per queue — never one
+  per handler —, created once like a bounded context (`new Subscriber<D>("app")`,
+  `handlersWith<D>()`). It pulls what the queue delivers, rebuilds it (an event by name, a Command
+  by identity) and hands it to every consumer subscribed to it: its own event handlers, and the
+  buses added to it — each with its use case for the event and its own handlers. Two levels, never
+  mixed: `addDependency("x", value)` is what its handlers find on `this` (a bus they call is a
+  dependency); `addBus(bus)` — no name, the bus's namespace — is a bus it delivers to. The same
+  bus added again changes nothing; another bus of the same name is delivered to as well
+  (`sales#2`). A Command from a queue runs only when declared (`commands`), in the one bus that
+  registered it; `CommandNotConsumed` otherwise.
+- **An event has three kinds of consumers, one API.** Its use case on a bus
+  (`@bus.feature([CommandX, Event])`, the event is its input); an event handler of a bus
+  (`@bus.handler([EventA, EventB])`, a layer above its use cases: the bus's dependencies and
+  `this.boundedContext`); an event handler of a subscriber (`@subscriber.handler([...])`, its
+  explicit dependencies). A handler decides nothing — it executes Commands —; it runs in the
+  pipeline of a use case, in its own layer (`event_handler`), and is registered with or without a
+  decorator.
 - **Messages are the backend's: CloudEvents 1.0.** One shape for Commands and events — `type` is
   the event's name or the Command's identity —; the route differs (N buses, or the one that
   registered it, when declared). `readMessage` reads structured and binary mode (`ce_` headers),
@@ -213,5 +225,6 @@ make test
 make build
 ```
 
-Never bump `version` in `package.json` — the release pipeline does. Never commit; a person
-does.
+Never bump `version` in `package.json` — the release pipeline does. Commit on a working branch,
+never on `main`: a change reaches `main` through a pull request, and further changes of the same
+work go into that one pull request.

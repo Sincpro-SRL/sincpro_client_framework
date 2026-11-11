@@ -202,31 +202,70 @@ A use case of an event runs through the same pipeline (span `<context>/<Service>
 `sincpro.event`, log lines, error handlers, report). An ApplicationService may take the event and
 compose Features; `execute(event)` answers whatever its use case returns (`unknown`).
 
-### The Subscriber: the queue's only entrypoint
+### The Subscriber: the queue's entrypoint, composite
 
-One per queue — the backend's `Subscriber(*buses)` and `QueueGateway`. What arrives is
-recognized (an event by its name, a Command by its identity), rebuilt and executed on the bus
-that registered it. Nobody writes a subscriber per event.
+One per queue — the backend's `Subscriber(*buses)` and `QueueGateway`, never one per handler.
+It pulls what the queue delivers, rebuilds it (an event by its name, a Command by its identity)
+and hands it to every consumer subscribed to it. An event has three kinds of consumers, all
+registered the same way, with or without a decorator:
+
+| Consumer                         | Registered with                              | It finds on `this`                               | Acknowledged as       |
+| -------------------------------- | -------------------------------------------- | ------------------------------------------------ | --------------------- |
+| a use case of a bus              | `@salesBoundedContext.feature([Cmd, Evt])`   | the bus's dependencies                           | `sales`               |
+| an event handler of a bus        | `@salesBoundedContext.handler([EvtA, EvtB])` | the bus's dependencies and `this.boundedContext` | `sales/OnSaleChanged` |
+| an event handler of a subscriber | `@appSubscriber.handler([EvtA])`             | the subscriber's dependencies                    | `app/NotifySalePaid`  |
 
 ```ts
-new Subscriber(accountingBoundedContext, billingBoundedContext); // every event they registered
-
-new Subscriber({
-  boundedContexts: [accountingBoundedContext, billingBoundedContext],
-  events: [InvoiceIssued, events.IssueClosed], // only these
+// entrypoints/queue/framework.ts — once, like a bounded context's framework.ts
+export const { EventHandler } = handlersWith<AppSubscriberDependencies>();
+export const appSubscriber = new Subscriber<AppSubscriberDependencies>("app", {
   commands: [CommandIssueInvoice], // consumed from the queue: only when declared
 });
+appSubscriber.addDependency("invoicingBoundedContext", invoicingBoundedContext); // to call it
+appSubscriber.addDependency("notifier", notifier);
+appSubscriber.addBus(salesBoundedContext); // to deliver to its use cases and handlers
 
-await subscriber.receive(message); // CloudEvents, structured or { headers, body }: what each answered
+// entrypoints/queue/sale_paid.handler.ts — events → handler; it decides nothing
+@appSubscriber.handler([SalePaid, SaleCancelled])
+export class NotifySaleChanged extends EventHandler<SalePaid | SaleCancelled> {
+  async handle(event: SalePaid | SaleCancelled) {
+    await this.invoicingBoundedContext.execute(new CommandIssueInvoice(event.saleId));
+  }
+}
+appSubscriber.handler([InvoiceVoided])(OnInvoiceVoided); // the same, without a decorator
+
+// services/sale/on_sale_changed.handler.ts — a handler of the bus: a layer above its use cases
+export const { Feature, ApplicationService, EventHandler } =
+  servicesWith<SalesDependencies>();
+@salesBoundedContext.handler([SalePaid])
+export class OnSalePaid extends EventHandler<SalePaid> {
+  async handle(event: SalePaid) {
+    await this.boundedContext.execute(new CommandCloseSale(event.saleId)); // its own bus
+  }
+}
+
+const queue = storedQueue({ store, subscriber: appSubscriber });
+await appSubscriber.receive(message); // CloudEvents, structured or { headers, body }
 ```
 
-- **An event** is handed to every bounded context that registered it, in the order named; one
-  that fails does not stop the others, and each is said under its name — which a stored queue
-  keeps, so a redelivery never runs one again. Two bounded contexts never share a name.
+- **Two levels, never mixed.** `addDependency("x", value)` is what its handlers find on `this` —
+  a bus they call is a dependency like any other —; `addBus(bus)`, with no name to write (the
+  bus's own namespace), is a bus it delivers to. The same bus added again changes nothing;
+  another bus of the same name is delivered to as well, under its own key (`sales#2`).
+- **An event** reaches every consumer subscribed to it — the subscriber's handlers, then each bus
+  in the order added (its use case, then its handlers); one that fails does not stop the others,
+  and each is acknowledged under its key — which a stored queue keeps, so a redelivery runs only
+  the ones that do not have it yet.
+- **A handler** runs in the pipeline of a use case, in its own layer (`event_handler`): its span
+  `<owner>/<Handler>`, `this.logger`, `this.execution.causationId` (the message's id), and what it
+  executes is its child. A handler takes N events: its type is their union, and TypeScript checks
+  it accepts every event listed.
 - **A Command** is executed by the one bounded context that registered it, continuing the
   message's flow — **only when declared** (`commands`). A bus never hands all its Commands to
   whoever can publish on a queue: an undeclared one fails `CommandNotConsumed`
   (`permission_denied`).
+- `new Subscriber(...boundedContexts)` and `new Subscriber({ boundedContexts, events, commands })`
+  still build one that delivers to those buses only.
 
 ### Publishing
 
@@ -256,7 +295,7 @@ What is defined here, and what each platform plugs behind the ports:
 | `Envelope`        | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
 | `EventQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
 | `EventStore` port | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
-| `Subscriber`      | recognize, rebuild, execute; events heard, Commands declared   | where messages come from (a socket)    |
+| `Subscriber`      | pull, rebuild, deliver to every consumer; Commands declared    | where messages come from (a socket)    |
 
 ### Stored events: one way to carry them, any store
 
@@ -776,7 +815,7 @@ src/
                      Subscribes and EventStore ports
     services/        writing and reading messages
     adapters/        syncQueue, storedQueue, memoryEventStore
-    entrypoint/      Publisher, Subscriber (the queue's only entrypoint)
+    entrypoint/      Publisher, Subscriber (the queue's composite entrypoint)
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger
 ```

@@ -19,7 +19,12 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /** The layer a line comes from. */
 export type LogLayer =
-  "infrastructure" | "adapter" | "bounded_context" | "application_service" | "feature";
+  | "infrastructure"
+  | "adapter"
+  | "bounded_context"
+  | "event_handler"
+  | "application_service"
+  | "feature";
 
 /** Structured logging never implicitly includes a DTO, response, error body or session context. */
 export type LogRecord = {

@@ -140,29 +140,32 @@ engine, combined with the console through `combineLoggers`.
 
 Mobile's `EventBus` splits along the line this package draws: what is the same on every
 platform comes from here; what a phone does to deliver durably stays in mobile, behind the
-`EventQueue` port. As in the backend, nobody writes a subscriber per event: a use case is
-registered for the event (with its Command too, when a screen also executes it), and the queue's
-one `Subscriber` hands each event to the bounded contexts that registered it. What a 1.x
-subscriber decided moves into that Feature; what it orchestrated, into an ApplicationService. A
-cron stays an entrypoint whose job executes a Command.
+`EventQueue` port. The queue has one `Subscriber`, composite, as in the backend: it delivers
+each event to every consumer subscribed to it — a bus's use case for it (with its Command too,
+when a screen also executes it), a bus's event handler, or a handler of the subscriber itself. A
+1.x subscriber becomes an event handler: of its bus when it executes that bus's Commands
+(`@bc.handler([A, B])`, `this.boundedContext`), of the subscriber when it crosses buses
+(`@subscriber.handler([A])`, its explicit dependencies). What it decided moves into a Feature;
+what it orchestrated, into an ApplicationService. A cron stays an entrypoint whose job executes a
+Command.
 
-| Today in mobile                                   | With the client framework                                                       |
-| ------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `Subscriber` with `listen = [A, B]` and `process` | a use case registered for them: `@bc.feature([A, B])`, or `[CommandX, A]`       |
-| the service calls and checks inside `process`     | that Feature (one step) or an ApplicationService (a workflow)                   |
-| a module's `subscribers()` list                   | its `boundedContexts()`: what they registered is what they hear                 |
-| `EventBus.on(subscriber)`, several per event      | the queue's one `new Subscriber(...boundedContexts)` fans out, one per context  |
-| `EventBus.publish` / `publishSync`                | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue`           |
-| `event_chain`, `applyChain`, `runWithChain`       | the `Envelope` and `execution.correlationId` / `causationId`                    |
-| event interceptors (`interceptEvent`, `"*"`)      | `boundedContext.interceptor(Command)(…)` around the use cases subscribers call  |
-| `static replaces = CoreSubscriber`                | `@bc.feature(Event, { replaces: CoreFeature })`                                 |
-| a `CronWorker` job calling a service or workflow  | a `CronWorker` job executing a Command: `boundedContext.execute(new Command())` |
-| `publishActivity` running / succeeded / failed    | `processListeners`, or the stored queue's `onSettled`                           |
-| `RepeatableFailure`, `DomainNetworkError`         | errors that declare a kind (`unavailable`, `unknown_outcome`): retried          |
-| `UserError`, `ValidationError` of mobile-odoo     | errors that declare `domain` / `invalid`: set aside, never retried              |
-| the drain loop, retries, backoff, DLQ             | `storedQueue` — the same rules on every platform                                |
-| `requiresNetwork`, `requiresAuth`                 | `ready` of the stored queue: waits while the rest go on                         |
-| SQLite table, `AppState`, NetInfo                 | mobile's `EventStore`, and what calls `queue.drain()`                           |
+| Today in mobile                                   | With the client framework                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `Subscriber` with `listen = [A, B]` and `process` | an event handler `@bc.handler([A, B])`, or a use case `@bc.feature([CommandX, A])` |
+| the service calls and checks inside `process`     | that Feature (one step) or an ApplicationService (a workflow)                      |
+| a module's `subscribers()` list                   | the buses added to the queue's subscriber (`addBus`) and its own handlers          |
+| `EventBus.on(subscriber)`, several per event      | the queue's one `Subscriber` fans out to every consumer, acknowledged apart        |
+| `EventBus.publish` / `publishSync`                | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue`              |
+| `event_chain`, `applyChain`, `runWithChain`       | the `Envelope` and `execution.correlationId` / `causationId`                       |
+| event interceptors (`interceptEvent`, `"*"`)      | `boundedContext.interceptor(Command)(…)` around the use cases subscribers call     |
+| `static replaces = CoreSubscriber`                | `@bc.feature(Event, { replaces: CoreFeature })`                                    |
+| a `CronWorker` job calling a service or workflow  | a `CronWorker` job executing a Command: `boundedContext.execute(new Command())`    |
+| `publishActivity` running / succeeded / failed    | `processListeners`, or the stored queue's `onSettled`                              |
+| `RepeatableFailure`, `DomainNetworkError`         | errors that declare a kind (`unavailable`, `unknown_outcome`): retried             |
+| `UserError`, `ValidationError` of mobile-odoo     | errors that declare `domain` / `invalid`: set aside, never retried                 |
+| the drain loop, retries, backoff, DLQ             | `storedQueue` — the same rules on every platform                                   |
+| `requiresNetwork`, `requiresAuth`                 | `ready` of the stored queue: waits while the rest go on                            |
+| SQLite table, `AppState`, NetInfo                 | mobile's `EventStore`, and what calls `queue.drain()`                              |
 
 ```ts
 // services/sale_order/confirm-quotation.feature.ts — a screen executes it, and the event triggers it
@@ -195,11 +198,15 @@ const sqliteEventStore: EventStore = {
   save: (stored) => events.update(stored),
 };
 
+const subscriber = new Subscriber("mobile");
+for (const module of activeModules)
+  for (const bus of module.boundedContexts()) subscriber.addBus(bus);
+
 const queue = storedQueue({
   store: sqliteEventStore,
-  subscriber: new Subscriber(...activeModules.flatMap((module) => module.boundedContexts())),
+  subscriber,
   ready: (stored) =>
-    (online || !requiresNetwork(stored)) && (signedIn || !requiresAuth(stored)),
+    (online || !requiresNetwork(stored)) && (signedIn || !requiresSession(stored)),
   onSettled: (stored) => publishActivity(stored),
 });
 AppState.addEventListener("change", (state) => state === "active" && queue.drain());
@@ -207,7 +214,7 @@ NetInfo.addEventListener((net) => net.isConnected && queue.drain());
 ```
 
 The rules — store first, deliver in order, retry what may succeed after its wait, set aside what
-never will, never run one who heard it twice — are the same as on the web; mobile keeps only the table,
+never will, never run one consumer twice — are the same as on the web; mobile keeps only the table,
 when to drain, and the screen that lists the set-aside events (`state: "set_aside"`). A stored
 event is rebuilt as its class — `static fromJSON` when it has one, as `from` is today. The
 events a backend publishes reach mobile as generated types when its contract is exported with
@@ -220,7 +227,7 @@ outcome and the screens then decide the same way as everywhere. A `CircuitBreake
 Odoo client stops spending battery on a server that does not answer; its `CircuitOpen` tells the
 queue how long to wait. Delivery is at least once: a use case that pushes to the server keys the
 write by the entity it pushes, as the `external_uuid` check does today, or by the envelope's id —
-the subscriber reads it as `this.execution.causationId` and hands it in the Command.
+the event handler reads it as `this.execution.causationId` and passes it in the Command.
 
 ## Adoption order
 
