@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { type ClientContract, memoryTransport, metasOf } from "@sincpro/client-framework";
+import {
+  type ClientContract,
+  memoryTransport,
+  metasOf,
+  restOperations,
+} from "@sincpro/client-framework";
 import {
   clientFileOf,
   domainFileOf,
@@ -202,7 +207,7 @@ function useForgeAsGenerated(issue: Issue) {
   // @ts-expect-error — sending an issue needs its message
   const missing: CommandSendIssue = { issue_id: "i1" };
 
-  const client = clientOf(memoryTransport({}));
+  const client = clientOf(restOperations(memoryTransport({})));
   void client.sendIssue({ issue_id: "i1", message: "y el reporte también" });
   // @ts-expect-error — the client takes the Command whole: its key goes in the body
   void client.sendIssue({ message: "y el reporte también" });
@@ -303,42 +308,49 @@ test("criteria is imported from its package, and only the definitions something 
   assert.ok(source.includes("export type Line = {"));
 });
 
-test("a page is listed, a record is read, a write is sent — under the base the transport adds", () => {
+test("every operation is a method called by who it is; how each wire reaches it is only data", () => {
   const source = clientFileOf(shop, options);
   assert.ok(
+    source.includes("export function clientOf(transport: OperationTransport) {"),
+    source,
+  );
+  assert.ok(
     source.includes(
-      'listOrders: (criteria: Criteria<dto.Order>, params?: Partial<Record<"customer_id", string>>) =>\n      transport.list<dto.Order>(listRoute("/orders", params), criteria),',
+      'import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";',
     ),
   );
   assert.ok(
     source.includes(
-      "getOrder: (id: string) =>\n      transport.one<dto.Order>(`/orders/${encodeURIComponent(id)}`),",
+      "payOrder: (input: dto.CommandPayOrder, options?: OperationOptions) =>\n      transport.call<dto.CommandPayOrderAnswer>(operations.CommandPayOrder, input, options),",
     ),
+    source,
   );
-  assert.ok(source.includes('  payOrder: writeRoute("POST /orders/{order_id}/payments"),'));
-  assert.ok(source.includes("pathFor(routes.payOrder, undefined, body),"));
+  assert.match(
+    source,
+    /listOrders: \(input\?: dto\.QueryListOrders, options\?: OperationOptions\) =>\n {6}transport\.call<dto\.\w+>\(operations\.QueryListOrders, input \?\? \{\}, options\),/,
+  );
   assert.ok(
-    source.includes(
-      "pathFor(routes.editOrder, body.id === undefined ? undefined : String(body.id), body),",
-    ),
+    source.includes('rest: { method: "POST", path: "/orders/{order_id}/payments" },'),
   );
   assert.ok(source.includes('targets: { Order: "order_id" },'));
   assert.ok(source.includes('mcp: { tool: "pay_order" },'));
+  assert.ok(source.includes("     * Published over REST, MCP."), source);
+  // No wire is written into a method: no route, no verb, no REST helper.
+  assert.doesNotMatch(
+    source,
+    /listRoute|pathFor|writeRoute|readRoute|transport\.(list|one|send)/,
+  );
 });
 
-test("a GET that is no page and no record is read as it answers", () => {
-  const source = clientFileOf(shop, options);
+test("a Query is a method like any other: its input, its answer", () => {
   assert.ok(
-    source.includes(
-      'getCaller: () =>\n      readRoute<dto.QueryGetCallerAnswer>(transport, "/me"),',
+    clientFileOf(shop, options).includes(
+      "getCaller: (input?: dto.QueryGetCaller, options?: OperationOptions) =>\n      transport.call<dto.QueryGetCallerAnswer>(operations.QueryGetCaller, input ?? {}, options),",
     ),
   );
-  assert.ok(
-    source.includes("import { bindable, listRoute, pathFor, readRoute, type SendOptions"),
-  );
 });
 
-test("a list under a record asks for its key; the rest of its fields are optional", () => {
+test("a list under a record keeps its path as data; the entity lists it there", () => {
   const members: Metamodel = {
     ...shop,
     operations: {
@@ -368,7 +380,7 @@ test("a list under a record asks for its key; the rest of its fields are optiona
   };
   assert.ok(
     clientFileOf(members, options).includes(
-      'listOrders: (criteria: Criteria<dto.Order>, params: Readonly<Record<"customer_id", string>> & Partial<Record<"state", string>>) =>\n      transport.list<dto.Order>(listRoute("/customers/{customer_id}/orders", params), criteria),',
+      'rest: { method: "GET", path: "/customers/{customer_id}/orders" },',
     ),
   );
   assert.ok(
@@ -376,15 +388,13 @@ test("a list under a record asks for its key; the rest of its fields are optiona
   );
 });
 
-test("what REST does not publish gets no method, and the client says why", () => {
-  const mcpOnly: Metamodel = {
+test("an operation no wire publishes still has its method: the adapter says it is not there", () => {
+  const unpublished: Metamodel = {
     ...shop,
     operations: { ...shop.operations, "shop.CommandRecount": operation({}) },
   };
   assert.ok(
-    clientFileOf(mcpOnly, options).includes(
-      " * - `CommandRecount`: REST does not publish it.",
-    ),
+    clientFileOf(unpublished, options).includes("    recount: (input?: dto.CommandRecount"),
   );
 });
 
@@ -590,7 +600,7 @@ test("an answer goes by the backend's own name, never under a second one", () =>
   assert.ok(
     entitiesFileOf(named, options).includes("    placeOrder: dto.ResponsePlaceOrder;"),
   );
-  assert.ok(clientFileOf(named, options).includes("transport.send<dto.ResponsePlaceOrder>("));
+  assert.ok(clientFileOf(named, options).includes("transport.call<dto.ResponsePlaceOrder>("));
   // Without a name of its own, as before.
   assert.ok(domain.includes("export type CommandPayOrderAnswer = null;"));
 });
@@ -709,7 +719,7 @@ test("a relation published as a collection is an EntityCollection of its records
   assert.ok(!source.includes("export type Count"));
 });
 
-test("an export answers a Download, is downloaded by the client, and is the entity's export", () => {
+test("an export answers a Download, says it streams, and is the entity's export", () => {
   const domain = domainFileOf(ledger);
   const client = clientFileOf(ledger, options);
   const entities = entitiesFileOf(ledger, { domain: "ledger", base: "/v1" });
@@ -720,17 +730,18 @@ test("an export answers a Download, is downloaded by the client, and is the enti
       'import type { Download, EntityCollection } from "@sincpro/client-framework";',
     ),
   );
+  // The client calls it as any other; the adapter downloads what answers bytes.
+  assert.ok(client.includes("    streamed: true,"), client);
   assert.ok(
     client.includes(
-      "exportEntries: (criteria?: Criteria<dto.Entry>, format?: ExportFormat) =>\n" +
-        '      downloadRoute(transport, exportRoute("/entries/export", criteria, format)),',
+      "transport.call<dto.QueryExportEntriesAnswer>(operations.QueryExportEntries, input ?? {}, options),",
     ),
+    client,
   );
-  assert.ok(client.includes("downloadRoute, type ExportFormat, exportRoute"));
   assert.ok(entities.includes('  export: "/entries/export",'));
 });
 
-test("an export under a record's keys takes them first: a required parameter never follows an optional one", () => {
+test("an export under a record's keys keeps its path as data", () => {
   const keyed: Metamodel = {
     ...ledger,
     bindings: {
@@ -744,13 +755,9 @@ test("an export under a record's keys takes them first: a required parameter nev
       },
     },
   };
-
-  const client = clientFileOf(keyed, options);
-
   assert.ok(
-    client.includes(
-      'exportEntries: (params: Readonly<Record<"tenant_id", string>>, criteria?: Criteria<dto.Entry>, format?: ExportFormat) =>',
+    clientFileOf(keyed, options).includes(
+      'rest: { method: "GET", path: "/tenants/{tenant_id}/entries/export" },',
     ),
-    client,
   );
 });

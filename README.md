@@ -452,18 +452,67 @@ its own. `values` is the same object until it changes, so a screen can hand it t
 
 ## Talking to a server
 
-| Piece                          | What it does                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------------------- |
-| `restTransport({ base })`      | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
-| `memoryTransport(tables)`      | the same contract in memory, copying by the wire's rules — for tests and demos        |
-| `entity(key, routes)`          | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
-| `retryKeys()`                  | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
-| `guardedTransport(t, breaker)` | every call of a transport — of any wire — through a circuit breaker                   |
-| `screensTransport(transport)`  | screen reads and writes run as use cases of `screens`: traced and reported            |
-| `parquetDecoder` (`./parquet`) | large pages read as Parquet through the same transport                                |
+A remote service is reached through a port. The generated client never names a wire: it says
+which operation, with what input, and the adapter the application injects decides how it
+travels.
 
-Inside a Feature, inject the transport or the generated client as they are — the run already
-observes them. `screensTransport` is for what a screen asks directly, outside any Feature.
+```ts
+import { clientOf } from "./generated/client";
+
+// pick the wire; the client, the Features and the tests stay the same
+const forge = clientOf(restOperations(restTransport({ base: "/v1", headers: session })));
+// or clientOf(jsonRpcOperations({ endpoint: "/rpc", headers: session }))
+// or clientOf(grpcOperations(channel)) — a platform's adapter, the same port
+
+await forge.sendIssue({ issue_id: "acme-3", message: "hola" }); // ResponseSendIssue
+```
+
+| Piece                             | What it does                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| `OperationTransport` port         | `call(operation, input, options)`: an operation by who it is, over any wire           |
+| `restOperations(transport)`       | over REST: the path from the input's fields, a Query's query, a Command's body        |
+| `jsonRpcOperations({ endpoint })` | over JSON-RPC 2.0: one `POST`, the operation's method, its input as named params      |
+| `restTransport({ base })`         | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
+| `memoryTransport(tables)`         | the same REST contract in memory, copying by the wire's rules — for tests and demos   |
+| `entity(key, routes)`             | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
+| `retryKeys()`                     | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
+| `guardedTransport(t, breaker)`    | every call of a transport through a circuit breaker                                   |
+| `screensTransport(transport)`     | screen reads and writes run as use cases of `screens`: traced and reported            |
+| `parquetDecoder` (`./parquet`)    | large pages read as Parquet through the same transport                                |
+
+Inside a Feature, inject the generated client as it is: the run binds it, so every call carries
+its trace (`traceparent`), its context (`sincpro-context`) and its signal — as headers over HTTP,
+as metadata where a platform's adapter puts them. `screensTransport` and `entity()` stay on the
+REST `Transport`: they are how a screen reads pages of an entity, with its model and its drafts.
+
+### Writing an adapter for another wire
+
+An adapter is one function: read the operation's binding for its wire, send the input, answer the
+answer, and fail with errors `failureOf` reads.
+
+```ts
+function grpcOperations(channel: Channel): OperationTransport {
+  return {
+    async call(operation, input, options) {
+      const method = operation.grpc?.method;
+      if (!method) throw new OperationNotPublished(operation.identity, "gRPC");
+      try {
+        return await channel.unary(method, input, {
+          metadata: options?.headers, // traceparent, sincpro-context
+          signal: options?.signal,
+        });
+      } catch (error) {
+        const code = (error as { code: number }).code;
+        throw Object.assign(error as Error, { failureKind: kindOfGrpcCode(code) });
+      }
+    },
+  };
+}
+```
+
+Every operation in `operations` carries its identity and each wire's binding (`rest`, `rpc`,
+`grpc`, `mcp`); an operation the adapter's wire does not publish is `OperationNotPublished`
+(`not_found`), never guessed.
 
 ## Generated code
 
@@ -476,14 +525,18 @@ sincpro-client check --root src
 
 `generate` writes, from the contract the backend exports — never edited, written again whole:
 
-| File          | What                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------ |
-| `domain.ts`   | a type per model, per `<Name>Input`, per operation's input and answer, per domain event    |
-| `client.ts`   | `clientOf(transport)`: a method per operation REST reaches; `operations` and `events` data |
-| `entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                |
+| File          | What                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `domain.ts`   | a type per model, per `<Name>Input`, per operation's input and answer, per domain event       |
+| `client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
+| `entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                   |
 
-`scaffold` writes, once, the application's own files: its dependencies, its service bases and
-`registerServices`. `check` enforces the application's layers and bounded-context boundaries.
+Each method takes the operation's input and answers its answer, as `domain.ts` types them — a
+search answers its `Response…` with its records and cursor, as the backend's callers get it, on
+every wire. `scaffold` writes, once, the application's own files: its dependencies (the client
+over the `operations` the application exports — `--operations <module>` —), its service bases
+and `registerServices`. `check` enforces the application's layers and bounded-context
+boundaries.
 
 **Domain events, on demand.** A backend leaves its events out of the contract unless it is
 exported with `--events`. Then each event is a type as it is received — every field present,
@@ -578,9 +631,11 @@ src/
     infrastructure/  the ports this process runs with
     services/        logger, loggerAdapter, reportError, outcomeOf
   client/
-    domain/          Transport, TransportError, entity(), the client contract
-    adapters/        rest, memory, parquet (optional entry)
-    services/        discovery, retry keys, propagation of trace and context
+    domain/          OperationTransport, RemoteOperation, Transport, TransportError, entity(),
+                     the client contract
+    adapters/        restOperations, jsonRpcOperations, rest, memory, parquet (optional entry)
+    services/        discovery, retry keys, propagation of trace, context and signal,
+                     guardedTransport
   model/           defineMeta, metaFromSchema, metaStore
   core/
     domain/          Command, DomainEvent, Response, Feature, ApplicationService, FeatureBus,
@@ -629,6 +684,17 @@ Read [`MANIFESTO.md`](MANIFESTO.md) (what this package is and is not), [`AGENTS.
 (how to change it), [`CONTRIBUTING.md`](CONTRIBUTING.md),
 [`docs/UBIQUITOUS_LANGUAGE.md`](docs/UBIQUITOUS_LANGUAGE.md),
 [`docs/WEB.md`](docs/WEB.md) and [`docs/MOBILE.md`](docs/MOBILE.md). Versions are written by the release pipeline.
+
+## For consumers: the skill
+
+[`.claude/skills/sincpro-client-framework/SKILL.md`](.claude/skills/sincpro-client-framework/SKILL.md)
+is the guide for whoever builds on this package — an application, @sincpro/web-framework,
+@sincpro/mobile — and for the agents that help them: the rule for what goes here, in a platform's
+framework or in an application; the vocabulary; how an application is laid out; how to start the
+process, reach the services over any wire, write a use case, decide what a screen does with a
+failure, publish and subscribe to events, extend the pipeline, write a platform's adapter for each
+port, and test; and the mistakes to avoid. It follows the format of sincpro_framework's skills, so
+the shared knowledge base can carry it beside them.
 
 ## License
 

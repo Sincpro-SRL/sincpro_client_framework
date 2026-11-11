@@ -8,6 +8,11 @@
  *   services/  discovery, retry keys, propagation (`traceparent`, `sincpro-context`)
  */
 export {
+  JsonRpcError,
+  jsonRpcOperations,
+  type JsonRpcOptions,
+} from "@sincpro/client-framework/client/adapters/json-rpc";
+export {
   type MemoryOptions,
   type MemoryTable,
   memoryTransport,
@@ -18,6 +23,7 @@ export {
   urlOf,
   type VersionDrift,
 } from "@sincpro/client-framework/client/adapters/rest";
+export { restOperations } from "@sincpro/client-framework/client/adapters/rest-operations";
 export {
   type ClientContract,
   entityKeyOf,
@@ -52,6 +58,12 @@ export {
   writeRoute,
 } from "@sincpro/client-framework/client/domain/entity";
 export {
+  OperationNotPublished,
+  type OperationOptions,
+  type OperationTransport,
+  type RemoteOperation,
+} from "@sincpro/client-framework/client/domain/operation";
+export {
   type CallOptions,
   type Decoder,
   type Download,
@@ -67,6 +79,7 @@ export {
 export { guardedTransport } from "@sincpro/client-framework/client/services/guarded";
 export {
   bindable,
+  bindOperations,
   bindTransport,
   headersOf,
 } from "@sincpro/client-framework/client/services/propagation";

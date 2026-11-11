@@ -6,6 +6,7 @@ import {
   failureOf,
   guardedTransport,
   memoryTransport,
+  type OperationTransport,
   outcomeOf,
   TransportError,
 } from "@sincpro/client-framework";
@@ -88,4 +89,23 @@ test("a wrapped function and a guarded transport go through the circuit", async 
 test("a circuit needs a failure and some time", () => {
   assert.throws(() => new CircuitBreaker("x", { failures: 0 }), /failures/);
   assert.throws(() => new CircuitBreaker("x", { openFor: 0 }), /openFor/);
+});
+
+test("an operation transport of any wire is guarded the same way", async () => {
+  const { breaker } = clocked(1);
+  let calls = 0;
+  const failing: OperationTransport = {
+    call: () => (calls++, Promise.reject(new TransportError("/x", 503, null))),
+  };
+  const guarded = guardedTransport(failing, breaker);
+  const operation = {
+    identity: "x.CommandY",
+    role: "command",
+    query: false,
+    entities: [],
+    targets: {},
+  };
+  await assert.rejects(guarded.call(operation, {}), TransportError);
+  await assert.rejects(guarded.call(operation, {}), CircuitOpen);
+  assert.equal(calls, 1);
 });

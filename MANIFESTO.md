@@ -50,7 +50,9 @@ server-side render, in a script and in a test, unchanged.**
    Features and ApplicationServices, registered for class DTOs — and called as
    `project.execute(new Command(...))`. The bounded context is the bus. An application is the set
    of bounded contexts it loads; they never import each other's insides.
-6. **The client.** The `Transport` port and its implementations (REST, memory), `entity()` with
+6. **The client.** The `OperationTransport` port — an operation called by who it is, over any
+   wire — with its REST and JSON-RPC adapters (a platform adds gRPC or its own); the `Transport`
+   port and its implementations (REST, memory), `entity()` with
    typed commands and answers, the service's client contract, model definitions read once from
    the server and the server's `Problem`.
 7. **The values of the wire.** How every value travels, as the backend writes it — a decimal as
@@ -144,6 +146,14 @@ server-side render, in a script and in a test, unchanged.**
 
 Dependencies point down only. This package knows nothing above it.
 
+**What goes where.** client-framework + web-framework is to a web application what
+sincpro_framework is to a backend; client-framework + @sincpro/mobile, the same for a phone. A
+piece web and mobile can both use, and that needs no platform, comes here — as a port, its rules
+and a memory adapter. A piece only one platform needs, or that needs a platform's technology, is
+that platform's — an adapter of a port. An application's business is the application's. Nothing
+is replicated: what differs by nature (a phone's SQLite domain, a browser's entity screens) stays
+different, and the platforms meet here only through the ports.
+
 ## Where it stands
 
 **The application layer is the backend's.** A bounded context executes class Commands through
@@ -159,9 +169,10 @@ bounded context has its own, and a run hands `this.logger`, bound to its executi
 infrastructure and the adapters have a predefined one.
 
 **The client and the generator read the backend's contract.** Types per model, operation and —
-when the contract is exported with them — domain event; a client per wire REST reaches; the
-entities screens use. What is generated is types, never classes: the remote contract describes
-the wire and never reaches the local bus.
+when the contract is exported with them — domain event; a client whose methods call each
+operation by who it is, over the `OperationTransport` the application injects — REST, JSON-RPC,
+a platform's gRPC —; the entities screens use. What is generated is types, never classes, and
+never names a wire: the contract's bindings are data, read by the adapter of each wire.
 
 **Each module is laid out as the backend's.** `domain/`, `adapters/`, `services/`,
 `infrastructure/`, `entrypoint/`, only those a module needs; `domain/` depends only on `domain/`.
@@ -177,12 +188,16 @@ first and delivered by the backend's store-and-forward rules (`storedQueue`) ove
 
 **A failure means the same thing everywhere.** `failureOf` reads any error — whatever the wire,
 whatever backend — in the backend's kinds and next steps; retrying, setting aside, reporting and
-a screen's answer follow from it. A run can be cancelled, and its requests with it.
+a screen's answer follow from it. A run can be cancelled, and its requests with it. The
+backend's circuit breaker guards any transport.
 
-**Next:** web and mobile adopt it in their own releases — mobile's SQLite queue and web's
-in-memory or IndexedDB one behind `EventQueue`; events from the server live, with the backend's
-server-sent events; generated readers that validate and convert what arrives, when a use needs
-them.
+**Consumers have a guide.** The `sincpro-client-framework` skill says, for an application and for
+a platform's framework, what goes where and how each thing is done.
+
+**Next:** web and mobile adopt it in their own releases — mobile's SQLite `EventStore` and gRPC or
+JSON-RPC wire, web's in-memory or IndexedDB store and its hooks —, declaring this package as a
+peer dependency; events from the server live, with the backend's server-sent events; generated
+readers that validate and convert what arrives, when a use needs them.
 
 ## How we decide
 

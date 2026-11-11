@@ -1,4 +1,10 @@
 import type { CircuitBreaker } from "@sincpro/client-framework/circuit_breaker/entrypoint/circuit-breaker";
+import {
+  isOperationTransport,
+  type OperationOptions,
+  type OperationTransport,
+  type RemoteOperation,
+} from "@sincpro/client-framework/client/domain/operation";
 import type {
   CallOptions,
   SendOptions,
@@ -7,17 +13,31 @@ import type {
 import type { Criteria } from "@sincpro/criteria";
 
 /**
- * `transport`, every call through `breaker` — REST, another wire's, a platform's:
+ * `transport`, every call through `breaker` — an `OperationTransport` of any wire, or REST's
+ * `Transport`:
  *
- *     const transport = guardedTransport(restTransport({ base }), new CircuitBreaker("forge"));
- *     project.addDependency("client", clientOf(transport));
+ *     const operations = guardedTransport(jsonRpcOperations({ endpoint }), new CircuitBreaker("forge"));
+ *     project.addDependency("client", clientOf(operations));
  *
  * Context: the circuit belongs where the dependency is — the transport —, not in each Feature. A
  * run binds it as it binds any transport, so the trace and the context still travel; an open
  * circuit fails at once with `CircuitOpen` (`unavailable`, with its wait), which the outcome, a
  * stored queue and a screen already read.
  */
-export function guardedTransport(transport: Transport, breaker: CircuitBreaker): Transport {
+export function guardedTransport(
+  transport: OperationTransport,
+  breaker: CircuitBreaker,
+): OperationTransport;
+export function guardedTransport(transport: Transport, breaker: CircuitBreaker): Transport;
+export function guardedTransport(
+  transport: Transport | OperationTransport,
+  breaker: CircuitBreaker,
+): Transport | OperationTransport {
+  if (isOperationTransport(transport))
+    return {
+      call: <T>(operation: RemoteOperation, input: unknown, options?: OperationOptions) =>
+        breaker.call(() => transport.call<T>(operation, input, options)),
+    };
   const guarded: Transport = {
     list: <T>(
       route: string,

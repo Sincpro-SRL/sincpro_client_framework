@@ -46,17 +46,19 @@ Entrypoint -> BoundedContext.execute(Command) -> Feature or ApplicationService -
 
 ## Remote contracts are not local services
 
-| Word             | Meaning                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| Client contract  | What a remote service publishes: models, operations, input/output schemas and bindings  |
-| Generated client | A typed remote adapter made over a Transport; injectable into a local Feature           |
-| Generated DTO    | A compile-time type from that contract — never a class, never on the local bus          |
-| Domain event     | A fact a context recorded, known by its wire `name`; in the contract only on `--events` |
-| Recorded event   | One of the context's own events: its aggregates record it                               |
-| Handled event    | An event a Feature of the context is registered for: it subscribes                      |
-| `DomainEvent`    | The generated union of a contract's events, narrowed by `name`                          |
-| Mapping Entity   | The remote descriptor exported as `Entity`, used for routes, fields and commands        |
-| Transport        | The remote boundary: REST, memory, or a separately implemented platform adapter         |
+| Word                | Meaning                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| Client contract     | What a remote service publishes: models, operations, input/output schemas and bindings     |
+| Generated client    | Typed methods per remote operation, over an `OperationTransport`; injected into a Feature  |
+| Remote operation    | An operation of the contract: its identity and each wire's binding (`rest`, `rpc`, `grpc`) |
+| Operation transport | The port that calls an operation by who it is; one adapter per wire, injected by the app   |
+| Generated DTO       | A compile-time type from that contract — never a class, never on the local bus             |
+| Domain event        | A fact a context recorded, known by its wire `name`; in the contract only on `--events`    |
+| Recorded event      | One of the context's own events: its aggregates record it                                  |
+| Handled event       | An event a Feature of the context is registered for: it subscribes                         |
+| `DomainEvent`       | The generated union of a contract's events, narrowed by `name`                             |
+| Mapping Entity      | The remote descriptor exported as `Entity`, used for routes, fields and commands           |
+| Transport           | REST's own port: what `restOperations` and screens (`entity()`, pages) stand on            |
 
 Local classes may implement generated DTO types, but a generated client is not automatically
 an ApplicationService or registered local executor. A history response containing event records

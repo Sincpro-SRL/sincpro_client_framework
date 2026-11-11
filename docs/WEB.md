@@ -4,14 +4,14 @@ The application layer lives in `@sincpro/client-framework`; @sincpro/web-framewo
 browser's pieces: React, the screens, the browser's tracing and error reporting. This page is
 how a web application adopts it — a plan, not a claim that it is adopted.
 
-| Responsibility        | Here                                                          | Web                                                                                  |
-| --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Application execution | `BoundedContext`, Commands, events, Features, AppServices     | A hook that runs a use case from a component, with its state                         |
-| Pipeline              | interceptors, `onStart` / `onCompletion` / `onFailure`        | What a screen shows of a run: busy, done, failed                                     |
-| Observability         | Tracer, ErrorReporter, Logger ports; console by default       | `browserTracer`, `sentryReporter` (web-framework), plugged in `main`                 |
-| Context               | levels, `ContextStore`, `memoryContexts()`                    | `useContextValues`; a store over `sessionStorage` if it must survive a reload        |
-| Events                | `Publisher`, `Subscriber`, `syncQueue`, the `EventQueue` port | `syncQueue` by default; IndexedDB to work offline; `BroadcastChannel` for other tabs |
-| Server                | REST transport, generated clients, `screensTransport`         | Wiring the transport and the session's headers                                       |
+| Responsibility        | Here                                                                                         | Web                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Application execution | `BoundedContext`, Commands, events, Features, AppServices                                    | A hook that runs a use case from a component, with its state                         |
+| Pipeline              | interceptors, `onStart` / `onCompletion` / `onFailure`                                       | What a screen shows of a run: busy, done, failed                                     |
+| Observability         | Tracer, ErrorReporter, Logger ports; console by default                                      | `browserTracer`, `sentryReporter` (web-framework), plugged in `main`                 |
+| Context               | levels, `ContextStore`, `memoryContexts()`                                                   | `useContextValues`; a store over `sessionStorage` if it must survive a reload        |
+| Events                | `Publisher`, `Subscriber`, `syncQueue`, the `EventQueue` port                                | `syncQueue` by default; IndexedDB to work offline; `BroadcastChannel` for other tabs |
+| Server                | `OperationTransport` and its REST / JSON-RPC adapters, generated clients, `screensTransport` | Choosing the wire, wiring the session's headers                                      |
 
 ## Startup
 
@@ -23,6 +23,19 @@ configureProcess({
   logger: { mode: import.meta.env.PROD ? "production" : "development" },
 });
 ```
+
+## Reaching the services
+
+```ts
+// domains/common/infrastructure/operations.ts — what `sincpro-client scaffold` imports
+export const operations = restOperations(
+  restTransport({ base: "/v1", headers: () => session() }),
+);
+```
+
+Every generated client of the application is made over it; changing to JSON-RPC is changing this
+line (`jsonRpcOperations({ endpoint: "/rpc", headers })`). Screens that list and edit entities
+keep the REST `Transport` underneath (`entity()`, `screensTransport`).
 
 ## Running a use case from a screen
 

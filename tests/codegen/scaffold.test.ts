@@ -27,7 +27,7 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["infrastructure/dependencies.ts"]?.includes(
-      'bc.addDependency("client", clientOf(transport));',
+      'bc.addDependency("client", clientOf(operations));',
     ),
   );
   assert.ok(
@@ -37,17 +37,17 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["index.ts"]?.includes(
-      'export const project = configProjectBoundedContext("project", transport);',
+      'export const project = configProjectBoundedContext("project", operations);',
     ),
   );
   assert.ok(
     files["index.ts"]?.includes(
-      'import { transport } from "../common/infrastructure/transport";',
+      'import { operations } from "../common/infrastructure/operations";',
     ),
   );
   assert.ok(
-    scaffoldFilesOf(project, { transport: "@/app/transport" })["index.ts"]?.includes(
-      'import { transport } from "@/app/transport";',
+    scaffoldFilesOf(project, { operations: "@/app/operations" })["index.ts"]?.includes(
+      'import { operations } from "@/app/operations";',
     ),
   );
 });
@@ -55,7 +55,7 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
 test("an alias that is a word of the language, or a name index.ts imports, gives a constant that can be", () => {
   const named = (alias: string) => scaffoldFilesOf({ ...project, alias })["index.ts"] ?? "";
   assert.ok(named("import").includes("export const importBoundedContext ="));
-  assert.ok(named("transport").includes("export const transportBoundedContext ="));
+  assert.ok(named("operations").includes("export const operationsBoundedContext ="));
   assert.ok(named("sales-orders").includes("export const salesOrders ="));
 });
 
@@ -73,8 +73,8 @@ test("the skeleton compiles as it is written, beside what the generator writes",
   }
   mkdirSync(join(root, "domains", "common", "infrastructure"), { recursive: true });
   writeFileSync(
-    join(root, "domains", "common", "infrastructure", "transport.ts"),
-    'import { memoryTransport } from "@sincpro/client-framework";\nexport const transport = memoryTransport({});\n',
+    join(root, "domains", "common", "infrastructure", "operations.ts"),
+    'import { memoryTransport, restOperations } from "@sincpro/client-framework";\nexport const operations = restOperations(memoryTransport({}));\n',
   );
   const program = ts.createProgram([join(own, "index.ts")], {
     strict: true,

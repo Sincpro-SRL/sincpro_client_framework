@@ -2,8 +2,7 @@
 // Version 008a5966d192c1c3b1b6606ba3fb913c765f61ef732a74d49ba267333c71dbd2.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
-import type { Criteria } from "@sincpro/criteria";
-import { bindable, listRoute, pathFor, readRoute, type SendOptions, type Transport, writeRoute } from "@sincpro/client-framework";
+import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
 import type * as dto from "./domain";
 
@@ -187,161 +186,167 @@ export const operations = {
   },
 } as const;
 
-const routes = {
-  addMember: writeRoute("POST /groups/{group_id}/members"),
-  addUser: writeRoute("POST /users"),
-  createGroup: writeRoute("POST /groups"),
-  createTenant: writeRoute("POST /tenants"),
-  editGroup: writeRoute("PUT /groups/{id}/edit"),
-  editTenant: writeRoute("PUT /tenants/{id}/edit"),
-  editUser: writeRoute("PUT /users/{id}/edit"),
-  issueToken: writeRoute("POST /tokens"),
-  joinTenant: writeRoute("POST /users/{email}/tenants"),
-  leaveTenant: writeRoute("POST /users/{email}/tenants/{tenant_id}/leave"),
-  removeMember: writeRoute("POST /groups/{group_id}/members/{email}/remove"),
-};
-
 /**
- * «auth» over a transport: a method for each operation REST reaches as a
- * page, a record, a read of its own or a write. Used by a Feature, each request carries the
- * trace and the context of the use case that sent it (`bindable`).
+ * «auth» over any wire: a method per operation, called by who it is. The transport
+ * decides how it travels — `restOperations(restTransport(…))`, `jsonRpcOperations(…)`, a
+ * platform's —; used by a Feature, each call carries the run's trace, context and signal.
  */
-export function clientOf(transport: Transport) {
+export function clientOf(transport: OperationTransport) {
   return bindable(transport, (transport) => ({
-    /** Put a user in a group. */
-    addMember: (body: dto.CommandAddMember, options?: SendOptions) =>
-      transport.send<dto.ResponseAddMember>(
-        "POST",
-        pathFor(routes.addMember, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
+    /**
+     * Put a user in a group.
+     *
+     * Published over REST.
+     */
+    addMember: (input: dto.CommandAddMember, options?: OperationOptions) =>
+      transport.call<dto.ResponseAddMember>(operations.CommandAddMember, input, options),
     /**
      * Add a person who uses forge, in a first tenant or in none yet. More tenants:
      * ``POST /v1/users/{email}/tenants``.
+     *
+     * Published over REST.
      */
-    addUser: (body: dto.CommandAddUser, options?: SendOptions) =>
-      transport.send<dto.ResponseAddUser>(
-        "POST",
-        pathFor(routes.addUser, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Create a group of users, in a tenant or across tenants. */
-    createGroup: (body: dto.CommandCreateGroup, options?: SendOptions) =>
-      transport.send<dto.ResponseCreateGroup>(
-        "POST",
-        pathFor(routes.createGroup, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Register a client of Sincpro as a tenant of forge. */
-    createTenant: (body: dto.CommandCreateTenant, options?: SendOptions) =>
-      transport.send<dto.ResponseCreateTenant>(
-        "POST",
-        pathFor(routes.createTenant, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Change a group's name: a draft, a save or a discard. */
-    editGroup: (body: dto.CommandEditGroup, options?: SendOptions) =>
-      transport.send<dto.ResponseEditGroup>(
-        "PUT",
-        pathFor(routes.editGroup, body.id === undefined ? undefined : String(body.id), body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Change a tenant's name or whether it is active: a draft, a save or a discard. */
-    editTenant: (body: dto.CommandEditTenant, options?: SendOptions) =>
-      transport.send<dto.ResponseEditTenant>(
-        "PUT",
-        pathFor(routes.editTenant, body.id === undefined ? undefined : String(body.id), body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Change a user's name: a draft, a save or a discard. */
-    editUser: (body: dto.CommandEditUser, options?: SendOptions) =>
-      transport.send<dto.ResponseEditUser>(
-        "PUT",
-        pathFor(routes.editUser, body.id === undefined ? undefined : String(body.id), body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Who calls and what they may do: the admin, or a user and the tenant they act in. */
-    getCaller: (params?: Partial<Record<"criteria" | "cursor", string>>) =>
-      readRoute<dto.ResponseGetCaller>(transport, listRoute("/me", params)),
-    /** One group, by its id. */
-    getGroup: (id: string) =>
-      transport.one<dto.Group>(`/groups/${encodeURIComponent(id)}`),
-    /** One tenant: whether it exists and whether it may use forge (``active``). */
-    getTenant: (id: string) =>
-      transport.one<dto.Tenant>(`/tenants/${encodeURIComponent(id)}`),
-    /** One user, by their email, with the tenants they belong to. */
-    getUser: (id: string) =>
-      transport.one<dto.User>(`/users/${encodeURIComponent(id)}`),
-    /** A bearer token for a user: the admin issues anyone's, a user renews their own. */
-    issueToken: (body: dto.CommandIssueToken, options?: SendOptions) =>
-      transport.send<dto.ResponseIssueToken>(
-        "POST",
-        pathFor(routes.issueToken, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Add a user to a tenant with a role; they keep the tenants they already had. */
-    joinTenant: (body: dto.CommandJoinTenant, options?: SendOptions) =>
-      transport.send<dto.ResponseJoinTenant>(
-        "POST",
-        pathFor(routes.joinTenant, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Take a user out of a tenant; they keep the others. */
-    leaveTenant: (body: dto.CommandLeaveTenant, options?: SendOptions) =>
-      transport.send<dto.ResponseLeaveTenant>(
-        "POST",
-        pathFor(routes.leaveTenant, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** A group's facts, oldest first; only the admin reads them. */
-    listGroupEvents: (params: Readonly<Record<"id", string>> & Partial<Record<"criteria" | "cursor" | "names", string>>) =>
-      readRoute<dto.ResponseListGroupEvents>(transport, listRoute("/groups/{id}/events", params)),
-    /** The groups of one tenant, or the groups across tenants. */
-    listGroups: (criteria: Criteria<dto.Group>, params?: Partial<Record<"drafts" | "format" | "tenant_id", string>>) =>
-      transport.list<dto.Group>(listRoute("/groups", params), criteria),
-    /** A tenant's facts, oldest first; only the admin reads them. */
-    listTenantEvents: (params: Readonly<Record<"id", string>> & Partial<Record<"criteria" | "cursor" | "names", string>>) =>
-      readRoute<dto.ResponseListTenantEvents>(transport, listRoute("/tenants/{id}/events", params)),
-    /** Who belongs to one tenant, with their role there. */
-    listTenantMembers: (criteria: Criteria<dto.Membership>, params: Readonly<Record<"tenant_id", string>> & Partial<Record<"drafts" | "format", string>>) =>
-      transport.list<dto.Membership>(listRoute("/tenants/{tenant_id}/members", params), criteria),
-    /** Every tenant forge knows, newest first. */
-    listTenants: (criteria: Criteria<dto.Tenant>, params?: Partial<Record<"drafts" | "format", string>>) =>
-      transport.list<dto.Tenant>(listRoute("/tenants", params), criteria),
-    /** A user's facts, oldest first; only the admin reads them. */
-    listUserEvents: (params: Readonly<Record<"id", string>> & Partial<Record<"criteria" | "cursor" | "names", string>>) =>
-      readRoute<dto.ResponseListUserEvents>(transport, listRoute("/users/{id}/events", params)),
-    /** Every user forge knows, newest first. */
-    listUsers: (criteria: Criteria<dto.User>, params?: Partial<Record<"drafts" | "format", string>>) =>
-      transport.list<dto.User>(listRoute("/users", params), criteria),
-    /** Take a user out of a group. */
-    removeMember: (body: dto.CommandRemoveMember, options?: SendOptions) =>
-      transport.send<dto.ResponseRemoveMember>(
-        "POST",
-        pathFor(routes.removeMember, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
+    addUser: (input: dto.CommandAddUser, options?: OperationOptions) =>
+      transport.call<dto.ResponseAddUser>(operations.CommandAddUser, input, options),
+    /**
+     * Create a group of users, in a tenant or across tenants.
+     *
+     * Published over REST.
+     */
+    createGroup: (input: dto.CommandCreateGroup, options?: OperationOptions) =>
+      transport.call<dto.ResponseCreateGroup>(operations.CommandCreateGroup, input, options),
+    /**
+     * Register a client of Sincpro as a tenant of forge.
+     *
+     * Published over REST.
+     */
+    createTenant: (input: dto.CommandCreateTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseCreateTenant>(operations.CommandCreateTenant, input, options),
+    /**
+     * Change a group's name: a draft, a save or a discard.
+     *
+     * Published over REST.
+     */
+    editGroup: (input?: dto.CommandEditGroup, options?: OperationOptions) =>
+      transport.call<dto.ResponseEditGroup>(operations.CommandEditGroup, input ?? {}, options),
+    /**
+     * Change a tenant's name or whether it is active: a draft, a save or a discard.
+     *
+     * Published over REST.
+     */
+    editTenant: (input?: dto.CommandEditTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseEditTenant>(operations.CommandEditTenant, input ?? {}, options),
+    /**
+     * Change a user's name: a draft, a save or a discard.
+     *
+     * Published over REST.
+     */
+    editUser: (input?: dto.CommandEditUser, options?: OperationOptions) =>
+      transport.call<dto.ResponseEditUser>(operations.CommandEditUser, input ?? {}, options),
+    /**
+     * Who calls and what they may do: the admin, or a user and the tenant they act in.
+     *
+     * Published over REST.
+     */
+    getCaller: (input?: dto.CommandGetCaller, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetCaller>(operations.CommandGetCaller, input ?? {}, options),
+    /**
+     * One group, by its id.
+     *
+     * Published over REST.
+     */
+    getGroup: (input: dto.CommandGetGroup, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetGroup>(operations.CommandGetGroup, input, options),
+    /**
+     * One tenant: whether it exists and whether it may use forge (``active``).
+     *
+     * Published over REST.
+     */
+    getTenant: (input: dto.CommandGetTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetTenant>(operations.CommandGetTenant, input, options),
+    /**
+     * One user, by their email, with the tenants they belong to.
+     *
+     * Published over REST.
+     */
+    getUser: (input: dto.CommandGetUser, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetUser>(operations.CommandGetUser, input, options),
+    /**
+     * A bearer token for a user: the admin issues anyone's, a user renews their own.
+     *
+     * Published over REST.
+     */
+    issueToken: (input: dto.CommandIssueToken, options?: OperationOptions) =>
+      transport.call<dto.ResponseIssueToken>(operations.CommandIssueToken, input, options),
+    /**
+     * Add a user to a tenant with a role; they keep the tenants they already had.
+     *
+     * Published over REST.
+     */
+    joinTenant: (input: dto.CommandJoinTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseJoinTenant>(operations.CommandJoinTenant, input, options),
+    /**
+     * Take a user out of a tenant; they keep the others.
+     *
+     * Published over REST.
+     */
+    leaveTenant: (input: dto.CommandLeaveTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseLeaveTenant>(operations.CommandLeaveTenant, input, options),
+    /**
+     * A group's facts, oldest first; only the admin reads them.
+     *
+     * Published over REST.
+     */
+    listGroupEvents: (input: dto.CommandListGroupEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListGroupEvents>(operations.CommandListGroupEvents, input, options),
+    /**
+     * The groups of one tenant, or the groups across tenants.
+     *
+     * Published over REST.
+     */
+    listGroups: (input?: dto.CommandListGroups, options?: OperationOptions) =>
+      transport.call<dto.ResponseListGroups>(operations.CommandListGroups, input ?? {}, options),
+    /**
+     * A tenant's facts, oldest first; only the admin reads them.
+     *
+     * Published over REST.
+     */
+    listTenantEvents: (input: dto.CommandListTenantEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListTenantEvents>(operations.CommandListTenantEvents, input, options),
+    /**
+     * Who belongs to one tenant, with their role there.
+     *
+     * Published over REST.
+     */
+    listTenantMembers: (input: dto.CommandListTenantMembers, options?: OperationOptions) =>
+      transport.call<dto.ResponseListTenantMembers>(operations.CommandListTenantMembers, input, options),
+    /**
+     * Every tenant forge knows, newest first.
+     *
+     * Published over REST.
+     */
+    listTenants: (input?: dto.CommandListTenants, options?: OperationOptions) =>
+      transport.call<dto.ResponseListTenants>(operations.CommandListTenants, input ?? {}, options),
+    /**
+     * A user's facts, oldest first; only the admin reads them.
+     *
+     * Published over REST.
+     */
+    listUserEvents: (input: dto.CommandListUserEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListUserEvents>(operations.CommandListUserEvents, input, options),
+    /**
+     * Every user forge knows, newest first.
+     *
+     * Published over REST.
+     */
+    listUsers: (input?: dto.CommandListUsers, options?: OperationOptions) =>
+      transport.call<dto.ResponseListUsers>(operations.CommandListUsers, input ?? {}, options),
+    /**
+     * Take a user out of a group.
+     *
+     * Published over REST.
+     */
+    removeMember: (input: dto.CommandRemoveMember, options?: OperationOptions) =>
+      transport.call<dto.ResponseRemoveMember>(operations.CommandRemoveMember, input, options),
   }));
 }

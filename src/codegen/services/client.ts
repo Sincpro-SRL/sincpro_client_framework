@@ -19,88 +19,43 @@ import {
 } from "@sincpro/client-framework/codegen/domain/names";
 import {
   type GenerateOptions,
-  ownerOf,
   type Reached,
   restOf,
-  WRITES,
 } from "@sincpro/client-framework/codegen/services/rest";
 
 /**
  * The client of a bounded context as TypeScript: every operation as data, and a method for each
- * one REST reaches the way a `Transport` sends — over `@sincpro/client-framework`, so a script,
- * a test or a hook of its own calls the service typed, with no screen.
+ * one, called by who it is through an `OperationTransport` — so a script, a test, a Feature or a
+ * hook calls the service typed, over whatever wire the application injects.
  *
- * Context: a method only writes down the route the contract published and hands the call to the
- * transport, which keeps the rules — the `Idempotency-Key`, the `Problem`, the model's version.
- * A GET is a page (`list`), one record (`one`), a file (`export`: `downloadRoute`, its bytes as
- * they arrive), or — a Query of the context's own, `GET /me` — a read of its answer as it came
- * (`readRoute`, over a transport that has `read`). A GET's
- * keys in its path are required parameters; every other field is an optional one.
+ * Context: the generated client names an operation and its input, never a route, a verb or an
+ * RPC method: those are the contract's bindings, in `operations`, and the adapter reads the one of
+ * its wire (`restOperations`, `jsonRpcOperations`, a platform's gRPC). So the same client, and the
+ * Features that use it, run over REST today and JSON-RPC or gRPC tomorrow without regenerating.
+ * Each method takes the operation's input and answers its answer, as the contract types them
+ * (`domain.ts`).
  */
 
-/** A search's fields a page asks with, not the screen: the criteria, and its cursor inside it. */
-const PAGED = new Set(["criteria", "cursor"]);
-/** An export's fields its method takes apart: the criteria and the format. */
-const EXPORTED = new Set(["criteria", "cursor", "format"]);
+const WIRES: readonly [keyof NonNullable<Metamodel["bindings"]>, string][] = [
+  ["rest", "REST"],
+  ["rpc", "JSON-RPC"],
+  ["grpc", "gRPC"],
+  ["mcp", "MCP"],
+];
 
-/** What a GET is asked with: the keys its path names, and every other field, as text. */
-type Asked = { path: readonly string[]; query: readonly string[] };
-
-/** How an operation is called through a transport, or why it is not. */
-type Call =
-  | ({ kind: "list"; entity: string } & Asked)
-  | ({ kind: "download"; entity: string } & Asked)
-  | { kind: "one"; entity: string; field: string }
-  | ({ kind: "read" } & Asked)
-  | { kind: "send" }
-  | { kind: "none"; why: string };
-
-/** A GET's parameters: the path's keys, and the rest of its input but what a page asks with. */
-function askedOf(
-  operation: Operation,
-  rest: Reached,
-  paged: boolean,
-  apart: ReadonlySet<string> = PAGED,
-): Asked {
-  const path = [...rest.fields].sort();
-  const query = Object.keys(operation.input.properties ?? {})
-    .filter((one) => !path.includes(one) && !(paged && apart.has(one)))
-    .sort();
-  return { path, query };
+/** The wires that publish an operation, by name. */
+function wiresOf(metamodel: Metamodel, identity: string): string[] {
+  return WIRES.filter(([wire]) => metamodel.bindings?.[wire]?.[identity] !== undefined).map(
+    ([, name]) => name,
+  );
 }
 
-function callOf(metamodel: Metamodel, operation: Operation, rest: Reached | undefined): Call {
-  if (rest === undefined) return { kind: "none", why: "REST does not publish it" };
-  if (WRITES.has(rest.method)) return { kind: "send" };
-  const owner = ownerOf(metamodel, operation);
-  if (operation.role === "search" && owner !== undefined && owner in metamodel.models)
-    return { kind: "list", entity: owner, ...askedOf(operation, rest, true) };
-  // An export answers bytes, never JSON: it is downloaded.
-  if (operation.role === "export" && owner !== undefined && owner in metamodel.models)
-    return { kind: "download", entity: owner, ...askedOf(operation, rest, true, EXPORTED) };
-  const field = owner === undefined ? undefined : operation.targets[owner];
-  const record = rest.fields.length === 1 && rest.fields[0] === field;
-  if (operation.role === "get" && owner !== undefined && field !== undefined && record)
-    return { kind: "one", entity: owner, field };
-  // Any other GET — a Query of the context's own, `GET /me` — is read as it answers.
-  return { kind: "read", ...askedOf(operation, rest, false) };
-}
-
-/** A parameter list's TypeScript: the path's keys required, the rest optional, all as text. */
-function paramsOf(asked: Asked): { signature: string; route: (path: string) => string } {
-  const union = (names: readonly string[]) =>
-    names.map((one) => JSON.stringify(one)).join(" | ");
-  if (asked.path.length === 0 && asked.query.length === 0)
-    return { signature: "", route: (path) => JSON.stringify(path) };
-  const required =
-    asked.path.length === 0 ? "" : `Readonly<Record<${union(asked.path)}, string>>`;
-  const optional =
-    asked.query.length === 0 ? "" : `Partial<Record<${union(asked.query)}, string>>`;
-  const type = [required, optional].filter((one) => one !== "").join(" & ");
-  return {
-    signature: `params${asked.path.length === 0 ? "?" : ""}: ${type}`,
-    route: (path) => `listRoute(${JSON.stringify(path)}, params)`,
-  };
+/** Whether an operation answers bytes as they are produced — an export —, not JSON. */
+function isStreamed(operation: Operation): boolean {
+  return (
+    operation.output !== null &&
+    (operation.output as Record<string, unknown>)["x-sincpro-streamed"] !== undefined
+  );
 }
 
 /** The data of one operation: what it is, and how each wire reaches it. */
@@ -117,6 +72,7 @@ function dataOf(
     `    entities: ${JSON.stringify(operation.entities)},`,
     `    targets: ${recordLiteral(operation.targets)},`,
   ];
+  if (isStreamed(operation)) lines.push("    streamed: true,");
   if (rest !== undefined)
     lines.push(
       `    rest: { method: ${JSON.stringify(rest.method)}, path: ${JSON.stringify(rest.path)} },`,
@@ -130,139 +86,60 @@ function dataOf(
   return `  ${localOf(metamodel, identity)}: {\n${lines.join("\n")}\n  },`;
 }
 
-function methodSourceOf(
-  local: string,
-  answer: string,
-  method: string,
-  call: Call,
-  rest: Reached,
-  doc: string,
-): string {
-  if (call.kind === "list") {
-    const entity = `dto.${identifierOf(call.entity)}`;
-    const params = paramsOf(call);
-    const signature = params.signature === "" ? "" : `, ${params.signature}`;
-    return `${doc}    ${method}: (criteria: Criteria<${entity}>${signature}) =>\n      transport.list<${entity}>(${params.route(rest.path)}, criteria),`;
-  }
-  if (call.kind === "download") {
-    const entity = `dto.${identifierOf(call.entity)}`;
-    const params = paramsOf(call);
-    // The path's keys are required, so they come first: a required parameter never follows an
-    // optional one.
-    const keys =
-      params.signature === "" ? "" : `${params.signature.replace("params?:", "params:")}, `;
-    const given = params.signature === "" ? "" : ", params";
-    return `${doc}    ${method}: (${keys}criteria?: Criteria<${entity}>, format?: ExportFormat) =>\n      downloadRoute(transport, exportRoute(${JSON.stringify(rest.path)}, criteria, format${given})),`;
-  }
-  if (call.kind === "read") {
-    const params = paramsOf(call);
-    return `${doc}    ${method}: (${params.signature}) =>\n      readRoute<dto.${answer}>(transport, ${params.route(rest.path)}),`;
-  }
-  if (call.kind === "one") {
-    const path = rest.path.replace(`{${call.field}}`, "${encodeURIComponent(id)}");
-    return `${doc}    ${method}: (id: string) =>\n      transport.one<dto.${identifierOf(call.entity)}>(\`${path}\`),`;
-  }
-  const id = rest.fields.includes("id")
-    ? "body.id === undefined ? undefined : String(body.id)"
-    : "undefined";
-  return [
-    `${doc}    ${method}: (body: dto.${local}, options?: SendOptions) =>`,
-    `      transport.send<dto.${answer}>(`,
-    `        ${JSON.stringify(rest.method)},`,
-    `        pathFor(routes.${method}, ${id}, body),`,
-    `        body,`,
-    `        undefined,`,
-    `        options,`,
-    `      ),`,
-  ].join("\n");
-}
-
 /**
  * The TypeScript of the client of `metamodel`, as the text of one file next to its `domain.ts`.
  *
- * 1. Every operation, by its local name, as data: identity, role, `query`, entities, targets
- *    and the binding of each wire that publishes it.
- * 2. Per operation REST reaches, how a transport calls it (`callOf`): a page, a record, a write
- *    — or none, said in the client's own doc.
- * 3. The routes of the writes, read once (`writeRoute`).
- * 4. When the contract carries them, every domain event as data, by its type's name: its wire
+ * 1. Every operation, by its local name, as data: identity, role, `query`, entities, targets,
+ *    whether it answers bytes, and the binding of each wire that publishes it.
+ * 2. A method per operation, named by `methodOf`: its input — optional when nothing in it is
+ *    required — and the call's options (headers, signal, idempotency key), answering its answer.
+ * 3. When the contract carries them, every domain event as data, by its type's name: its wire
  *    name, and whether the bounded context records it or handles it.
- * Final: `clientOf(transport)`, a method per operation reached, named by `methodOf`; two with
- *    one name are refused, naming both.
+ * Final: `clientOf(transport)` over an `OperationTransport`, bound to each run that uses it; two
+ *    methods with one name are refused, naming both.
  */
 export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}): string {
   const claim = claimed();
-  const operations = sorted(metamodel.operations);
   const data: string[] = [];
-  const routes: string[] = [];
   const methods: string[] = [];
-  const unreached: string[] = [];
-  let lists = false;
-  let paged = false;
-  let reads = false;
-  let sends = false;
-  let downloads = false;
-
-  for (const [identity, operation] of operations) {
+  for (const [identity, operation] of sorted(metamodel.operations)) {
     const local = localOf(metamodel, identity);
-    const rest = restOf(metamodel, identity, options);
-    data.push(dataOf(metamodel, identity, operation, rest));
-    const call = callOf(metamodel, operation, rest);
-    if (call.kind === "none" || rest === undefined) {
-      unreached.push(`\`${local}\`: ${call.kind === "none" ? call.why : ""}.`);
-      continue;
-    }
+    data.push(dataOf(metamodel, identity, operation, restOf(metamodel, identity, options)));
     const method = methodOf(local);
     claim(method, `operation ${identity}`);
-    const doc = docOf([operation.description, deprecationOf(metamodel, operation)], "    ");
-    methods.push(
-      methodSourceOf(local, answerOf(metamodel, identity), method, call, rest, doc),
+    const wires = wiresOf(metamodel, identity);
+    const doc = docOf(
+      [
+        operation.description,
+        deprecationOf(metamodel, operation),
+        wires.length === 0 ? undefined : `Published over ${wires.join(", ")}.`,
+      ],
+      "    ",
     );
-    if (call.kind === "download") {
-      downloads = true;
-      paged = true;
-    }
-    if (call.kind === "list" || call.kind === "read") {
-      paged ||= call.kind === "list";
-      reads ||= call.kind === "read";
-      lists ||= call.path.length + call.query.length > 0;
-    }
-    if (call.kind === "send") {
-      sends = true;
-      routes.push(
-        `  ${method}: writeRoute(${JSON.stringify(`${rest.method} ${rest.path}`)}),`,
-      );
-    }
+    const optional = (operation.input.required ?? []).length === 0;
+    methods.push(
+      [
+        `${doc}    ${method}: (input${optional ? "?" : ""}: dto.${local}, options?: OperationOptions) =>`,
+        `      transport.call<dto.${answerOf(metamodel, identity)}>(operations.${local}, input${optional ? " ?? {}" : ""}, options),`,
+      ].join("\n"),
+    );
   }
 
-  const core = [
-    "bindable",
-    ...(downloads ? ["downloadRoute", "type ExportFormat", "exportRoute"] : []),
-    ...(lists ? ["listRoute"] : []),
-    ...(sends ? ["pathFor"] : []),
-    ...(reads ? ["readRoute"] : []),
-    ...(sends ? ["type SendOptions"] : []),
-    "type Transport",
-    ...(sends ? ["writeRoute"] : []),
-  ];
-  const imports = [
-    ...(paged ? ['import type { Criteria } from "@sincpro/criteria";'] : []),
-    `import { ${core.join(", ")} } from "${FRAMEWORK}";`,
-    "",
-    `import type * as dto from "${DOMAIN_MODULE}";`,
-  ].join("\n");
   const events = sorted(metamodel.events ?? {}).map(
     ([name, event]) =>
       `  ${identifierOf(event.title)}: { name: ${JSON.stringify(name)}, recorded: ${event.recorded}, handled: ${event.handled} },`,
   );
+
+  const imports = [
+    `import { bindable, type OperationOptions, type OperationTransport } from "${FRAMEWORK}";`,
+    "",
+    `import type * as dto from "${DOMAIN_MODULE}";`,
+  ].join("\n");
   const client = [
     "/**",
-    ` * «${aliasOf(metamodel)}» over a transport: a method for each operation REST reaches as a`,
-    " * page, a record, a read of its own or a write. Used by a Feature, each request carries the",
-    " * trace and the context of the use case that sent it (`bindable`).",
-    ...(unreached.length === 0
-      ? []
-      : [" *", " * Without a method here:", ...unreached.map((one) => ` * - ${one}`)]),
+    ` * «${aliasOf(metamodel)}» over any wire: a method per operation, called by who it is. The transport`,
+    " * decides how it travels — `restOperations(restTransport(…))`, `jsonRpcOperations(…)`, a",
+    " * platform's —; used by a Feature, each call carries the run's trace, context and signal.",
     " */",
   ].join("\n");
 
@@ -275,7 +152,6 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
       : [
           `/** Every domain event of «${aliasOf(metamodel)}» in the contract, as data: its wire name, and whether it records or handles it. */\nexport const events = {\n${events.join("\n")}\n} as const;`,
         ]),
-    ...(routes.length === 0 ? [] : [`const routes = {\n${routes.join("\n")}\n};`]),
-    `${client}\nexport function clientOf(transport: Transport) {\n  return bindable(transport, (transport) => ({\n${methods.join("\n")}\n  }));\n}`,
+    `${client}\nexport function clientOf(transport: OperationTransport) {\n  return bindable(transport, (transport) => ({\n${methods.join("\n")}\n  }));\n}`,
   ].join("\n\n")}\n`;
 }

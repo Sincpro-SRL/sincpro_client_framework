@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 
-import { configureProcess, processContext, restTransport } from "@sincpro/client-framework";
+import {
+  configureProcess,
+  processContext,
+  restOperations,
+  restTransport,
+} from "@sincpro/client-framework";
 import { memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
 
@@ -15,13 +20,15 @@ test("the generated client is an injected adapter, not the local application ser
   configureProcess({ tracer });
   processContext.set({ tenant_id: "acme" });
   const client = clientOf(
-    restTransport({
-      document: null,
-      fetch: async (url, init) => {
-        requests.push(new Request(new URL(String(url), "https://example.test"), init));
-        return Response.json({ issue_id: "x", resolution: "cancelled" });
-      },
-    }),
+    restOperations(
+      restTransport({
+        document: null,
+        fetch: async (url, init) => {
+          requests.push(new Request(new URL(String(url), "https://example.test"), init));
+          return Response.json({ issue_id: "x", resolution: "cancelled" });
+        },
+      }),
+    ),
   );
   const project = projectOf({ client, access: { requireCancellation() {} } });
   project.context.set({ company_id: 2 });

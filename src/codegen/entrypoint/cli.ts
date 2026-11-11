@@ -18,7 +18,7 @@ import { scaffoldFilesOf } from "@sincpro/client-framework/codegen/services/scaf
  *
  * - `domain.ts`: the DTOs, only types — and the domain events with `DomainEvent`, their union,
  *   when the contract was exported with them (`export-client-contract --events`);
- * - `client.ts`: every operation (and event) as data, and `clientOf(transport)`;
+ * - `client.ts`: every operation (and event) as data, and `clientOf(operations)` over any wire;
  * - `entities.ts`: an `entity<T, C>()` per model a screen can list;
  * - `contract.json`: the snapshot they were written from, for `metasOf`.
  *
@@ -30,7 +30,7 @@ import { scaffoldFilesOf } from "@sincpro/client-framework/codegen/services/scaf
  */
 const USAGE = [
   "usage: sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]",
-  "       sincpro-client scaffold <contract.json> --out <dir> [--transport <module>]",
+  "       sincpro-client scaffold <contract.json> --out <dir> [--operations <module>]",
   "       sincpro-client check [--root src] [--tsconfig tsconfig.json]",
 ].join("\n");
 
@@ -52,7 +52,7 @@ function parsed(args: readonly string[]):
       source: string;
       out: string;
       options: GenerateOptions;
-      transport: string | undefined;
+      operations: string | undefined;
     }
   | undefined {
   const [command, source, ...rest] = args;
@@ -67,7 +67,7 @@ function parsed(args: readonly string[]):
   }
   const out = flags.get("--out");
   const known = new Set(
-    command === "generate" ? ["--out", "--domain", "--base"] : ["--out", "--transport"],
+    command === "generate" ? ["--out", "--domain", "--base"] : ["--out", "--operations"],
   );
   if (out === undefined || [...flags.keys()].some((one) => !known.has(one))) return undefined;
   const domain = flags.get("--domain");
@@ -80,13 +80,13 @@ function parsed(args: readonly string[]):
       ...(domain === undefined ? {} : { domain }),
       ...(base === undefined ? {} : { base }),
     },
-    transport: flags.get("--transport"),
+    operations: flags.get("--operations"),
   };
 }
 
 /** The skeleton, each file only when it is not there: what is there is the application's. */
-function scaffold(metamodel: Metamodel, out: string, transport: string | undefined): number {
-  const files = scaffoldFilesOf(metamodel, transport === undefined ? {} : { transport });
+function scaffold(metamodel: Metamodel, out: string, operations: string | undefined): number {
+  const files = scaffoldFilesOf(metamodel, operations === undefined ? {} : { operations });
   const written: string[] = [];
   const kept: string[] = [];
   for (const [name, source] of Object.entries(files)) {
@@ -145,7 +145,7 @@ function main(args: readonly string[]): number {
     return 2;
   }
   const metamodel = JSON.parse(readFileSync(asked.source, "utf8")) as Metamodel;
-  if (asked.command === "scaffold") return scaffold(metamodel, asked.out, asked.transport);
+  if (asked.command === "scaffold") return scaffold(metamodel, asked.out, asked.operations);
   const files: Record<string, string> = { "domain.ts": domainFileOf(metamodel) };
   if (metamodel.bindings !== undefined) {
     files["client.ts"] = clientFileOf(metamodel, asked.options);

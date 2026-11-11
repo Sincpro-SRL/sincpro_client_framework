@@ -1,4 +1,9 @@
 import type {
+  OperationOptions,
+  OperationTransport,
+  RemoteOperation,
+} from "@sincpro/client-framework/client/domain/operation";
+import type {
   CallOptions,
   SendOptions,
   Transport,
@@ -82,24 +87,61 @@ export function bindTransport(transport: Transport, execution: Execution): Trans
 }
 
 /**
+ * The operation transport, calling as `execution`: every call carries the run's trace and
+ * context as headers and is cancelled with the run — the caller's own headers and signal still
+ * win.
+ */
+export function bindOperations(
+  transport: OperationTransport,
+  execution: Execution,
+): OperationTransport {
+  const own = headersOf(execution);
+  const cancels = execution.signal;
+  if (Object.keys(own).length === 0 && cancels === undefined) return transport;
+  return {
+    call: <T>(operation: RemoteOperation, input: unknown, options?: OperationOptions) =>
+      transport.call<T>(operation, input, {
+        ...options,
+        headers: { ...own, ...options?.headers },
+        ...((options?.signal ?? cancels) ? { signal: options?.signal ?? cancels } : {}),
+      }),
+  };
+}
+
+/** A transport of either kind, bound to `execution`. */
+export function bound<W extends Transport | OperationTransport>(
+  wire: W,
+  execution: Execution,
+): W {
+  return (
+    isTransport(wire)
+      ? bindTransport(wire, execution)
+      : bindOperations(wire as OperationTransport, execution)
+  ) as W;
+}
+
+/**
  * A client made over a transport, made again over the transport bound to each execution it is
- * used in. What a generated `clientOf(transport)` answers, so a Feature that calls
- * `this.client.sendIssue(…)` sends that request with its own trace.
+ * used in. What a generated `clientOf(operations)` answers, so a Feature that calls
+ * `this.client.sendIssue(…)` sends that request with its own trace, context and signal.
  *
- *     export function clientOf(transport: Transport) {
- *       return bindable(transport, (transport) => ({ sendIssue: (body) => transport.send(…) }));
+ *     export function clientOf(operations: OperationTransport) {
+ *       return bindable(operations, (operations) => ({
+ *         sendIssue: (input) => operations.call(operations_.CommandSendIssue, input),
+ *       }));
  *     }
  *
  * Context: it takes the function that makes the client, not the client — rebuilding through
- * `clientOf` itself would make TypeScript infer `clientOf` from its own return.
+ * `clientOf` itself would make TypeScript infer `clientOf` from its own return. A REST
+ * `Transport` binds the same way, for a client written over it by hand.
  */
-export function bindable<T extends object>(
-  transport: Transport,
-  make: (transport: Transport) => T,
+export function bindable<W extends Transport | OperationTransport, T extends object>(
+  wire: W,
+  make: (wire: W) => T,
 ): T {
-  const client = make(transport);
+  const client = make(wire);
   Object.defineProperty(client, BIND, {
-    value: (execution: Execution) => bindable(bindTransport(transport, execution), make),
+    value: (execution: Execution) => bindable(bound(wire, execution), make),
     enumerable: false,
   });
   return client;

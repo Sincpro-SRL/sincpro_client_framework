@@ -6,6 +6,7 @@ import {
   configureProcess,
   memoryTransport,
   processContext,
+  restOperations,
   restTransport,
   type Tracer,
   TransportError,
@@ -117,13 +118,15 @@ test("an injected generated client carries its execution's trace; direct calls d
   configureProcess({ tracer });
   processContext.set({ tenant_id: "acme" });
   const client = clientOf(
-    restTransport({
-      document: null,
-      fetch: async (_url, init) => {
-        sent.push(new Headers(init?.headers));
-        return Response.json({});
-      },
-    }),
+    restOperations(
+      restTransport({
+        document: null,
+        fetch: async (_url, init) => {
+          sent.push(new Headers(init?.headers));
+          return Response.json({});
+        },
+      }),
+    ),
   );
   const context = project.fresh();
   context.addDependency("client", client, { replaces: context.deps.client });
