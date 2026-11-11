@@ -33,7 +33,7 @@ module has only the layers it needs, and says what it offers in its own `index.t
 | `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation   |
 | `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                    |
 | `src/core/`          | DTOs and events, bus, services, handlers, extension points; pipeline; `BoundedContext`; process |
-| `src/event_driven/`  | `Envelope`, `EventQueue`/`Subscribes` ports; `syncQueue`; `Publisher`, `Subscriber`             |
+| `src/event_driven/`  | `Envelope`, `EventQueue`/`Subscribes` ports; queues; `Publisher`, `Subscriber`, `Subscriptions` |
 | `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed          |
 | `src/testing/`       | The public entry of the in-memory observability adapters                                        |
 | `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts       |
@@ -78,18 +78,35 @@ module has only the layers it needs, and says what it offers in its own `index.t
   unless `Service` is registered now for `dto`; its spans carry `sincpro.replaces`. A service
   meant to be subclassed declares `static readonly serviceName: string = "…"`, or the literal
   type stops a subclass from renaming itself.
-- **How events are carried is here; where they are kept is the platform's.** One subscriber
-  per bounded context; a `Subscriber` executes an event in each. `storedQueue` holds the rules —
-  store first, deliver in order, retry what may succeed, set aside what never will, never run a
-  context twice — over an `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store
-  only keeps records; it never decides.
+- **How events are carried is here; where they are kept is the platform's.** One use case of an
+  event per bounded context, one `EventSubscriber` per event per `Subscriptions`; a `Subscriber`
+  executes an event in each. `storedQueue` holds the rules — store first, deliver in order,
+  retry what may succeed, set aside what never will, never run one who heard it twice — over an
+  `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store only keeps records; it
+  never decides.
+- **A subscriber is an entrypoint, not a use case.** An `EventSubscriber` reads the event and
+  executes Commands on a bounded context it was given, as a cron does on a tick; what to decide,
+  and a workflow of several use cases, is a Feature or an ApplicationService it executes. Its run
+  is layer `entrypoint`: no interceptor wraps it, no listener hears it, no error handler answers
+  it. An event may instead be the input of a use case (`feature(Event)(Service)`) when the use
+  case exists because of it. A `Subscriptions` is named apart from every bounded context: the
+  queue keeps who heard an event by name, and `Subscriber` refuses two of one name.
+- **A bounded context injected into a run is bound to it** (`BIND`): what it executes is a child
+  of the caller — span, flow, cause, signal, one report — with its own dependencies, context and
+  handlers. A failure keeps the outcome where it first failed, so a caller does not report what
+  the callee expected.
+- **A bounded context is named for what it is.** `salesBoundedContext`, never `sales` (an
+  entity?) and never `ctx` or `bc`: `context` is already the run's. The scaffold writes it so.
 - **A circuit belongs where the dependency is.** `CircuitBreaker` (in the process's memory, the
   backend's semantics: `COUNTED_KINDS`, half-open with one probe) guards a transport
   (`guardedTransport`) or an adapter; its `CircuitOpen` declares `unavailable` and a wait, so
   nothing else needs to know a circuit exists.
-- **Delivery is at least once.** A stored event may run twice in a context after a crash; a
-  subscriber keys its effect by `this.execution.causationId` (the envelope's id). `maxAttempts`
-  sets aside what keeps failing. One process drains a store. `execution` is reserved.
+- **Delivery is at least once.** A stored event may run twice after a crash. A use case of the
+  event keys its effect by `this.execution.causationId` (the envelope's id); an `EventSubscriber`
+  finds the same id in its own run and hands it in the Command it executes — the use case's
+  `causationId` is the subscriber's run —, or the effect is keyed by the entity the event names.
+  `maxAttempts` sets aside what keeps failing. One process drains a store. `execution` is
+  reserved.
 - **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the
   `Problem` (the same over REST, JSON-RPC and gRPC), then a REST status. A transport of another
   wire, or another backend's adapter, declares the kind with `kindOfGrpcCode` /
@@ -153,7 +170,7 @@ options)`: no route, no verb, no RPC method. The contract's bindings (`rest`, `r
 - **An error handler answers; it does not observe.** The failure is recorded where it happened —
   span, log line, report — before the layer's handlers run, as in sincpro_framework. A handler
   returns the answer or throws to the next; the global chain wraps only `execute` and `scoped`.
-- **The application layer imports no logger.** A bounded context has `project.logger`; a run
+- **The application layer imports no logger.** A bounded context has `projectBoundedContext.logger`; a run
   hands `this.logger`, bound to its execution. Only `logger` (infrastructure, the global one) and
   `loggerAdapter` are predefined; injected as a dependency they bind to the run (`BIND`), imported
   at module level they do not. No logger is predefined for an application layer. Console is the

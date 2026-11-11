@@ -6,7 +6,11 @@ import type {
   Subscribes,
 } from "@sincpro/client-framework/event_driven/domain/queue";
 
-/** What the subscriber needs of a bounded context: whether it hears an event, and running it. */
+/**
+ * What the subscriber needs of whoever hears events — a bounded context (a use case of the event)
+ * or `Subscriptions` (an `EventSubscriber` of it): its name, whether it hears an event, and
+ * running it.
+ */
 export type HearingContext = {
   readonly name: string;
   handlerOf(dto: abstract new (...args: never[]) => DomainEvent): unknown;
@@ -15,19 +19,32 @@ export type HearingContext = {
 };
 
 /**
- * Hands an event to every bounded context that hears it — the backend's `Subscriber(buses)`:
+ * The door of a queue: hands an event to everyone who hears it — the backend's
+ * `Subscriber(buses)`:
  *
- *     const subscriber = new Subscriber(shop, mail, stock);
+ *     const subscriber = new Subscriber(shopBoundedContext, mailBoundedContext, ticketsSubscriptions);
  *     const queue = syncQueue(subscriber);              // or a platform's durable queue
  *
- * Context: one subscriber per bounded context (its Feature or ApplicationService registered for
- * the event class); several contexts hearing one event is several executions, one each, in the
- * order named. A context that fails does not stop the others: each answer, or failure, is said.
+ * Context: who hears an event is a bounded context with a use case of it (a Feature or an
+ * ApplicationService registered for its class) or `Subscriptions` with an `EventSubscriber` of
+ * it — the entrypoint that calls use cases. Several hearing one event is several executions, one
+ * each, in the order named; one that fails does not stop the others: each answer, or failure, is
+ * said under its name — which a stored queue keeps, so a redelivery never runs again one that
+ * already heard it. Two of them never share a name.
  */
 export class Subscriber implements Subscribes {
   private readonly contexts: readonly HearingContext[];
 
   constructor(...contexts: HearingContext[]) {
+    const names = new Set<string>();
+    for (const context of contexts) {
+      if (names.has(context.name)) {
+        throw new Error(
+          `Two of those who hear events are named ${context.name}: the queue keeps who heard an event by its name`,
+        );
+      }
+      names.add(context.name);
+    }
     this.contexts = contexts;
   }
 

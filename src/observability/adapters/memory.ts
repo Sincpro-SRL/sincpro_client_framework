@@ -18,7 +18,7 @@ import type {
  *
  *     const tracer = memoryTracer();
  *     configureProcess({ tracer });
- *     await project.execute(new CommandCloseIssue("issue-1"));
+ *     await projectBoundedContext.execute(new CommandCloseIssue("issue-1"));
  *     tracer.spans.map((one) => one.name);   // ["project/CloseIssue", "project/Store", …]
  *
  * Context: a use case is proven in Node with nothing of a platform; these are the platform's

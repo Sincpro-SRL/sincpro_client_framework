@@ -10,7 +10,7 @@ import type { Span } from "@sincpro/client-framework/observability/domain/tracin
  * registered Command — or domain event, as its subscriber —; an ApplicationService composes its
  * context's Features.
  *
- *     @project.feature(CommandCancelIssue)
+ *     @projectBoundedContext.feature(CommandCancelIssue)
  *     class CancelIssue extends Feature<CommandCancelIssue, ResponseCancelIssue> {
  *       static readonly serviceName = "CancelIssue";
  *       async execute(command: CommandCancelIssue) {
@@ -37,9 +37,10 @@ export abstract class Feature<
   /** What cancels this run, when it was executed with one: check it in a long loop. */
   declare readonly signal: AbortSignal | undefined;
   /**
-   * This run: its id, use case, flow (`correlationId`) and cause. A subscriber of a delivered
-   * event finds the envelope's id as `causationId` — the key that makes executing it twice
-   * harmless.
+   * This run: its id, use case, flow (`correlationId`) and cause. A use case of a delivered event
+   * finds the envelope's id as `causationId` — the key that makes executing it twice harmless; a
+   * use case an `EventSubscriber` executes finds the subscriber's run, so the subscriber hands the
+   * envelope's id in the Command when the effect must not repeat.
    */
   declare readonly execution: Execution;
   abstract execute(command: C): R | Promise<R>;

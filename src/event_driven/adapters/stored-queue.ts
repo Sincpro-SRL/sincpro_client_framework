@@ -74,7 +74,7 @@ function described(boundedContext: string, error: unknown): DeliveryFailure {
  * each platform plugs.
  *
  *     const queue = storedQueue({ store: sqliteEventStore(db), subscriber, ready: online });
- *     shop.addDependency("publisher", new Publisher(queue));
+ *     shopBoundedContext.addDependency("publisher", new Publisher(queue));
  *     connectivity.onBack(() => queue.drain());
  *
  * Context: what a phone did by hand in its event bus, the same on every platform. `publish`
@@ -93,9 +93,10 @@ function described(boundedContext: string, error: unknown): DeliveryFailure {
  *    refused it for good or ran out of attempts; `onSettled` hears either.
  *
  * Delivery is at least once: a process that stops after a context executed an event and before
- * the store saved it executes it there again on the next drain. A subscriber that must not act
- * twice keys what it does by the envelope's id — `this.execution.causationId` in its run. And one
- * process drains a store: two tabs over one IndexedDB claim it first (the Web Locks API).
+ * the store saved it executes it there again on the next drain. What must not act twice keys what
+ * it does by the envelope's id — `this.execution.causationId` in a use case of the event, or in an
+ * `EventSubscriber`, which hands it to the Command it executes — or by the entity the event names.
+ * And one process drains a store: two tabs over one IndexedDB claim it first (the Web Locks API).
  */
 export function storedQueue(options: StoredQueueOptions): StoredQueue {
   const { store, subscriber } = options;

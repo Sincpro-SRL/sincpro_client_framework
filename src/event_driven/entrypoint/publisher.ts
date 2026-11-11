@@ -11,7 +11,7 @@ import type { EventQueue } from "@sincpro/client-framework/event_driven/domain/q
  * Puts events into a queue — what a Feature holds to tell whoever listens, as the backend's
  * `Publisher`:
  *
- *     shop.addDependency("publisher", new Publisher(queue));
+ *     shopBoundedContext.addDependency("publisher", new Publisher(queue));
  *     // in a Feature:
  *     await this.publisher.publish(new OrderPaid(order.id));   // its Envelope
  *

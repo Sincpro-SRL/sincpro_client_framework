@@ -5,7 +5,7 @@
  *     class CommandCancelIssue extends Command<ResponseCancelIssue> {
  *       constructor(readonly issue_id: string) { super(); }
  *     }
- *     const answer = await project.execute(new CommandCancelIssue("x"));   // ResponseCancelIssue
+ *     const answer = await projectBoundedContext.execute(new CommandCancelIssue("x"));   // ResponseCancelIssue
  *
  * Context: the backend asks `bus(dto, ResponseType)` for the type; here the Command carries it, so
  * `execute` infers it with no second argument. The association is type-only: absent from a
@@ -34,8 +34,8 @@ export abstract class Command<R> extends DataTransferObject {
  *       static readonly eventName = "shop.order.v1.paid";
  *       constructor(readonly order_id: string) { super(); }
  *     }
- *     project.feature(OrderPaid)(NotifyCustomer);
- *     await project.execute(new OrderPaid("o-1"));
+ *     projectBoundedContext.feature(OrderPaid)(NotifyCustomer);
+ *     await projectBoundedContext.execute(new OrderPaid("o-1"));
  *
  * Context: the backend names an event on the wire by `name`, `<context>.<aggregate>.vN.<fact>`,
  * and defaults it to the class's name; a client is minified, so the name is declared, as

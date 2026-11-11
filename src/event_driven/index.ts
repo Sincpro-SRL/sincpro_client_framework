@@ -7,7 +7,9 @@
  *   domain/      the envelope and the ports: EventQueue, Subscribes, EventStore
  *   adapters/    syncQueue (in the call), storedQueue (store, then deliver, retry, set aside),
  *                memoryEventStore
- *   entrypoint/  Publisher (what a Feature holds), Subscriber (every bounded context that hears)
+ *   entrypoint/  Publisher (what a Feature holds), Subscriber (the queue's door: everyone who
+ *                hears), Subscriptions and EventSubscriber (the entrypoint that hears an event and
+ *                calls use cases)
  */
 export {
   type MemoryEventStore,
@@ -39,3 +41,9 @@ export {
   type HearingContext,
   Subscriber,
 } from "@sincpro/client-framework/event_driven/entrypoint/subscriber";
+export {
+  EventSubscriber,
+  type Subscribing,
+  type SubscriptionOptions,
+  Subscriptions,
+} from "@sincpro/client-framework/event_driven/entrypoint/subscriptions";

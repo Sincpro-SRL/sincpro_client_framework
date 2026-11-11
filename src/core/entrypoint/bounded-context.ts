@@ -1,4 +1,4 @@
-import type { Execution } from "@sincpro/client-framework/context/domain/execution";
+import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
 import type { ContextValues } from "@sincpro/client-framework/context/domain/store";
 import {
   type Context,
@@ -96,12 +96,15 @@ interface Registration {
 /** The error handlers of a bounded context, by where they answer. */
 type Handlers = Readonly<Record<"global" | Layer, readonly ErrorHandler[]>>;
 
+/** How a root run is executed: its options, and — from outside, through `BIND` — who called it. */
+type RootOptions = ExecuteOptions & { readonly caller?: Execution };
+
 type GenerationDispatch = (
   executable: Executable,
   parent?: Execution,
   featureOnly?: boolean,
   scope?: Readonly<object>,
-  options?: ExecuteOptions,
+  options?: RootOptions,
 ) => Promise<unknown>;
 
 /** One generation: the root (through the global handlers) and the dispatch its runs share. */
@@ -109,7 +112,7 @@ type Generation = {
   root: (
     executable: Executable,
     scope: Readonly<object>,
-    options: ExecuteOptions,
+    options: RootOptions,
   ) => Promise<unknown>;
 };
 
@@ -135,22 +138,24 @@ function nameOf(Service: unknown): string {
  * A bounded context: the bus of its Commands and domain events, as sincpro_framework's
  * `UseFramework`.
  *
- *     const project = new BoundedContext<ProjectDependencies>("project");
- *     project.addDependency("client", clientOf(transport));
- *     project.feature(CommandCancelIssue)(CancelIssue);          // or @project.feature(...)
- *     project.feature(IssueClosed)(NotifyWatchers);              // a subscriber of an event
- *     project.feature(CommandCancelIssue, { replaces: CancelIssue })(CancelAndArchive);
- *     project.addFeatureErrorHandler(toEmptyWhenMissing);
- *     project.expectErrors(IssueLocked);                         // refused, never reported
- *     await project.execute(new CommandCancelIssue("x"));        // ResponseCancelIssue
- *     await project.execute(new IssueClosed("x"));               // what its subscriber returns
- *     project.logger.info("Catalog preloaded");
+ *     const projectBoundedContext = new BoundedContext<ProjectDependencies>("project");
+ *     projectBoundedContext.addDependency("client", clientOf(operations));
+ *     projectBoundedContext.feature(CommandCancelIssue)(CancelIssue);   // or a decorator
+ *     projectBoundedContext.feature(IssueClosed)(ArchiveIssue);         // a use case of an event
+ *     projectBoundedContext.feature(CommandCancelIssue, { replaces: CancelIssue })(CancelAndArchive);
+ *     projectBoundedContext.addFeatureErrorHandler(toEmptyWhenMissing);
+ *     projectBoundedContext.expectErrors(IssueLocked);                  // refused, never reported
+ *     await projectBoundedContext.execute(new CommandCancelIssue("x")); // ResponseCancelIssue
+ *     await projectBoundedContext.execute(new IssueClosed("x"));        // what its use case returns
+ *     projectBoundedContext.logger.info("Catalog preloaded");
  *
  * Context: registrations, dependencies, handlers and expected errors are snapshotted per
  * generation; a call keeps the generation it started with, and what is added later answers from
- * the next call — as the backend's `build_root_bus`. A domain event is executed as a Command is:
- * one subscriber per bounded context, through the same pipeline; carrying it to every bounded
- * context that hears it (a queue, an outbox) is the platform's.
+ * the next call — as the backend's `build_root_bus`. A domain event may be the input of a use
+ * case, executed as a Command is: one per bounded context, through the same pipeline. Carrying
+ * it to whoever hears it (a queue, an outbox) is the platform's; an entrypoint that hears it and
+ * calls use cases is an `EventSubscriber`. Injected into another run — an `EventSubscriber`, a
+ * Feature of another bounded context — it is bound to that run (`BIND`).
  */
 export class BoundedContext<
   D extends object = Record<never, never>,
@@ -378,6 +383,33 @@ export class BoundedContext<
     );
   }
 
+  /**
+   * This bounded context as `execution` calls it — what it is as a dependency of another run (an
+   * `EventSubscriber`, a Feature of another bounded context): what it executes is a child of
+   * that run — its span under the caller's, the same flow (`correlationId`), caused by it,
+   * cancelled with it, its errors reported once along it. It still runs with its own
+   * dependencies, context, interceptors and handlers.
+   */
+  [BIND](execution: Execution): this {
+    const caller = execution;
+    const execute = (executable: Executable, second?: unknown) =>
+      this.generation().root(executable, {}, { ...optionsOf(second), caller });
+    const scoped = (context: Partial<C>) => {
+      const scope = { ...context };
+      return new FeatureBus((executable, options) =>
+        this.generation().root(executable, scope, { ...options, caller }),
+      );
+    };
+    return new Proxy(this, {
+      get(target, property) {
+        if (property === "execute") return execute;
+        if (property === "scoped") return scoped;
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
   buildRootBus(): void {
     this.generation();
   }
@@ -415,7 +447,8 @@ export class BoundedContext<
     const heard: ExecutionFailed = {
       executable: at?.executable ?? executable,
       execution: at?.execution,
-      layer: at?.layer,
+      // Listeners hear use cases: a failure an entrypoint's run started says no layer.
+      layer: at?.layer === "entrypoint" ? undefined : at?.layer,
       error,
       outcome,
     };
@@ -572,7 +605,9 @@ export class BoundedContext<
         dependencies,
         context: () => ({ ...processContext.values, ...this.context.values, ...scope }),
         ...(parent ? { parent } : {}),
-        // Only an event comes from outside with a cause; a child continues its parent.
+        // A root called from another run continues it; a child continues its parent.
+        ...(options.caller && !parent ? { caller: options.caller } : {}),
+        // Only an event comes from outside with a cause.
         ...(options.cause && executable instanceof DomainEvent && !parent
           ? { cause: options.cause }
           : {}),
