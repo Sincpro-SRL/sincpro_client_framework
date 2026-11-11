@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 
 import {
   BoundedContext,
+  CircuitBreaker,
   configureProcess,
   DomainEvent,
   Feature,
   memoryEventStore,
+  Money,
   Publisher,
   type StoredEvent,
   storedQueue,
@@ -181,3 +183,98 @@ function envelope(id: string, name = "shop.order.v1.paid") {
     publishedAt: new Date().toISOString(),
   };
 }
+
+test("an event that keeps failing in a way a retry might fix is set aside after maxAttempts", async () => {
+  const seen: string[] = [];
+  const store = memoryEventStore();
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(
+      flaky("mail", [new TypeError("a bug"), new TypeError("a bug")], seen),
+    ),
+    maxAttempts: 2,
+    wait: 1,
+  });
+  await queue.put(new OrderPaid("o-8"), envelope("e-8"));
+  await queue.put(new OrderPaid("o-9"), envelope("e-9"));
+  await queue.drain();
+  assert.equal(store.events[0]?.state, "pending");
+  await pause(1100);
+  await queue.drain();
+  assert.deepEqual(
+    store.events.map((one) => [one.state, one.attempts]),
+    [
+      ["set_aside", 2],
+      ["delivered", 1],
+    ],
+  );
+  assert.equal(store.events[0]?.failures[0]?.kind, "internal");
+  assert.deepEqual(seen, ["mail o-9 true"]);
+});
+
+test("an open circuit makes the queue wait what the circuit asks", async () => {
+  const breaker = new CircuitBreaker("odoo", { failures: 1, openFor: 30_000 });
+  await assert.rejects(
+    breaker.call(() => Promise.reject(new TransportError("/x", 503, null))),
+  );
+  class Push extends Feature<OrderPaid, void> {
+    static readonly serviceName = "Push";
+    execute(): Promise<void> {
+      return breaker.call(() => undefined);
+    }
+  }
+  const sync = new BoundedContext("sync");
+  sync.feature(OrderPaid)(Push);
+  const store = memoryEventStore();
+  const queue = storedQueue({ store, subscriber: new Subscriber(sync), wait: 1 });
+  const before = Date.now();
+  await queue.put(new OrderPaid("o-10"), envelope("e-10"));
+  await queue.drain();
+  const waiting = store.events[0];
+  assert.equal(waiting?.state, "pending");
+  assert.equal(waiting?.failures[0]?.reason, "CIRCUIT_OPEN");
+  assert.ok(Date.parse(waiting?.retryAt ?? "") - before >= 29_000);
+});
+
+test("a subscriber keys what it does by the envelope's id; fromJSON reads a Money back as one", async () => {
+  class InvoicePaid extends DomainEvent {
+    static readonly eventName = "billing.invoice.v1.paid";
+    static fromJSON(values: {
+      invoice_id: string;
+      total: { amount: string; currency: string };
+    }) {
+      return new InvoicePaid(
+        values.invoice_id,
+        new Money(values.total.amount, values.total.currency),
+      );
+    }
+    constructor(
+      readonly invoice_id: string,
+      readonly total: Money,
+    ) {
+      super();
+    }
+  }
+  const keys: (string | undefined)[] = [];
+  const totals: string[] = [];
+  class Record extends Feature<InvoicePaid, void> {
+    static readonly serviceName = "Record";
+    execute(event: InvoicePaid): void {
+      keys.push(this.execution.causationId);
+      totals.push(event.total.plus(new Money("1.00", "BOB")).amount.toString());
+    }
+  }
+  const ledger = new BoundedContext("ledger");
+  ledger.feature(InvoicePaid)(Record);
+  const queue = storedQueue({
+    store: memoryEventStore(),
+    subscriber: new Subscriber(ledger),
+  });
+  await queue.put(
+    new InvoicePaid("i-1", new Money("10.50", "BOB")),
+    envelope("e-11", "billing.invoice.v1.paid"),
+  );
+  await queue.drain();
+  assert.deepEqual(keys, ["e-11"]);
+  assert.deepEqual(totals, ["11.50"]);
+});

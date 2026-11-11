@@ -134,6 +134,7 @@ function serviceView(
       if (property === "span") return execution.span;
       if (property === "logger") return logger;
       if (property === "signal") return execution.signal;
+      if (property === "execution") return execution;
       if (property === "featureBus" && options.layer === "application_service") {
         return (features ??= options.featureBus(execution));
       }
@@ -160,6 +161,7 @@ function serviceView(
         property === "span" ||
         property === "logger" ||
         property === "signal" ||
+        property === "execution" ||
         property === "featureBus" ||
         (typeof property === "string" && options.dependencies.has(property))
       ) {

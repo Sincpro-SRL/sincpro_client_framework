@@ -163,7 +163,11 @@ mobile.
 
 Errors of mobile-odoo declare their kind with the backend's JSON-RPC table
 (`kindOfJsonRpcCode`) or the one they mean (`domain`, `invalid`, `unavailable`): the queue, the
-outcome and the screens then decide the same way as everywhere.
+outcome and the screens then decide the same way as everywhere. A `CircuitBreaker` around the
+Odoo client stops spending battery on a server that does not answer; its `CircuitOpen` tells the
+queue how long to wait. A subscriber that pushes to the server keys the write by the envelope's
+id (`this.execution.causationId`), as the `external_uuid` check does today: delivery is at least
+once.
 
 ## Adoption order
 

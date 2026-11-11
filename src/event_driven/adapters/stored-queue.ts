@@ -25,7 +25,8 @@ export type StoredQueueOptions = {
   readonly subscriber: Subscribes;
   /**
    * How a stored payload becomes its class again. By default, `static fromJSON` when the class
-   * has one, else its values set on an instance of it.
+   * has one, else its values set on an instance of it — as JSON gave them: an event that carries
+   * a `Money`, a `Decimal` or a date declares `fromJSON` to read them back as such.
    */
   readonly rebuild?: (type: EventClass<DomainEvent>, payload: JsonValue) => DomainEvent;
   /**
@@ -37,6 +38,12 @@ export type StoredQueueOptions = {
   readonly wait?: number;
   /** The longest wait between attempts, in ms (one minute). */
   readonly longestWait?: number;
+  /**
+   * How many attempts an event gets before it is set aside although a retry might still fix it
+   * (10): a bug of this process (`internal`) or a dependency gone for good must not hold the line
+   * forever. `Infinity` keeps trying.
+   */
+  readonly maxAttempts?: number;
   /** Told each time an event settles — delivered, set aside, or waiting to retry —: a screen's activity. */
   readonly onSettled?: (stored: StoredEvent) => void;
 };
@@ -80,14 +87,22 @@ function described(boundedContext: string, error: unknown): DeliveryFailure {
  * 4. Executed in every bounded context that hears it and does not have it yet (`reached`).
  * 5. A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
  *    that context aside; any other is tried again after the backoff — or what the failure asks
- *    for (`retryAfter`) —, and what comes after waits, so the order holds.
+ *    for (`retryAfter`, an open circuit's time left) —, and what comes after waits, so the
+ *    order holds; after `maxAttempts`, it is set aside too.
  * Final: delivered when every context has it, set aside — the dead-letter queue — when one
- *    refused it for good; `onSettled` hears either.
+ *    refused it for good or ran out of attempts; `onSettled` hears either.
+ *
+ * Delivery is at least once: a process that stops after a context executed an event and before
+ * the store saved it executes it there again on the next drain. A subscriber that must not act
+ * twice keys what it does by the envelope's id — `this.execution.causationId` in its run. And one
+ * process drains a store: two tabs over one IndexedDB claim it first (the Web Locks API).
  */
 export function storedQueue(options: StoredQueueOptions): StoredQueue {
   const { store, subscriber } = options;
   const firstWait = options.wait ?? 1000;
   const longestWait = options.longestWait ?? 60_000;
+  const maxAttempts = options.maxAttempts ?? 10;
+  if (!(maxAttempts >= 1)) throw new TypeError("A stored queue needs one attempt at least");
   const rebuild = options.rebuild ?? rebuildEvent;
   let draining: Promise<void> | undefined;
   let again = false;
@@ -167,7 +182,7 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
           retryAfter = Math.max(retryAfter, (failure.retryAfter ?? 0) * 1000);
         }
       }
-      if (repeat) {
+      if (repeat && attempts < maxAttempts) {
         const backoff = Math.min(longestWait, firstWait * 2 ** (attempts - 1));
         const at = Date.now() + Math.max(backoff, retryAfter);
         await settle({
