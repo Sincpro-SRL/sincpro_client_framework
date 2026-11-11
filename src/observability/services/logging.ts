@@ -32,7 +32,7 @@ import { observabilityNow } from "@sincpro/client-framework/observability/infras
 /** What a line says about where it was written: its bounded context, and the run when there is one. */
 type Correlation = Pick<
   LogRecord,
-  "boundedContext" | "useCase" | "executionId" | "traceId" | "spanId"
+  "boundedContext" | "useCase" | "executionId" | "correlationId" | "traceId" | "spanId"
 >;
 
 const processSink = (): Logger | undefined => observabilityNow().logger;
@@ -53,6 +53,7 @@ function correlationOf(execution: Execution): Correlation {
     boundedContext: execution.boundedContext,
     useCase: execution.useCase,
     executionId: execution.id,
+    correlationId: execution.correlationId,
     ...(execution.span.traceId ? { traceId: execution.span.traceId } : {}),
     ...(execution.span.spanId ? { spanId: execution.span.spanId } : {}),
   };

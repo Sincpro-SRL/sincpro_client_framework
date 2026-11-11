@@ -25,17 +25,18 @@ Each module is laid out as sincpro_framework's are: `domain/` (ports, types and 
 (the process's state and technical support) and `entrypoint/` (the doors a caller uses). A
 module has only the layers it needs, and says what it offers in its own `index.ts`.
 
-| Folder               | What                                                                                           |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt`  |
-| `src/context/`       | `ContextStore`, codec, `Execution` (domain); memory and plain codec; `Context`; the process's  |
-| `src/observability/` | Tracer/ErrorReporter/Logger ports; console, memory, OpenTelemetry, Sentry; loggers, reporting  |
-| `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation  |
-| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                   |
-| `src/core/`          | DTOs, bus, Feature/ApplicationService, error handlers; pipeline; `BoundedContext`; the process |
-| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed         |
-| `src/testing/`       | The public entry of the in-memory observability adapters                                       |
-| `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts      |
+| Folder               | What                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| `src/common/`        | The values of the wire: ids, a day and an instant, `Decimal`, `Money`, `valuesOf` / `rebuilt`   |
+| `src/context/`       | `ContextStore`, codec, `Execution` (domain); memory and plain codec; `Context`; the process's   |
+| `src/observability/` | Tracer/ErrorReporter/Logger ports; console, memory, OpenTelemetry, Sentry; loggers, reporting   |
+| `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation   |
+| `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                    |
+| `src/core/`          | DTOs and events, bus, services, handlers, extension points; pipeline; `BoundedContext`; process |
+| `src/event_driven/`  | `Envelope`, `EventQueue`/`Subscribes` ports; `syncQueue`; `Publisher`, `Subscriber`             |
+| `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed          |
+| `src/testing/`       | The public entry of the in-memory observability adapters                                        |
+| `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts       |
 
 ## Hard rules (the build enforces them — `make doctor`)
 
@@ -70,7 +71,24 @@ module has only the layers it needs, and says what it offers in its own `index.t
   instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
 - **A span uses stable service metadata, not constructor.name.** `serviceName = "Cancel"` gives
-  `project/Cancel`, identity `project.Cancel`. Commands route by exact constructor identity.
+  `project/Cancel`, identity `project.Cancel`. Commands and events route by exact constructor
+  identity. An event declares `static eventName` (its wire name) for the same reason; `name` is
+  reserved for it.
+- **A replacement names what it replaces.** `feature(dto, { replaces: Service })` is refused
+  unless `Service` is registered now for `dto`; its spans carry `sincpro.replaces`. A service
+  meant to be subclassed declares `static readonly serviceName: string = "…"`, or the literal
+  type stops a subclass from renaming itself.
+- **Events are published and executed here; stored and retried by the platform.** One
+  subscriber per bounded context; a `Subscriber` executes an event in each. A durable queue is
+  an `EventQueue` adapter of the platform's: it stores the event with its envelope, asks
+  `eventTypeOf(name)`, rebuilds it and calls `subscriber.handle(event, envelope)`.
+- **A run belongs to a flow.** `correlationId` is shared by every run and event of one flow;
+  `causationId` names what directly caused it. A dependency carrying `BIND` (the `Publisher`)
+  is bound to the run, so what it publishes joins that flow with nothing passed by hand.
+- **The pipeline is closed for modification, open for extension.** Change the flow in
+  `executeService` only for every run; what one application needs goes through an interceptor
+  (control, inside the run, keeps the class), a listener (observation, never changes the
+  answer, its failure ignored) or `extend`.
 - **Dependency declarations do not register anything.** Service bases declare typed attributes
   from a shared dependency interface. Only `addDependency` supplies runtime values; a missing
   dependency fails explicitly.

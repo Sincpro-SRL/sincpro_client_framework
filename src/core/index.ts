@@ -12,11 +12,29 @@ export { type CommandBus, FeatureBus } from "@sincpro/client-framework/core/doma
 export {
   Command,
   DataTransferObject,
+  DomainEvent,
+  type EventClass,
   Response,
 } from "@sincpro/client-framework/core/domain/dto";
 export type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
+export type {
+  CallNext,
+  Cause,
+  ExecutionCompleted,
+  ExecutionFailed,
+  ExecutionStarted,
+  Extension,
+  InterceptedRun,
+  Interceptor,
+  Listener,
+  PipelineLayer,
+} from "@sincpro/client-framework/core/domain/pipeline";
 export { ApplicationService, Feature } from "@sincpro/client-framework/core/domain/services";
-export { BoundedContext } from "@sincpro/client-framework/core/entrypoint/bounded-context";
+export {
+  BoundedContext,
+  type Registrar,
+  type RegistrationOptions,
+} from "@sincpro/client-framework/core/entrypoint/bounded-context";
 export { screensTransport } from "@sincpro/client-framework/core/entrypoint/screens";
 export {
   configureLogger,

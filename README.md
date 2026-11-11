@@ -7,6 +7,8 @@ the same way, and a typed client generated from a service's contract. No React, 
 platform storage: what a platform must give, it gives through a port.
 
 - [A bounded context](#a-bounded-context)
+- [Domain events](#domain-events)
+- [Extending the pipeline](#extending-the-pipeline)
 - [Errors](#errors)
 - [Observability](#observability)
 - [Context](#context)
@@ -102,6 +104,123 @@ The same functions work as standard decorators and as legacy ones (`experimental
 without a decorator transform, call them: `sales.feature(CommandTotal)(Total)`. No DI library
 and no `reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's
 transform (Vite, Metro/Babel) is each application's to configure and test.
+
+### Replacing a service
+
+An application takes the place of a service a module registered, as the backend's `replaces=`:
+
+```ts
+class PrintOnBixolon extends Print {
+  static override readonly serviceName = "PrintOnBixolon";
+  override execute(command: CommandPrint) { … }
+}
+printing.feature(CommandPrint, { replaces: Print })(PrintOnBixolon);
+printing.handlerOf(CommandPrint); // PrintOnBixolon
+```
+
+`replaces` names the service registered now for that class, or the registration is refused. The
+next call answers with the new one; its spans say which it replaced (`sincpro.replaces`). A
+service meant to be replaced by a subclass widens its name — `static readonly serviceName:
+string = "Print"` —, or TypeScript keeps the literal and the subclass cannot rename itself. A
+dependency is replaced the same way: `addDependency(name, next, { replaces: previous })`.
+
+## Domain events
+
+A fact that already happened — `OrderPaid` — is executed as a Command is: by the Feature or
+ApplicationService registered for its class, its subscriber in this bounded context, through
+the same pipeline (span, log lines, error handlers, report):
+
+```ts
+class OrderPaid extends DomainEvent {
+  static readonly eventName = "shop.order.v1.paid"; // its wire name, as the backend's `name`
+  constructor(readonly order_id: string) {
+    super();
+  }
+}
+
+class ThankCustomer extends Feature<OrderPaid, void> {
+  static readonly serviceName = "ThankCustomer";
+  async execute(event: OrderPaid) { … }
+}
+
+shop.feature(OrderPaid)(ThankCustomer);
+await shop.execute(new OrderPaid("o-1")); // span shop/ThankCustomer, sincpro.event = its name
+```
+
+- **`eventName` is declared**, as `serviceName` is: a minifier renames classes. `event.name`
+  reads it; `name` is reserved, and a subclass cannot make it a field.
+- **One subscriber per bounded context.** Another context that hears the event registers its
+  own; a `Subscriber` executes it in each.
+- An ApplicationService can subscribe too, and compose Features — of Commands or of events —
+  through `featureBus`. `execute(event)` answers whatever the subscriber returns (`unknown`).
+
+### Publishing and subscribing
+
+```ts
+import { Publisher, Subscriber, syncQueue } from "@sincpro/client-framework";
+
+const subscriber = new Subscriber(mail, stock); // every bounded context that hears
+const queue = syncQueue(subscriber); // in the call, in memory — or a platform's
+shop.addDependency("publisher", new Publisher(queue));
+
+class Pay extends Feature<CommandPay, string> {
+  declare readonly publisher: Publisher;
+  async execute(command: CommandPay) {
+    await this.publisher.publish(new OrderPaid(command.order_id)); // its Envelope
+    return command.order_id;
+  }
+}
+```
+
+The `Publisher` is bound to the run that holds it, so the event joins that run's flow: its
+envelope carries the run's `correlationId` and names the run as its cause. The `Subscriber`
+executes it in `mail` and in `stock` — `context.execute(event, envelope)` —, so their runs
+continue the same flow; one that fails does not stop the others.
+
+What is defined here, and what each platform plugs behind the ports:
+
+| Piece                     | Here                                                        | The platform's                                                                 |
+| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `DomainEvent`, subscriber | the class, its `eventName`, its execution                   | —                                                                              |
+| `Envelope`                | `name`, `id`, `correlationId`, `causationId`, `publishedAt` | storing it beside the event                                                    |
+| `EventQueue` port         | `syncQueue`: in the call, in memory                         | mobile: SQLite, retries, DLQ, connectivity; web: IndexedDB, `BroadcastChannel` |
+| `Subscribes` port         | `Subscriber(...contexts)`, `eventTypeOf(name)`              | rebuilding a stored event as its class                                         |
+
+The events a remote service publishes arrive as generated types (`DomainEvent` in
+`generated/domain.ts`, a union narrowed by `name`); a local event is a class, like a local
+Command.
+
+## Extending the pipeline
+
+The flow of a run is the core's — context, chain, span, log lines, outcome, report, handlers —,
+and an application changes or hears it from outside, as the backend's `bus_pipeline`:
+
+```ts
+// control: around the service — look, veto (throw), adjust (same class), or answer
+shop.interceptor(CommandPay)(async (command, next, run) => {
+  if (!credit.allows(command.customer_id)) throw new NoCredit();
+  return next(command);
+});
+shop.interceptor()((executable, next, run) => next(executable)); // every class
+
+// observation: never changes the answer
+shop.onStart((started) => activity.running(started.execution.useCase));
+shop.onCompletion((done) => activity.succeeded(done.execution.useCase), CommandPay);
+shop.onFailure((failed) => activity.failed(failed.execution?.useCase, failed.outcome));
+
+// composition: a module or plugin wires its pieces in one place
+shop.extend(auditing);
+```
+
+- **Interceptors** run inside the run, outermost first in the order registered: a veto is the
+  use case's failure — observed, answered by the error handlers. What an interceptor passes on
+  keeps its class (the bus routes by class); `run` gives it the use case, the execution and its
+  logger. `withoutInterceptor(fn)` stops one; registered later, it wraps from the next call.
+- **Listeners** hear each run start and each service that answered, filtered by class when
+  named; a failure is heard once, when it escapes the call after every handler, from where it
+  first failed. One that throws is ignored. Each `on…` answers how to stop.
+- **`extend(fn)`** is `fn(context)`, said as composition; `fresh()` copies everything an
+  extension registered.
 
 ## Errors
 
@@ -358,10 +477,15 @@ src/
     services/        discovery, retry keys, propagation of trace and context
   model/           defineMeta, metaFromSchema, metaStore
   core/
-    domain/          Command, Response, Feature, ApplicationService, FeatureBus, ErrorHandler
-    services/        the execution pipeline, dependency binding, the handler chain
+    domain/          Command, DomainEvent, Response, Feature, ApplicationService, FeatureBus,
+                     ErrorHandler, the pipeline's extension points
+    services/        the execution pipeline, interceptors, dependency binding, the handler chain
     entrypoint/      BoundedContext, screensTransport
     infrastructure/  configureProcess, configureLogger
+  event_driven/
+    domain/          Envelope, the EventQueue and Subscribes ports
+    adapters/        syncQueue: in the call, in memory
+    entrypoint/      Publisher, Subscriber
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger
 ```
@@ -397,8 +521,8 @@ The runtime uses `fetch`, `AbortSignal`, `URL`, `crypto.getRandomValues`, `Proxy
 
 Read [`MANIFESTO.md`](MANIFESTO.md) (what this package is and is not), [`AGENTS.md`](AGENTS.md)
 (how to change it), [`CONTRIBUTING.md`](CONTRIBUTING.md),
-[`docs/UBIQUITOUS_LANGUAGE.md`](docs/UBIQUITOUS_LANGUAGE.md) and
-[`docs/MOBILE.md`](docs/MOBILE.md). Versions are written by the release pipeline.
+[`docs/UBIQUITOUS_LANGUAGE.md`](docs/UBIQUITOUS_LANGUAGE.md),
+[`docs/WEB.md`](docs/WEB.md) and [`docs/MOBILE.md`](docs/MOBILE.md). Versions are written by the release pipeline.
 
 ## License
 

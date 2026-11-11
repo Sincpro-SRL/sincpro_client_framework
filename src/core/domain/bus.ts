@@ -1,22 +1,22 @@
 import type {
-  AnyCommand,
   Command,
+  DomainEvent,
+  Executable,
   ResponseClass,
 } from "@sincpro/client-framework/core/domain/dto";
 
-/** What executes a Command: the bounded context, a scope of it, an ApplicationService's features. */
+/**
+ * What executes a Command or a domain event: the bounded context, a scope of it, an
+ * ApplicationService's features. A Command answers its Response; an event, whatever its
+ * subscriber returns.
+ */
 export interface CommandBus {
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
+  execute(event: DomainEvent): Promise<unknown>;
 }
 
-/** @internal — how a bus hands a Command to its generation. */
-export type Dispatch = (command: AnyCommand) => Promise<unknown>;
-
-/** @internal — the heterogeneous registry erases the type; registration checks the association. */
-export async function executeTyped<R>(dispatch: Dispatch, command: Command<R>): Promise<R> {
-  // As with Python's return_type, this does not validate the returned data at runtime.
-  return (await dispatch(command)) as R;
-}
+/** @internal — how a bus hands what it executes to its generation. */
+export type Dispatch = (executable: Executable) => Promise<unknown>;
 
 /**
  * What an ApplicationService composes its context's Features through (`this.featureBus`): the
@@ -25,7 +25,10 @@ export async function executeTyped<R>(dispatch: Dispatch, command: Command<R>): 
 export class FeatureBus implements CommandBus {
   constructor(private readonly dispatch: Dispatch) {}
 
-  execute<R>(command: Command<R>, _returnType?: ResponseClass<NoInfer<R>>): Promise<R> {
-    return executeTyped(this.dispatch, command);
+  execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
+  execute(event: DomainEvent): Promise<unknown>;
+  execute(executable: Executable): Promise<unknown> {
+    // As with Python's return_type, the answer is not validated at runtime.
+    return this.dispatch(executable);
   }
 }

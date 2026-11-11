@@ -12,7 +12,9 @@
  *   observability/  tracing, error reporting and logging: ports, console, loggers
  *   client/         the seam with a server: transports, entities, the client contract
  *   model/          model definitions
- *   core/           Commands, Features, ApplicationServices, BoundedContext, the process
+ *   core/           Commands, events, Features, ApplicationServices, BoundedContext, the
+ *                   pipeline's extension points, the process
+ *   event_driven/   publishing and subscribing to domain events: ports, Publisher, Subscriber
  *
  * The generator is `@sincpro/client-framework/codegen`, and the in-memory observability
  * `@sincpro/client-framework/testing`: neither is part of what an application runs.
@@ -21,5 +23,6 @@ export * from "@sincpro/client-framework/client";
 export * from "@sincpro/client-framework/common";
 export * from "@sincpro/client-framework/context";
 export * from "@sincpro/client-framework/core";
+export * from "@sincpro/client-framework/event_driven";
 export * from "@sincpro/client-framework/model";
 export * from "@sincpro/client-framework/observability";
