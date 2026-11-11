@@ -17,11 +17,11 @@ import { observabilityNow } from "@sincpro/client-framework/observability/infras
  *
  *     logger.info("Database opened")                   // infrastructure — the global logger
  *     loggerAdapter.debug("Printer answered", { ms })  // an adapter
- *     project.logger.info("Catalog preloaded")         // a bounded context, outside a use case
+ *     projectBoundedContext.logger.info("Catalog preloaded")         // a bounded context, outside a use case
  *     this.logger.info("Order checked")                // a Feature or ApplicationService
  *
  * Context: the application layer has no logger to import. A bounded context owns its own
- * (`project.logger`, named after it, as sincpro_framework's `bus.logger`), and a run hands its
+ * (`projectBoundedContext.logger`, named after it, as sincpro_framework's `bus.logger`), and a run hands its
  * Features and ApplicationServices one bound to that execution (`this.logger`), which carries the
  * use case, the execution and its trace on every line. `logger` and `loggerAdapter` are for the
  * code around the use cases; injected as a dependency they are bound to each run too (`BIND`).
@@ -93,16 +93,16 @@ export const logger: LayerLogger = layerLogger("infrastructure", processSink);
 /** The adapters' logger: what talks to a printer, a database, another system. */
 export const loggerAdapter: LayerLogger = layerLogger("adapter", processSink);
 
-/** @internal — a bounded context's own logger (`project.logger`). */
+/** @internal — a bounded context's own logger (`projectBoundedContext.logger`). */
 export function boundedContextLogger(name: string): LayerLogger {
   return layerLogger("bounded_context", processSink, { boundedContext: name });
 }
 
-/** @internal — what a Feature or ApplicationService finds as `this.logger` while it runs. */
-export function executionLogger(
-  layer: "feature" | "application_service",
-  execution: Execution,
-): LayerLogger {
+/** A run's layer: an entrypoint's (an `EventSubscriber`), a Feature's or an ApplicationService's. */
+type RunLogLayer = Extract<LogLayer, "entrypoint" | "feature" | "application_service">;
+
+/** @internal — what a run (a use case, an entrypoint) finds as `this.logger` while it runs. */
+export function executionLogger(layer: RunLogLayer, execution: Execution): LayerLogger {
   return layerLogger(layer, processSink, correlationOf(execution));
 }
 
@@ -117,7 +117,7 @@ export function combineLoggers(...loggers: readonly Logger[]): Logger {
 
 /** @internal — lifecycle records contain correlation and outcome, never business payloads. */
 export function logExecution(
-  layer: "feature" | "application_service",
+  layer: RunLogLayer,
   execution: Execution,
   completed?: { outcome: Outcome; durationMs: number },
 ): void {

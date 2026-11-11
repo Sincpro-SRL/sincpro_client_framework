@@ -48,7 +48,7 @@ server-side render, in a script and in a test, unchanged.**
    in a global stack: two calls at once never mix their parents.
 5. **Bounded contexts.** Set up like the backend's — its dependencies (`addDependency`), its
    Features and ApplicationServices, registered for class DTOs — and called as
-   `project.execute(new Command(...))`. The bounded context is the bus. An application is the set
+   `projectBoundedContext.execute(new Command(...))`. The bounded context is the bus. An application is the set
    of bounded contexts it loads; they never import each other's insides.
 6. **The client.** The `OperationTransport` port — an operation called by who it is, over any
    wire — with its REST and JSON-RPC adapters (a platform adds gRPC or its own); the `Transport`
@@ -67,16 +67,18 @@ server-side render, in a script and in a test, unchanged.**
 10. **The command core (`./core`).** The single model matching the backend's application
     abstractions: class DTOs and Responses, a bounded context that is a bus, Features and
     ApplicationServices registered for DTO classes, attribute-injected dependencies and a
-    feature bus for composition, domain events executed by their subscribers, replacements,
+    feature bus for composition, domain events as the input of a use case, replacements,
     and the backend's error handlers — global, feature and application service — with the
     errors a bounded context expects. The internal engine uses
     the injected process ports. Remote clients and mapping remain distinct.
 11. **Event-driven, as ports (`event_driven`).** How every platform publishes domain events and
     subscribes to them the same way: the envelope that travels beside an event (its flow and
-    its cause), the `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, a
-    `Subscriber` over the bounded contexts that hear, the queue that delivers in the call, and
-    the stored queue's rules over an `EventStore` the platform plugs. The guidelines, the rules
-    and the contracts are here; where events are kept is the platform's.
+    its cause), the `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, the
+    `EventSubscriber` — the entrypoint that hears an event and calls use cases, as a cron does on
+    a tick — and its `Subscriptions`, a `Subscriber` over everyone who hears, the queue that
+    delivers in the call, and the stored queue's rules over an `EventStore` the platform plugs.
+    The guidelines, the rules and the contracts are here; where events are kept is the
+    platform's.
 12. **Resilience.** What a failure is (`failureOf`, the backend's kinds on every wire) and the
     backend's circuit breaker, guarding any transport or adapter.
 

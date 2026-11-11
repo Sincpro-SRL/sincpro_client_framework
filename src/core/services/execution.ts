@@ -27,11 +27,13 @@ import {
 } from "@sincpro/client-framework/observability/services/logging";
 import { firstReport } from "@sincpro/client-framework/observability/services/reporting";
 
-export interface RuntimeService {
-  execute(command: object): unknown;
-}
+/**
+ * Where a run sits: a use case's layer (`PipelineLayer`), or an entrypoint that calls use cases —
+ * an `EventSubscriber`. Interceptors wrap and listeners hear use cases only.
+ */
+export type RunLayer = PipelineLayer | "entrypoint";
 
-type Layer = PipelineLayer;
+type Layer = RunLayer;
 
 /** Where a failure first happened: the run, its executable, its layer and how it ended. */
 export type FailedAt = {
@@ -55,23 +57,34 @@ export interface Announcer {
 }
 
 export interface ExecutionOptions {
+  /** Its bounded context — or, for an entrypoint's run, the registry it belongs to. */
   readonly boundedContext: string;
   readonly name: string;
   readonly layer: Layer;
+  /** The method that runs it: a use case's `execute`, an entrypoint's `handle`. */
+  readonly method?: "execute" | "handle";
   /** What else its span says: the event it executes, the service it replaced. */
   readonly attributes?: Attributes;
   readonly dependencies: ReadonlyMap<string, unknown>;
   readonly context: () => ContextValues;
   readonly parent?: Execution;
+  /**
+   * The run that called this root from outside its bounded context — an `EventSubscriber`, a
+   * Feature of another bounded context — through a bounded context bound to it (`BIND`): its span
+   * is the parent, its flow continues, it is the cause and its signal cancels this one; the
+   * context, dependencies and handlers stay this bounded context's.
+   */
+  readonly caller?: Execution;
   /** What caused a root run from outside: a delivered event's envelope continues its chain. */
   readonly cause?: Cause;
   /** What cancels a root run; a child inherits its parent's. */
   readonly signal?: AbortSignal;
-  readonly featureBus: (execution: Execution) => object;
+  /** An ApplicationService's Features; no other layer has them. */
+  readonly featureBus?: (execution: Execution) => object;
   /** What runs around the service, outermost first. */
   readonly interceptors: readonly Interceptor[];
-  /** Who hears it start and answer. */
-  readonly announce: Announcer;
+  /** Who hears a use case start and answer; an entrypoint's run is not announced. */
+  readonly announce?: Announcer;
   /** The bounded context's expected errors: they end `refused`, never reported. */
   readonly expected: (error: unknown) => boolean;
   /** The bounded context's handlers for this layer: what answers a failure instead of raising it. */
@@ -120,11 +133,7 @@ function observe<T>(work: () => T, fallback: T): T {
   }
 }
 
-function serviceView(
-  target: RuntimeService,
-  options: ExecutionOptions,
-  execution: Execution,
-) {
+function serviceView(target: object, options: ExecutionOptions, execution: Execution) {
   const dependencies = new Map<string, unknown>();
   const logger = executionLogger(options.layer, execution);
   let features: object | undefined;
@@ -135,7 +144,11 @@ function serviceView(
       if (property === "logger") return logger;
       if (property === "signal") return execution.signal;
       if (property === "execution") return execution;
-      if (property === "featureBus" && options.layer === "application_service") {
+      if (
+        property === "featureBus" &&
+        options.layer === "application_service" &&
+        options.featureBus
+      ) {
         return (features ??= options.featureBus(execution));
       }
       if (typeof property === "string" && options.dependencies.has(property)) {
@@ -175,24 +188,27 @@ function serviceView(
 }
 
 /**
- * One pipeline for every registered Feature and ApplicationService.
+ * One pipeline for every registered Feature and ApplicationService — and for every entrypoint's
+ * run that calls them (an `EventSubscriber`).
  *
- * 1. A span `<bounded context>/<serviceName>`, a child of the parent run when there is one, and
- *    the execution every dependency, `this.logger` and child Feature are bound to.
- *    Its chain: the parent's correlation (or the cause's, or its own id for a root), caused by
- *    the parent run or the delivered event.
- * 2. Its start is announced; the interceptors run around the service, which sees the
- *    execution through its own view of the instance.
+ * 1. A span `<bounded context>/<serviceName>`, a child of the run above it when there is one (its
+ *    parent, or the caller from outside), and the execution every dependency, `this.logger` and
+ *    child Feature are bound to. Its chain: the run above's correlation (or the cause's, or its
+ *    own id for a root), caused by the run above or the delivered event.
+ * 2. A use case's start is announced; the interceptors run around the service, which sees the
+ *    execution through its own view of the instance. An entrypoint's run is neither announced
+ *    nor intercepted.
  * 3. A failure is observed where it happened: its outcome (expected by the bounded context →
- *    `refused`, else the process's `outcomeOf`), the span closed with it, its log line,
- *    where it first failed and — when `failed`, and only once per error along the run — its
+ *    `refused`; else the outcome it already had where it first failed — another bounded
+ *    context's rules —; else the process's `outcomeOf`), the span closed with it, its log line,
+ *    where it first failed and — when `failed`, and only once per error along the flow — its
  *    report.
  * 4. Then the layer's error handlers answer it, in order; with none, or when the last throws,
  *    the error reaches the caller.
  * Final: the service's answer — announced —, or its handlers'.
  */
 export async function executeService(
-  target: RuntimeService,
+  target: object,
   command: Executable,
   options: ExecutionOptions,
 ): Promise<unknown> {
@@ -201,8 +217,12 @@ export async function executeService(
   const useCase = `${options.boundedContext}.${options.name}`;
   const context = options.parent?.context ?? options.context();
   const id = newEntityId();
-  const correlationId = options.parent?.correlationId ?? options.cause?.correlationId ?? id;
-  const causationId = options.parent?.id ?? options.cause?.id;
+  // The run above this one: its parent in the bounded context, or the caller from outside.
+  const above = options.parent ?? options.caller;
+  const correlationId = above?.correlationId ?? options.cause?.correlationId ?? id;
+  const causationId = above?.id ?? options.cause?.id;
+  const layer = options.layer;
+  const useCaseLayer = layer === "entrypoint" ? undefined : layer;
   const attributes: Attributes = {
     "sincpro.use_case": useCase,
     "sincpro.layer": options.layer,
@@ -215,7 +235,7 @@ export async function executeService(
   const span: Span = observe(
     () =>
       ports.tracer.start(`${options.boundedContext}/${options.name}`, {
-        ...(options.parent ? { parent: options.parent.span } : {}),
+        ...(above ? { parent: above.span } : {}),
         attributes,
       }),
     NO_TRACER.start(useCase, {}),
@@ -224,32 +244,37 @@ export async function executeService(
     id,
     useCase,
     boundedContext: options.boundedContext,
-    parent: options.parent,
+    parent: above,
     correlationId,
     causationId,
-    signal: options.signal ?? options.parent?.signal,
+    signal: options.signal ?? above?.signal,
     span,
     context,
   };
-  const reported = options.parent
-    ? (REPORTED_BY_EXECUTION.get(options.parent) ?? new Set<unknown>())
+  const reported = above
+    ? (REPORTED_BY_EXECUTION.get(above) ?? new Set<unknown>())
     : new Set<unknown>();
   REPORTED_BY_EXECUTION.set(execution, reported);
-  logExecution(options.layer, execution);
-  observe(
-    () => options.announce.started({ executable: command, execution, layer: options.layer }),
-    undefined,
-  );
+  logExecution(layer, execution);
+  if (useCaseLayer)
+    observe(
+      () =>
+        options.announce?.started({ executable: command, execution, layer: useCaseLayer }),
+      undefined,
+    );
 
   const finish = (error?: { value: unknown }): Outcome => {
     const outcome: Outcome = error
       ? observe(
-          () => (options.expected(error.value) ? "refused" : ports.outcomeOf(error.value)),
+          () =>
+            options.expected(error.value)
+              ? "refused"
+              : (failedAt(error.value)?.outcome ?? ports.outcomeOf(error.value)),
           "failed",
         )
       : "ok";
     observe(() => span.end(outcome, error?.value), undefined);
-    logExecution(options.layer, execution, {
+    logExecution(layer, execution, {
       outcome,
       durationMs: Math.max(0, Date.now() - startedAt),
     });
@@ -276,45 +301,51 @@ export async function executeService(
       FAILED_AT.set(error.value, {
         execution,
         executable: command,
-        layer: options.layer,
+        layer,
         outcome,
       });
     return outcome;
   };
 
   const view = serviceView(target, options, execution);
+  const method = Reflect.get(target, options.method ?? "execute") as (
+    executable: Executable,
+  ) => unknown;
   const service = (current: Executable) =>
-    Promise.resolve(Reflect.apply(target.execute, view, [current]));
+    Promise.resolve(Reflect.apply(method, view, [current]));
   let answer: unknown;
   try {
     const signal = execution.signal;
     if (signal?.aborted) throw abortedBy(signal);
-    const running = runAround(options.interceptors, service, command, {
-      boundedContext: options.boundedContext,
-      useCase,
-      layer: options.layer,
-      execution,
-      logger: executionLogger(options.layer, execution),
-    });
+    const running = useCaseLayer
+      ? runAround(options.interceptors, service, command, {
+          boundedContext: options.boundedContext,
+          useCase,
+          layer: useCaseLayer,
+          execution,
+          logger: executionLogger(useCaseLayer, execution),
+        })
+      : service(command);
     answer = signal === undefined ? await running : await untilAborted(running, signal);
   } catch (error) {
     finish({ value: error });
     if (options.handlers.length === 0) throw error;
     const recovered = await handled(options.handlers, error);
-    logHandled(options.layer, { execution });
+    logHandled(layer, { execution });
     return recovered;
   }
   finish();
-  observe(
-    () =>
-      options.announce.completed({
-        executable: command,
-        execution,
-        layer: options.layer,
-        answer,
-        durationMs: Math.max(0, Date.now() - startedAt),
-      }),
-    undefined,
-  );
+  if (useCaseLayer)
+    observe(
+      () =>
+        options.announce?.completed({
+          executable: command,
+          execution,
+          layer: useCaseLayer,
+          answer,
+          durationMs: Math.max(0, Date.now() - startedAt),
+        }),
+      undefined,
+    );
   return answer;
 }

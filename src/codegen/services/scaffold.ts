@@ -10,7 +10,7 @@ import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/domain/nam
  *       infrastructure/dependencies.ts     what the services can count on: the generated client
  *       infrastructure/bounded_context.ts  its Feature and ApplicationService, and how it is made
  *       services/index.ts                  registers command classes and their services
- *       index.ts                           `export const project` — ready to use
+ *       index.ts                           `export const projectBoundedContext` — ready to use
  *
  * Context: the layout sincpro_framework gives a service (`dependencies.py`, `framework.py`,
  * `services/`, `__init__.py`), so a bounded context starts the way every other does and nobody
@@ -26,15 +26,6 @@ export type ScaffoldOptions = {
    */
   operations?: string;
 };
-
-/** Names the skeleton's `index.ts` cannot give its constant. */
-const TAKEN = new Set([
-  "operations",
-  "registerServices",
-  ..."break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield let static implements interface package private protected public await".split(
-    " ",
-  ),
-]);
 
 /** `sales-orders` → `SalesOrders`. */
 function pascalOf(alias: string): string {
@@ -58,10 +49,9 @@ export function scaffoldFilesOf(
 ): Record<string, string> {
   const alias = aliasOf(metamodel);
   const Name = pascalOf(alias);
-  const bare = `${Name.charAt(0).toLowerCase()}${Name.slice(1)}`;
-  // A word the language keeps (`import`, `default`) or a name `index.ts` already imports cannot
-  // be the constant's: it takes the bounded context's word instead.
-  const name = TAKEN.has(bare) ? `${bare}BoundedContext` : bare;
+  // Named for what it is — `projectBoundedContext`, never `project` (an entity?) or `ctx` —:
+  // nobody misreads it, and no word of the language or name `index.ts` imports can take it.
+  const name = `${Name.charAt(0).toLowerCase()}${Name.slice(1)}BoundedContext`;
   const Dependencies = `${Name}Dependencies`;
   const client = metamodel.bindings !== undefined;
   const operations = options.operations ?? at("..", "common", "infrastructure", "operations");
@@ -83,11 +73,11 @@ export function scaffoldFilesOf(
     "}",
     "",
     "export function registerDependencies(",
-    `  bc: BoundedContext<${Dependencies}>,`,
+    `  boundedContext: BoundedContext<${Dependencies}>,`,
     `  ${client ? "operations" : "_operations"}: OperationTransport,`,
     ") {",
-    ...(client ? [`  bc.addDependency("client", clientOf(operations));`] : []),
-    "  return bc;",
+    ...(client ? [`  boundedContext.addDependency("client", clientOf(operations));`] : []),
+    "  return boundedContext;",
     "}",
     "",
   ].join("\n");
@@ -106,7 +96,7 @@ export function scaffoldFilesOf(
     "",
     `import { type ${Dependencies}, registerDependencies } from "${at(".", "dependencies")}";`,
     "",
-    `/** A Feature of «${alias}» — of a Command, or a subscriber of an event: its dependencies typed on \`this\`, and \`this.context\`. */`,
+    `/** A Feature of «${alias}» — of a Command, or a use case of an event: its dependencies typed on \`this\`, and \`this.context\`. */`,
     "export abstract class Feature<C extends Command<R> | DomainEvent, R> extends BaseFeature<C, R> {",
     ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
     "}",
@@ -132,10 +122,12 @@ export function scaffoldFilesOf(
     " * Generated DTO types are remote contracts, not runtime command constructors: import",
     ` * them under their own name — \`import type * as remote from "${at("..", "generated", "domain")}"\` —`,
     " * and let a local Command implement one (`implements remote.CommandCancelIssue`).",
-    " * Register with context.feature(CommandClass)(FeatureClass) or",
-    " * context.appService(CommandClass)(ApplicationServiceClass).",
+    " * Register with boundedContext.feature(CommandClass)(FeatureClass) or",
+    " * boundedContext.appService(CommandClass)(ApplicationServiceClass); the services live in",
+    " * one folder per aggregate (`services/<aggregate>/`), and an entity of that aggregate with",
+    " * use cases of its own in a folder inside it (`services/<aggregate>/<entity>/`).",
     " */",
-    `export function registerServices(_context: BoundedContext<${Dependencies}>): void {}`,
+    `export function registerServices(_boundedContext: BoundedContext<${Dependencies}>): void {}`,
     "",
   ].join("\n");
 

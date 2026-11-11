@@ -17,7 +17,7 @@ import type { Criteria } from "@sincpro/criteria";
  * `Transport`:
  *
  *     const operations = guardedTransport(jsonRpcOperations({ endpoint }), new CircuitBreaker("forge"));
- *     project.addDependency("client", clientOf(operations));
+ *     projectBoundedContext.addDependency("client", clientOf(operations));
  *
  * Context: the circuit belongs where the dependency is — the transport —, not in each Feature. A
  * run binds it as it binds any transport, so the trace and the context still travel; an open

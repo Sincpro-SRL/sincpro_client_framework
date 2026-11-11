@@ -65,12 +65,12 @@ class Quote extends ApplicationService<CommandQuote, ResponseTotal> {
   }
 }
 
-const sales = new BoundedContext<{ unitPrice: number }>("sales");
-sales.addDependency("unitPrice", 10);
-sales.feature(CommandTotal)(Total);
-sales.appService(CommandQuote)(Quote);
+const salesBoundedContext = new BoundedContext<{ unitPrice: number }>("sales");
+salesBoundedContext.addDependency("unitPrice", 10);
+salesBoundedContext.feature(CommandTotal)(Total);
+salesBoundedContext.appService(CommandQuote)(Quote);
 
-const answer = await sales.execute(new CommandQuote(3)); // ResponseTotal — total 30
+const answer = await salesBoundedContext.execute(new CommandQuote(3)); // ResponseTotal — total 30
 ```
 
 A Command names, by its type, the Response it answers: `execute` infers it, with no second
@@ -96,12 +96,12 @@ only). A Response may be a class, a plain object, a page, a primitive or `void`.
 ### Decorators, when the project has them
 
 ```ts
-@sales.feature(CommandTotal)
+@salesBoundedContext.feature(CommandTotal)
 class Total extends Feature<CommandTotal, ResponseTotal> { … }
 ```
 
 The same functions work as standard decorators and as legacy ones (`experimentalDecorators`);
-without a decorator transform, call them: `sales.feature(CommandTotal)(Total)`. No DI library
+without a decorator transform, call them: `salesBoundedContext.feature(CommandTotal)(Total)`. No DI library
 and no `reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's
 transform (Vite, Metro/Babel) is each application's to configure and test.
 
@@ -114,8 +114,8 @@ class PrintOnBixolon extends Print {
   static override readonly serviceName = "PrintOnBixolon";
   override execute(command: CommandPrint) { … }
 }
-printing.feature(CommandPrint, { replaces: Print })(PrintOnBixolon);
-printing.handlerOf(CommandPrint); // PrintOnBixolon
+printingBoundedContext.feature(CommandPrint, { replaces: Print })(PrintOnBixolon);
+printingBoundedContext.handlerOf(CommandPrint); // PrintOnBixolon
 ```
 
 `replaces` names the service registered now for that class, or the registration is refused. The
@@ -126,9 +126,22 @@ dependency is replaced the same way: `addDependency(name, next, { replaces: prev
 
 ## Domain events
 
-A fact that already happened — `OrderPaid` — is executed as a Command is: by the Feature or
-ApplicationService registered for its class, its subscriber in this bounded context, through
-the same pipeline (span, log lines, error handlers, report):
+A fact that already happened — `OrderPaid` — is heard in one of two ways:
+
+| What hears it                                                                                 | When                                                                                       |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **A use case of the event**: a Feature or ApplicationService whose input _is_ the event       | the use case exists because of the event, and nothing else calls it                        |
+| **An `EventSubscriber`**: an entrypoint that reads the event and executes Commands on the bus | the event starts use cases that have their own Command — a screen or a cron calls them too |
+
+A subscriber is not a use case — it is a door, as a cron or a screen is: it decides nothing. Work
+of several steps is an ApplicationService (the workflow) that the subscriber executes, never
+logic in the subscriber.
+
+### A use case of the event
+
+The event is executed as a Command is: by the Feature or ApplicationService registered for its
+class in this bounded context, through the same pipeline (span, log lines, error handlers,
+report):
 
 ```ts
 class OrderPaid extends DomainEvent {
@@ -143,25 +156,67 @@ class ThankCustomer extends Feature<OrderPaid, void> {
   async execute(event: OrderPaid) { … }
 }
 
-shop.feature(OrderPaid)(ThankCustomer);
-await shop.execute(new OrderPaid("o-1")); // span shop/ThankCustomer, sincpro.event = its name
+shopBoundedContext.feature(OrderPaid)(ThankCustomer);
+await shopBoundedContext.execute(new OrderPaid("o-1")); // span shop/ThankCustomer, sincpro.event = its name
 ```
 
 - **`eventName` is declared**, as `serviceName` is: a minifier renames classes. `event.name`
   reads it; `name` is reserved, and a subclass cannot make it a field.
-- **One subscriber per bounded context.** Another context that hears the event registers its
-  own; a `Subscriber` executes it in each.
-- An ApplicationService can subscribe too, and compose Features — of Commands or of events —
-  through `featureBus`. `execute(event)` answers whatever the subscriber returns (`unknown`).
+- **One use case per event in a bounded context.** Another context that hears the event
+  registers its own; the queue's `Subscriber` executes it in each.
+- An ApplicationService can take the event too, and compose Features — of Commands or of events
+  — through `featureBus`. `execute(event)` answers whatever its use case returns (`unknown`).
+
+### An `EventSubscriber`: the entrypoint that hears an event
+
+```ts
+// entrypoints/queue/logged-successfully.subscriber.ts — reads the event, executes the Command
+export class LoggedSuccessfully extends EventSubscriber<OdooLoggedIn> {
+  static readonly subscriberName = "LoggedSuccessfully";
+  declare readonly ticketsBoundedContext: BoundedContext<TicketsDependencies>;
+
+  async handle(event: OdooLoggedIn) {
+    await this.ticketsBoundedContext.execute(new CommandStartDay(event.uid)); // an ApplicationService
+  }
+}
+
+// entrypoints/queue/index.ts — who hears what, and what they call
+export const ticketsSubscriptions = new Subscriptions<TicketsEntrypoints>(
+  "tickets-subscriptions",
+);
+ticketsSubscriptions.addDependency("ticketsBoundedContext", ticketsBoundedContext);
+ticketsSubscriptions.subscribe(OdooLoggedIn)(LoggedSuccessfully);
+```
+
+- **Each delivery is a run of its own**, `tickets-subscriptions/LoggedSuccessfully` in the layer
+  `entrypoint`: its span, its log lines, `this.logger`, `this.execution`. It continues the
+  envelope's flow, and the use cases it executes are its children.
+- **A bounded context it was given is bound to it** (`BIND`), as a transport is: what it executes
+  runs under the subscriber's span, in the same flow, caused by it, cancelled with it — and still
+  with its own dependencies, context, interceptors and handlers. A Feature that calls another
+  bounded context injected into it gets the same.
+- **One subscriber per event in a `Subscriptions`**; a second is refused, a replacement names the
+  one it replaces (`subscribe(Event, { replaces: Old })`). Several reactions to one event are one
+  ApplicationService, or subscribers of different registries.
+- **It is not a use case**: interceptors and listeners see the use cases it calls, not it. A
+  failure is reported once along the flow, where it happened, with the outcome its bounded
+  context gave it (`expectErrors` holds).
+- **Its name is its identity** in spans, logs and the stored queue's record of who already
+  heard an event, so it differs from every bounded context's (`<context>-subscriptions`).
 
 ### Publishing and subscribing
 
 ```ts
 import { Publisher, Subscriber, syncQueue } from "@sincpro/client-framework";
 
-const subscriber = new Subscriber(mail, stock); // every bounded context that hears
+// the queue's door: every bounded context with a use case of the event, every Subscriptions
+const subscriber = new Subscriber(
+  mailBoundedContext,
+  stockBoundedContext,
+  ticketsSubscriptions,
+);
 const queue = syncQueue(subscriber); // in the call, in memory — or a platform's
-shop.addDependency("publisher", new Publisher(queue));
+shopBoundedContext.addDependency("publisher", new Publisher(queue));
 
 class Pay extends Feature<CommandPay, string> {
   declare readonly publisher: Publisher;
@@ -174,37 +229,43 @@ class Pay extends Feature<CommandPay, string> {
 
 The `Publisher` is bound to the run that holds it, so the event joins that run's flow: its
 envelope carries the run's `correlationId` and names the run as its cause. The `Subscriber`
-executes it in `mail` and in `stock` — `context.execute(event, envelope)` —, so their runs
-continue the same flow; one that fails does not stop the others.
+executes it in `mail`, in `stock` and in `tickets-subscriptions` — `execute(event, envelope)`
+—, so their runs continue the same flow; one that fails does not stop the others. Two of them
+never share a name.
 
 What is defined here, and what each platform plugs behind the ports:
 
-| Piece                     | Here                                                           | The platform's                         |
-| ------------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| `DomainEvent`, subscriber | the class, its `eventName`, its execution                      | —                                      |
-| `Envelope`                | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
-| `EventQueue` port         | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
-| `EventStore` port         | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
-| `Subscribes` port         | `Subscriber(...contexts)`, `eventTypeOf(name)`                 | —                                      |
+| Piece             | Here                                                           | The platform's                         |
+| ----------------- | -------------------------------------------------------------- | -------------------------------------- |
+| `DomainEvent`     | the class, its `eventName`, its execution                      | —                                      |
+| `EventSubscriber` | the entrypoint, its run, `Subscriptions`                       | —                                      |
+| `Envelope`        | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
+| `EventQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
+| `EventStore` port | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
+| `Subscribes` port | `Subscriber(...hearing)`, `eventTypeOf(name)`                  | —                                      |
 
 ### Stored events: one way to carry them, any store
 
 ```ts
 const queue = storedQueue({
   store: sqliteEventStore(db), // the platform's EventStore; memoryEventStore() in a tab or a test
-  subscriber: new Subscriber(sales, stock, printing),
+  subscriber: new Subscriber(
+    salesBoundedContext,
+    stockBoundedContext,
+    printingBoundedContext,
+  ),
   ready: (stored) => connectivity.online || !needsNetwork(stored.envelope.name),
   onSettled: (stored) => activity.show(stored.envelope.name, stored.state),
 });
-shop.addDependency("publisher", new Publisher(queue));
+shopBoundedContext.addDependency("publisher", new Publisher(queue));
 connectivity.onBack(() => queue.drain()); // and on coming back to the foreground
 ```
 
 `publish` returns once the event is stored. Then the queue delivers what waits, one at a time,
 in the order stored — the backend's store-and-forward, over whatever store the platform plugs:
 
-- It is rebuilt as its class — `static fromJSON` when it has one — and executed in every
-  bounded context that hears it and does not have it yet: a retry never runs one twice.
+- It is rebuilt as its class — `static fromJSON` when it has one — and executed by everyone who
+  hears it and does not have it yet: a retry never runs one twice.
 - A failure a retry may fix (`failureOf`: unavailable, no answer, a conflict…) is tried again
   after the backoff or the wait it asks for, and what follows waits, so the order holds.
 - A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
@@ -219,8 +280,9 @@ memory carry events the same way, with the same rules.
 Three things a platform keeps in mind:
 
 - **At least once.** A process that stops after a context executed an event and before the store
-  saved it runs it there again. A subscriber that must not act twice keys what it does by the
-  envelope's id, `this.execution.causationId` in its run.
+  saved it runs it there again. What must not act twice keys what it does by the envelope's id —
+  `this.execution.causationId` in a use case of the event, or in an `EventSubscriber`, which hands
+  it to the Command it executes — or by what the event names (the entity's own id).
 - **One drainer per store.** Two tabs over one IndexedDB claim it first (the Web Locks API).
 - **Values come back as JSON.** An event that carries a `Money`, a `Decimal` or a date declares
   `static fromJSON` to read them back as such.
@@ -236,19 +298,24 @@ and an application changes or hears it from outside, as the backend's `bus_pipel
 
 ```ts
 // control: around the service — look, veto (throw), adjust (same class), or answer
-shop.interceptor(CommandPay)(async (command, next, run) => {
+shopBoundedContext.interceptor(CommandPay)(async (command, next, run) => {
   if (!credit.allows(command.customer_id)) throw new NoCredit();
   return next(command);
 });
-shop.interceptor()((executable, next, run) => next(executable)); // every class
+shopBoundedContext.interceptor()((executable, next, run) => next(executable)); // every class
 
 // observation: never changes the answer
-shop.onStart((started) => activity.running(started.execution.useCase));
-shop.onCompletion((done) => activity.succeeded(done.execution.useCase), CommandPay);
-shop.onFailure((failed) => activity.failed(failed.execution?.useCase, failed.outcome));
+shopBoundedContext.onStart((started) => activity.running(started.execution.useCase));
+shopBoundedContext.onCompletion(
+  (done) => activity.succeeded(done.execution.useCase),
+  CommandPay,
+);
+shopBoundedContext.onFailure((failed) =>
+  activity.failed(failed.execution?.useCase, failed.outcome),
+);
 
 // composition: a module or plugin wires its pieces in one place
-shop.extend(auditing);
+shopBoundedContext.extend(auditing);
 ```
 
 - **Interceptors** run inside the run, outermost first in the order registered: a veto is the
@@ -270,14 +337,14 @@ first-registered-first. A handler returns the answer, or throws to hand the erro
 one's throw reaches the caller:
 
 ```ts
-sales.addFeatureErrorHandler((error) => {
+salesBoundedContext.addFeatureErrorHandler((error) => {
   if (error instanceof PriceNotFound) return new ResponseTotal(0); // the answer
   throw error; // the next handler, or the caller
 });
-sales.addAppServiceErrorHandler(toBusinessError);
-sales.addGlobalErrorHandler(toProblem); // what reaches sales.execute or a scope
+salesBoundedContext.addAppServiceErrorHandler(toBusinessError);
+salesBoundedContext.addGlobalErrorHandler(toProblem); // what reaches salesBoundedContext.execute or a scope
 
-sales.expectErrors(QuoteExpired); // the business answering: `refused`, never reported
+salesBoundedContext.expectErrors(QuoteExpired); // the business answering: `refused`, never reported
 ```
 
 A failure is observed where it happened, before any handler runs: its span closes with its
@@ -338,7 +405,7 @@ reports what fails outside a use case — a view, a worker —, with the same ru
 
 ```ts
 const screen = new AbortController();
-const answer = sales.execute(new CommandQuote(3), { signal: screen.signal });
+const answer = salesBoundedContext.execute(new CommandQuote(3), { signal: screen.signal });
 screen.abort(); // the run ends `aborted` at once; nothing is reported
 ```
 
@@ -399,21 +466,21 @@ import { logger, loggerAdapter } from "@sincpro/client-framework";
 
 logger.info("Database opened"); // infrastructure — the global logger
 loggerAdapter.warn("Printer is slow", { ms: 900 }); // an adapter
-sales.logger.info("Catalog preloaded"); // a bounded context, outside a use case
+salesBoundedContext.logger.info("Catalog preloaded"); // a bounded context, outside a use case
 this.logger.info("Totalling"); // inside a Feature or ApplicationService
 ```
 
-| Logger                    | Layer                 | Each line carries                              |
-| ------------------------- | --------------------- | ---------------------------------------------- |
-| `logger`                  | `infrastructure`      | —                                              |
-| `loggerAdapter`           | `adapter`             | the run, when injected as a dependency         |
-| `sales.logger`            | `bounded_context`     | its bounded context                            |
-| `this.logger`, Feature    | `feature`             | bounded context, use case, execution and trace |
-| `this.logger`, AppService | `application_service` | the same                                       |
+| Logger                       | Layer                 | Each line carries                              |
+| ---------------------------- | --------------------- | ---------------------------------------------- |
+| `logger`                     | `infrastructure`      | —                                              |
+| `loggerAdapter`              | `adapter`             | the run, when injected as a dependency         |
+| `salesBoundedContext.logger` | `bounded_context`     | its bounded context                            |
+| `this.logger`, Feature       | `feature`             | bounded context, use case, execution and trace |
+| `this.logger`, AppService    | `application_service` | the same                                       |
 
 `this.logger` keeps its run across awaits and concurrent calls, without a global stack. An
 adapter that imports `loggerAdapter` at module level writes without the run; inject it
-(`sales.addDependency("log", loggerAdapter)`) or pass `this.logger` when a line must carry it.
+(`salesBoundedContext.addDependency("log", loggerAdapter)`) or pass `this.logger` when a line must carry it.
 
 One configuration, two doors — `configureProcess({ logger })` replaces every process port,
 `configureLogger(...)` only logging (an in-app debug switch):
@@ -441,8 +508,8 @@ snapshot, and what travels goes to the server in `sincpro-context`.
 
 ```ts
 processContext.set({ tenant_id: "acme" });
-sales.context.set({ warehouse_id: 4 });
-await sales.scoped({ company_id: 2 }).execute(new CommandQuote(1));
+salesBoundedContext.context.set({ warehouse_id: 4 });
+await salesBoundedContext.scoped({ company_id: 2 }).execute(new CommandQuote(1));
 ```
 
 Where the values live is a port (`ContextStore`): synchronous reads, a version per change and an
@@ -612,6 +679,44 @@ never a `Date`. `valuesOf`/`pack` write; `readValues` reads tagged values back; 
 use a reader given explicitly. Cycles, functions and non-finite numbers are refused. How a value
 is shown, typed or stored is the platform's.
 
+## An application's layout
+
+An application is laid out as a sincpro_framework service is — the entrypoints call the bus, the
+bus runs the use cases, the use cases use the adapters:
+
+```text
+src/
+  entrypoints/main.ts(x)               configureProcess, the stored queue and its Subscriber
+  domains/
+    common/infrastructure/operations.ts  export const operations — the wire every client uses
+    <bounded context>/
+      generated/                       sincpro-client generate — never edited
+      domain/                          local Commands, Responses, DomainEvents, value rules
+      adapters/                        repositories, printers, other systems
+      services/                        the use cases, one folder per aggregate or entity
+        <aggregate>/                     sale_order/: its Features and ApplicationServices
+          confirm-quotation.feature.ts
+          <entity of the aggregate>/     payments/: a related entity with use cases of its own
+            register-payment.feature.ts
+            reconcile-payments.app-service.ts
+        index.ts                         registerServices: each Command with its service
+      infrastructure/                  dependencies.ts, bounded_context.ts (service bases)
+      entrypoints/                     the doors: they translate, they decide nothing
+        queue/                           EventSubscribers: event → Command → bus; index.ts: Subscriptions
+        cron/                            the platform's scheduler: tick → Command → bus
+      index.ts                         export const <context>BoundedContext — ready to execute
+```
+
+- **Services by aggregate.** A simple entity is one folder with its Features (a CRUD). When an
+  aggregate holds related entities with use cases of their own — the payments of a sale order —,
+  they get a folder inside it, and its Features and ApplicationServices live there, grouped by
+  what they are about.
+- **Entrypoints translate.** A subscriber, a cron and a screen build a Command and execute it;
+  a workflow of several use cases is an ApplicationService they execute. `sincpro-client check`
+  refuses a service that imports an entrypoint.
+- **A bounded context is named for what it is**: `salesBoundedContext`, never `sales` (an
+  entity?) or `ctx` — `context` is already the run's (`this.context`).
+
 ## Package layout
 
 Each module is laid out as sincpro_framework's are, and says what it offers in its `index.ts`:
@@ -646,7 +751,7 @@ src/
   event_driven/
     domain/          Envelope, the EventQueue, Subscribes and EventStore ports
     adapters/        syncQueue, storedQueue, memoryEventStore
-    entrypoint/      Publisher, Subscriber
+    entrypoint/      Publisher, Subscriber (the queue's door), Subscriptions, EventSubscriber
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger
 ```

@@ -27,7 +27,7 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["infrastructure/dependencies.ts"]?.includes(
-      'bc.addDependency("client", clientOf(operations));',
+      'boundedContext.addDependency("client", clientOf(operations));',
     ),
   );
   assert.ok(
@@ -37,7 +37,7 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
   assert.ok(
     files["index.ts"]?.includes(
-      'export const project = configProjectBoundedContext("project", operations);',
+      'export const projectBoundedContext = configProjectBoundedContext("project", operations);',
     ),
   );
   assert.ok(
@@ -52,11 +52,13 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   );
 });
 
-test("an alias that is a word of the language, or a name index.ts imports, gives a constant that can be", () => {
+test("the constant says it is a bounded context, whatever the alias: never a bare word or an abbreviation", () => {
   const named = (alias: string) => scaffoldFilesOf({ ...project, alias })["index.ts"] ?? "";
   assert.ok(named("import").includes("export const importBoundedContext ="));
   assert.ok(named("operations").includes("export const operationsBoundedContext ="));
-  assert.ok(named("sales-orders").includes("export const salesOrders ="));
+  assert.ok(named("sales-orders").includes("export const salesOrdersBoundedContext ="));
+  const files = Object.values(scaffoldFilesOf(project)).join("\n");
+  assert.ok(!/\b(bc|ctx)\b/.test(files));
 });
 
 test("the skeleton compiles as it is written, beside what the generator writes", () => {

@@ -5,18 +5,19 @@ import type {
 
 /**
  * One level of the context: the process's (`processContext`) or a bounded context's
- * (`project.context`), read and written the same way on every platform.
+ * (`projectBoundedContext.context`), read and written the same way on every platform.
  *
  *     processContext.set({ tenant_id: "acme" });      the company changed — every screen hears it
  *     processContext.get("tenant_id")                  →  "acme"
- *     project.context.set({ warehouse_id: 4 });        only what `project` runs
+ *     projectBoundedContext.context.set({ warehouse_id: 4 });   only what it runs
  *     const stop = processContext.watch(() => redraw());
  *
  * Context: sincpro_framework reads its context from a tree — the process, the bounded context,
  * the scope, the execution — and the nearest wins. A client has the same levels: a use case runs
  * with the process's values, under them its bounded context's, under them a scope's
- * (`project.scoped({...})`), read once where the gesture starts and inherited by every Feature
- * it runs. That snapshot is `this.context` and what travels to the server in `sincpro-context`.
+ * (`projectBoundedContext.scoped({...})`), read once where the gesture starts and inherited by
+ * every Feature it runs. That snapshot is `this.context` and what travels to the server in
+ * `sincpro-context`.
  *
  * Where the values live is the platform's (`ContextStore`): this is only the door. `values` is
  * the same object until something changes it, so a screen can hand it straight to React's

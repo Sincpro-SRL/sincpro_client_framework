@@ -9,11 +9,11 @@ import type { Outcome } from "@sincpro/client-framework/observability/domain/tra
  *     control       interceptors   wrap the service: look, veto, adjust or answer
  *     observation   listeners      a run started, answered, or a failure escaped: heard, never changed
  *
- *     project.interceptor(CommandPay)(async (command, next, run) => {
+ *     projectBoundedContext.interceptor(CommandPay)(async (command, next, run) => {
  *       if (!credit.allows(command.customer_id)) throw new NoCredit();   // veto
  *       return next(command);                                             // the next, or the service
  *     });
- *     project.onCompletion((done) => activity.succeeded(done.execution.useCase));
+ *     projectBoundedContext.onCompletion((done) => activity.succeeded(done.execution.useCase));
  *
  * Context: the core owns the flow — context, span, log lines, outcome, report, handlers — and
  * these are the places an application changes it from outside, without touching a service. An
@@ -36,7 +36,7 @@ export type Cause = {
  * How a Command or an event is executed: what cancels it, and — for a delivered event — what
  * caused it.
  *
- *     await sales.execute(new CommandQuote(3), { signal: screen.signal });
+ *     await salesBoundedContext.execute(new CommandQuote(3), { signal: screen.signal });
  *
  * Context: a screen that closes, a navigation that leaves, a user who gives up stop waiting; the
  * run ends `aborted` (not reported), its Features inherit the signal, and the requests its

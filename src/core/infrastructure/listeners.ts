@@ -16,7 +16,7 @@ import {
  *
  *     const stop = processListeners.onFailure((failed) => toast(failed.execution?.useCase));
  *
- * Context: a bounded context's own listeners (`project.onStart`) hear it alone; these hear all of
+ * Context: a bounded context's own listeners (`projectBoundedContext.onStart`) hear it alone; these hear all of
  * them, after its own. They live as long as the process — `configureProcess` does not clear
  * them —, so whoever adds one keeps the function that stops it.
  */
