@@ -45,6 +45,24 @@ The provider, error client and store are built by mobile, not this package. The 
 one span per Feature/ApplicationService execution; a generated client injected into a Feature
 propagates that run's headers. It does not configure destinations or automatically deliver to Loki.
 
+## Reaching the services
+
+Mobile chooses the wire; the generated clients and the Features do not change with it:
+
+```ts
+// domains/common/infrastructure/operations.ts — what `sincpro-client scaffold` imports
+export const operations = guardedTransport(
+  jsonRpcOperations({ endpoint: `${server}/rpc`, headers: () => sessionHeaders() }),
+  new CircuitBreaker("backend"),
+);
+```
+
+`restOperations(restTransport(…))` speaks REST, `jsonRpcOperations` JSON-RPC; a gRPC adapter is
+mobile's — one function reading `operation.grpc.method`, putting `options.headers` in the call's
+metadata, and declaring `kindOfGrpcCode(code)` on what fails (README, «Writing an adapter for
+another wire»). Odoo is no sincpro_framework contract: mobile-odoo keeps its client, and its
+errors declare their kind.
+
 ## Registering local work
 
 ```ts

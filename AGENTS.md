@@ -122,6 +122,12 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **A store's `load` may answer a new object each time** (one that parses JSON does): `Context`
   keeps one object per `version`, so a screen can hand `values` to `useSyncExternalStore`. A store
   that changes without moving the version is a broken store.
+- **The generated client never names a wire.** A method is `transport.call(operations.X, input,
+options)`: no route, no verb, no RPC method. The contract's bindings (`rest`, `rpc`, `grpc`,
+  `mcp`) are data in `operations`; an `OperationTransport` adapter reads the one of its wire
+  (`restOperations`, `jsonRpcOperations`, a platform's gRPC) and throws `OperationNotPublished`
+  for the rest. A run binds an `OperationTransport` as it binds a `Transport`: headers and signal.
+  The REST `Transport` stays for `restOperations` and for screens (`entity()`, pages, drafts).
 - **What is generated is types, never classes.** A generated DTO is the remote contract: a
   class extending `Command` could be registered on the local bus, which is what keeps a remote
   operation and a local use case apart. Runtime knowledge goes in data (`operations`, `events`);

@@ -19,14 +19,17 @@ import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/domain/nam
  * whole every time.
  */
 export type ScaffoldOptions = {
-  /** Where the application's transport is exported (`export const transport`), from the
-   *  bounded context's folder. `../common/infrastructure/transport` by default. */
-  transport?: string;
+  /**
+   * Where the application exports how it reaches its services (`export const operations`, an
+   * `OperationTransport`: REST, JSON-RPC, a platform's), from the bounded context's folder.
+   * `../common/infrastructure/operations` by default.
+   */
+  operations?: string;
 };
 
 /** Names the skeleton's `index.ts` cannot give its constant. */
 const TAKEN = new Set([
-  "transport",
+  "operations",
   "registerServices",
   ..."break case catch class const continue debugger default delete do else enum export extends false finally for function if import in instanceof new null return super switch this throw true try typeof var void while with yield let static implements interface package private protected public await".split(
     " ",
@@ -61,12 +64,12 @@ export function scaffoldFilesOf(
   const name = TAKEN.has(bare) ? `${bare}BoundedContext` : bare;
   const Dependencies = `${Name}Dependencies`;
   const client = metamodel.bindings !== undefined;
-  const transport = options.transport ?? at("..", "common", "infrastructure", "transport");
+  const operations = options.operations ?? at("..", "common", "infrastructure", "operations");
 
   const dependencies = [
     HEADER(`What the services of «${alias}» can count on`),
     "",
-    `import type { Transport } from "${FRAMEWORK}";`,
+    `import type { OperationTransport } from "${FRAMEWORK}";`,
     `import type { BoundedContext } from "${at(FRAMEWORK, "core")}";`,
     ...(client ? ["", `import { clientOf } from "${at("..", "generated", "client")}";`] : []),
     "",
@@ -81,9 +84,9 @@ export function scaffoldFilesOf(
     "",
     "export function registerDependencies(",
     `  bc: BoundedContext<${Dependencies}>,`,
-    `  ${client ? "transport" : "_transport"}: Transport,`,
+    `  ${client ? "operations" : "_operations"}: OperationTransport,`,
     ") {",
-    ...(client ? [`  bc.addDependency("client", clientOf(transport));`] : []),
+    ...(client ? [`  bc.addDependency("client", clientOf(operations));`] : []),
     "  return bc;",
     "}",
     "",
@@ -99,7 +102,7 @@ export function scaffoldFilesOf(
     "  type Command,",
     "  type DomainEvent,",
     `} from "${at(FRAMEWORK, "core")}";`,
-    `import type { Transport } from "${FRAMEWORK}";`,
+    `import type { OperationTransport } from "${FRAMEWORK}";`,
     "",
     `import { type ${Dependencies}, registerDependencies } from "${at(".", "dependencies")}";`,
     "",
@@ -113,8 +116,8 @@ export function scaffoldFilesOf(
     ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
     "}",
     "",
-    `export function config${Name}BoundedContext(name: string, transport: Transport) {`,
-    `  return registerDependencies(new BoundedContext<${Dependencies}>(name), transport);`,
+    `export function config${Name}BoundedContext(name: string, operations: OperationTransport) {`,
+    `  return registerDependencies(new BoundedContext<${Dependencies}>(name), operations);`,
     "}",
     "",
   ].join("\n");
@@ -139,13 +142,13 @@ export function scaffoldFilesOf(
   const index = [
     HEADER(`«${alias}», ready to use`),
     "",
-    `import { transport } from "${transport}";`,
+    `import { operations } from "${operations}";`,
     "",
     `import { config${Name}BoundedContext } from "${at(".", "infrastructure", "bounded_context")}";`,
     `import { registerServices } from "${at(".", "services")}";`,
     "",
     `/** «${alias}»: \`${name}.execute(new Command(...))\`. */`,
-    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, transport);`,
+    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, operations);`,
     `registerServices(${name});`,
     "",
   ].join("\n");

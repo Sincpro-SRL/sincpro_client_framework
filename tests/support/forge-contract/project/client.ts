@@ -2,8 +2,7 @@
 // Version 5a9473783e7d83ade46ed4972746d65db20404a63a305d2f5308baa9fc22cf69.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
-import type { Criteria } from "@sincpro/criteria";
-import { bindable, listRoute, pathFor, readRoute, type SendOptions, type Transport, writeRoute } from "@sincpro/client-framework";
+import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
 import type * as dto from "./domain";
 
@@ -179,189 +178,164 @@ export const operations = {
   },
 } as const;
 
-const routes = {
-  assignIssueSandbox: writeRoute("PUT /issues/{issue_id}/sandbox"),
-  cancelIssue: writeRoute("POST /issues/{issue_id}/cancel"),
-  deliverIssue: writeRoute("POST /issues/{issue_id}/delivery"),
-  editProject: writeRoute("PUT /projects/{id}/edit"),
-  getIssueSandboxReady: writeRoute("POST /issues/{issue_id}/sandbox/prepare"),
-  openIssue: writeRoute("POST /issues"),
-  queueIssueRun: writeRoute("POST /issues/{issue_id}/runs"),
-  registerProject: writeRoute("POST /projects"),
-  resetIssueSandbox: writeRoute("POST /issues/{issue_id}/sandbox/reset"),
-  sendIssue: writeRoute("POST /issues/{issue_id}/messages"),
-  setProjectTenant: writeRoute("PUT /projects/{project_id}/tenant"),
-  shareProject: writeRoute("POST /projects/{project_id}/shares"),
-  stopIssue: writeRoute("POST /issues/{issue_id}/stop"),
-  unshareProject: writeRoute("POST /projects/{project_id}/shares/{tenant_id}/revoke"),
-};
-
 /**
- * «project» over a transport: a method for each operation REST reaches as a
- * page, a record, a read of its own or a write. Used by a Feature, each request carries the
- * trace and the context of the use case that sent it (`bindable`).
+ * «project» over any wire: a method per operation, called by who it is. The transport
+ * decides how it travels — `restOperations(restTransport(…))`, `jsonRpcOperations(…)`, a
+ * platform's —; used by a Feature, each call carries the run's trace, context and signal.
  */
-export function clientOf(transport: Transport) {
+export function clientOf(transport: OperationTransport) {
   return bindable(transport, (transport) => ({
-    /** Make an issue's next runs work on an existing Sandbox of its project. */
-    assignIssueSandbox: (body: dto.CommandAssignIssueSandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseAssignIssueSandbox>(
-        "PUT",
-        pathFor(routes.assignIssueSandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Close an issue as cancelled, with any queued run. */
-    cancelIssue: (body: dto.CommandCancelIssue, options?: SendOptions) =>
-      transport.send<dto.ResponseCancelIssue>(
-        "POST",
-        pathFor(routes.cancelIssue, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Verify the issue's change and publish its branch. Nothing is published if the checks fail. */
-    deliverIssue: (body: dto.CommandDeliverIssue, options?: SendOptions) =>
-      transport.send<dto.ResponseRunStep>(
-        "POST",
-        pathFor(routes.deliverIssue, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Change a project's definition: a draft, a save or a discard. */
-    editProject: (body: dto.CommandEditProject, options?: SendOptions) =>
-      transport.send<dto.ResponseEditProject>(
-        "PUT",
-        pathFor(routes.editProject, body.id === undefined ? undefined : String(body.id), body),
-        body,
-        undefined,
-        options,
-      ),
-    /** One issue, by its id. */
-    getIssue: (id: string) =>
-      transport.one<dto.Issue>(`/issues/${encodeURIComponent(id)}`),
-    /** Get an issue's Sandbox ready before an agent works on it — or say why it is not. */
-    getIssueSandboxReady: (body: dto.CommandGetIssueSandboxReady, options?: SendOptions) =>
-      transport.send<dto.ResponseRunStep>(
-        "POST",
-        pathFor(routes.getIssueSandboxReady, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** One project, by its id. */
-    getProject: (id: string) =>
-      transport.one<dto.Project>(`/projects/${encodeURIComponent(id)}`),
+    /**
+     * Make an issue's next runs work on an existing Sandbox of its project.
+     *
+     * Published over REST.
+     */
+    assignIssueSandbox: (input: dto.CommandAssignIssueSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseAssignIssueSandbox>(operations.CommandAssignIssueSandbox, input, options),
+    /**
+     * Close an issue as cancelled, with any queued run.
+     *
+     * Published over REST.
+     */
+    cancelIssue: (input: dto.CommandCancelIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseCancelIssue>(operations.CommandCancelIssue, input, options),
+    /**
+     * Verify the issue's change and publish its branch. Nothing is published if the checks fail.
+     *
+     * Published over REST.
+     */
+    deliverIssue: (input: dto.CommandDeliverIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseRunStep>(operations.CommandDeliverIssue, input, options),
+    /**
+     * Change a project's definition: a draft, a save or a discard.
+     *
+     * Published over REST.
+     */
+    editProject: (input?: dto.CommandEditProject, options?: OperationOptions) =>
+      transport.call<dto.ResponseEditProject>(operations.CommandEditProject, input ?? {}, options),
+    /**
+     * One issue, by its id.
+     *
+     * Published over REST.
+     */
+    getIssue: (input: dto.CommandGetIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetIssue>(operations.CommandGetIssue, input, options),
+    /**
+     * Get an issue's Sandbox ready before an agent works on it — or say why it is not.
+     *
+     * Published over REST.
+     */
+    getIssueSandboxReady: (input: dto.CommandGetIssueSandboxReady, options?: OperationOptions) =>
+      transport.call<dto.ResponseRunStep>(operations.CommandGetIssueSandboxReady, input, options),
+    /**
+     * One project, by its id.
+     *
+     * Published over REST.
+     */
+    getProject: (input: dto.CommandGetProject, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetProject>(operations.CommandGetProject, input, options),
     /**
      * One run of an issue (``<issue id>.<n>``): its status, its steps with their summaries and
      * the result — what the agent did, what the checks said.
+     *
+     * Published over REST.
      */
-    getRun: (id: string) =>
-      transport.one<dto.Run>(`/runs/${encodeURIComponent(id)}`),
-    /** An issue's facts, oldest first; only the admin reads them. */
-    listIssueEvents: (params: Readonly<Record<"id", string>> & Partial<Record<"criteria" | "cursor" | "names", string>>) =>
-      readRoute<dto.ResponseListIssueEvents>(transport, listRoute("/issues/{id}/events", params)),
+    getRun: (input: dto.CommandGetRun, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetRun>(operations.CommandGetRun, input, options),
+    /**
+     * An issue's facts, oldest first; only the admin reads them.
+     *
+     * Published over REST.
+     */
+    listIssueEvents: (input: dto.CommandListIssueEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListIssueEvents>(operations.CommandListIssueEvents, input, options),
     /**
      * The issues of a project, newest first, each with its status: idle, running, finished,
      * cancelled. Filter by ``parent_id`` for the issues one belongs to.
+     *
+     * Published over REST.
      */
-    listIssues: (criteria: Criteria<dto.Issue>, params?: Partial<Record<"drafts" | "format" | "parent_id" | "project_id", string>>) =>
-      transport.list<dto.Issue>(listRoute("/issues", params), criteria),
-    /** A project's facts, oldest first; only the admin reads them. */
-    listProjectEvents: (params: Readonly<Record<"id", string>> & Partial<Record<"criteria" | "cursor" | "names", string>>) =>
-      readRoute<dto.ResponseListProjectEvents>(transport, listRoute("/projects/{id}/events", params)),
+    listIssues: (input: dto.CommandListIssues, options?: OperationOptions) =>
+      transport.call<dto.ResponseListIssues>(operations.CommandListIssues, input, options),
+    /**
+     * A project's facts, oldest first; only the admin reads them.
+     *
+     * Published over REST.
+     */
+    listProjectEvents: (input: dto.CommandListProjectEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListProjectEvents>(operations.CommandListProjectEvents, input, options),
     /**
      * The projects of a tenant: its own and those shared with it. Use a project's id to open or
      * list its issues. A person reads only what their tenant works on: asking for another tenant
      * answers only what that tenant shares with theirs.
+     *
+     * Published over REST.
      */
-    listProjects: (criteria: Criteria<dto.Project>, params?: Partial<Record<"drafts" | "format" | "tenant_id", string>>) =>
-      transport.list<dto.Project>(listRoute("/projects", params), criteria),
+    listProjects: (input?: dto.CommandListProjects, options?: OperationOptions) =>
+      transport.call<dto.ResponseListProjects>(operations.CommandListProjects, input ?? {}, options),
     /**
      * Open an issue: ask for work on a system of the requester's tenant. Give the project and
      * the request in their words. It does not start the harness: send a message, or queue it.
+     *
+     * Published over REST.
      */
-    openIssue: (body: dto.CommandOpenIssue, options?: SendOptions) =>
-      transport.send<dto.ResponseOpenIssue>(
-        "POST",
-        pathFor(routes.openIssue, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Ask forge to run the harness on an issue in the background. Returns at once. */
-    queueIssueRun: (body: dto.CommandQueueIssueRun, options?: SendOptions) =>
-      transport.send<dto.ResponseQueueIssueRun>(
-        "POST",
-        pathFor(routes.queueIssueRun, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Register a system forge works on: its repositories, where its sandboxes run, its agent and how a change is verified. */
-    registerProject: (body: dto.CommandRegisterProject, options?: SendOptions) =>
-      transport.send<dto.ResponseRegisterProject>(
-        "POST",
-        pathFor(routes.registerProject, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Apply the project's current base again over the issue's Sandbox. */
-    resetIssueSandbox: (body: dto.CommandResetIssueSandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseResetIssueSandbox>(
-        "POST",
-        pathFor(routes.resetIssueSandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Save the message and queue one session. The subscriber starts the harness. */
-    sendIssue: (body: dto.CommandSendIssue, options?: SendOptions) =>
-      transport.send<dto.ResponseSendIssue>(
-        "POST",
-        pathFor(routes.sendIssue, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Group a project under a tenant, or under none. */
-    setProjectTenant: (body: dto.CommandSetProjectTenant, options?: SendOptions) =>
-      transport.send<dto.ResponseSetProjectTenant>(
-        "PUT",
-        pathFor(routes.setProjectTenant, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Share a project with another tenant: its users may open issues on it. */
-    shareProject: (body: dto.CommandShareProject, options?: SendOptions) =>
-      transport.send<dto.ResponseShareProject>(
-        "POST",
-        pathFor(routes.shareProject, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Stop a running session. A later message resumes the same thread. */
-    stopIssue: (body: dto.CommandStopIssue, options?: SendOptions) =>
-      transport.send<dto.ResponseStopIssue>(
-        "POST",
-        pathFor(routes.stopIssue, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Stop sharing a project with a tenant. Its home tenant is unchanged. */
-    unshareProject: (body: dto.CommandUnshareProject, options?: SendOptions) =>
-      transport.send<dto.ResponseUnshareProject>(
-        "POST",
-        pathFor(routes.unshareProject, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
+    openIssue: (input: dto.CommandOpenIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseOpenIssue>(operations.CommandOpenIssue, input, options),
+    /**
+     * Ask forge to run the harness on an issue in the background. Returns at once.
+     *
+     * Published over REST.
+     */
+    queueIssueRun: (input: dto.CommandQueueIssueRun, options?: OperationOptions) =>
+      transport.call<dto.ResponseQueueIssueRun>(operations.CommandQueueIssueRun, input, options),
+    /**
+     * Register a system forge works on: its repositories, where its sandboxes run, its agent and how a change is verified.
+     *
+     * Published over REST.
+     */
+    registerProject: (input: dto.CommandRegisterProject, options?: OperationOptions) =>
+      transport.call<dto.ResponseRegisterProject>(operations.CommandRegisterProject, input, options),
+    /**
+     * Apply the project's current base again over the issue's Sandbox.
+     *
+     * Published over REST.
+     */
+    resetIssueSandbox: (input: dto.CommandResetIssueSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseResetIssueSandbox>(operations.CommandResetIssueSandbox, input, options),
+    /**
+     * Save the message and queue one session. The subscriber starts the harness.
+     *
+     * Published over REST.
+     */
+    sendIssue: (input: dto.CommandSendIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseSendIssue>(operations.CommandSendIssue, input, options),
+    /**
+     * Group a project under a tenant, or under none.
+     *
+     * Published over REST.
+     */
+    setProjectTenant: (input: dto.CommandSetProjectTenant, options?: OperationOptions) =>
+      transport.call<dto.ResponseSetProjectTenant>(operations.CommandSetProjectTenant, input, options),
+    /**
+     * Share a project with another tenant: its users may open issues on it.
+     *
+     * Published over REST.
+     */
+    shareProject: (input: dto.CommandShareProject, options?: OperationOptions) =>
+      transport.call<dto.ResponseShareProject>(operations.CommandShareProject, input, options),
+    /**
+     * Stop a running session. A later message resumes the same thread.
+     *
+     * Published over REST.
+     */
+    stopIssue: (input: dto.CommandStopIssue, options?: OperationOptions) =>
+      transport.call<dto.ResponseStopIssue>(operations.CommandStopIssue, input, options),
+    /**
+     * Stop sharing a project with a tenant. Its home tenant is unchanged.
+     *
+     * Published over REST.
+     */
+    unshareProject: (input: dto.CommandUnshareProject, options?: OperationOptions) =>
+      transport.call<dto.ResponseUnshareProject>(operations.CommandUnshareProject, input, options),
   }));
 }

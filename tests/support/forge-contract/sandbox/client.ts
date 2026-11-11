@@ -2,8 +2,7 @@
 // Version 838639fa62510d86c537a0188dc109e1b81f2f3944ca18a8fd5915e647a56250.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
-import type { Criteria } from "@sincpro/criteria";
-import { bindable, listRoute, pathFor, readRoute, type SendOptions, type Transport, writeRoute } from "@sincpro/client-framework";
+import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
 import type * as dto from "./domain";
 
@@ -107,103 +106,97 @@ export const operations = {
   },
 } as const;
 
-const routes = {
-  createSandbox: writeRoute("POST /sandboxes"),
-  deliver: writeRoute("POST /deliveries"),
-  deploySandbox: writeRoute("POST /sandboxes/{sandbox_id}/deploy"),
-  destroySandbox: writeRoute("POST /sandboxes/{sandbox_id}/destroy"),
-  reconcileSandbox: writeRoute("POST /sandboxes/{sandbox_id}/reconcile"),
-  recordInstrumentation: writeRoute("POST /sandboxes/{sandbox_id}/instrumentation"),
-  refreshSandbox: writeRoute("POST /sandboxes/{sandbox_id}/refresh"),
-};
-
 /**
- * «sandbox» over a transport: a method for each operation REST reaches as a
- * page, a record, a read of its own or a write. Used by a Feature, each request carries the
- * trace and the context of the use case that sent it (`bindable`).
+ * «sandbox» over any wire: a method per operation, called by who it is. The transport
+ * decides how it travels — `restOperations(restTransport(…))`, `jsonRpcOperations(…)`, a
+ * platform's —; used by a Feature, each call carries the run's trace, context and signal.
  */
-export function clientOf(transport: Transport) {
+export function clientOf(transport: OperationTransport) {
   return bindable(transport, (transport) => ({
-    /** Create a Sandbox on an existing Workspace nobody else holds. */
-    createSandbox: (body: dto.CommandCreateSandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseCreateSandbox>(
-        "POST",
-        pathFor(routes.createSandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
+    /**
+     * Create a Sandbox on an existing Workspace nobody else holds.
+     *
+     * Published over REST.
+     */
+    createSandbox: (input: dto.CommandCreateSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseCreateSandbox>(operations.CommandCreateSandbox, input, options),
     /**
      * Publish a workspace's verified change: one branch per repository and, with a review
      * host, one review request each. Only the revisions the verification passed go out.
+     *
+     * Published over REST.
      */
-    deliver: (body: dto.CommandDeliver, options?: SendOptions) =>
-      transport.send<dto.ResponseDeliver>(
-        "POST",
-        pathFor(routes.deliver, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Deploy a Sandbox with its provider, from a source and parameters. */
-    deploySandbox: (body: dto.CommandDeploySandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseDeploySandbox>(
-        "POST",
-        pathFor(routes.deploySandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Destroy a Sandbox nobody holds; with ``dry_run``, say what would go. */
-    destroySandbox: (body: dto.CommandDestroySandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseDestroySandbox>(
-        "POST",
-        pathFor(routes.destroySandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** What a workspace's change branch delivered: its branches and their review requests. */
-    getDeliveryStatus: (params?: Partial<Record<"branch" | "criteria" | "cursor" | "workspace_id", string>>) =>
-      readRoute<dto.ResponseGetDeliveryStatus>(transport, listRoute("/deliveries", params)),
-    /** One Sandbox: its lifecycle, its Workspace and its deployment. */
-    getSandbox: (id: string) =>
-      transport.one<dto.Sandbox>(`/sandboxes/${encodeURIComponent(id)}`),
-    /** The Sandboxes no run may take now: reserved, or uncertain. */
-    listOccupiedSandboxes: (params?: Partial<Record<"criteria" | "cursor", string>>) =>
-      readRoute<dto.ResponseListOccupiedSandboxes>(transport, listRoute("/occupied-sandboxes", params)),
-    /** Who holds each Sandbox, or held it last. */
-    listReservations: (criteria: Criteria<dto.Reservation>, params?: Partial<Record<"drafts" | "format", string>>) =>
-      transport.list<dto.Reservation>(listRoute("/reservations", params), criteria),
-    /** The facts of the sandbox context — sandboxes, workspaces, deliveries — newest first. */
-    listSandboxEvents: (criteria: Criteria<dto.SandboxEvent>, params?: Partial<Record<"drafts" | "format", string>>) =>
-      transport.list<dto.SandboxEvent>(listRoute("/sandbox-events", params), criteria),
-    /** Free a Sandbox left uncertain, once a person confirmed nothing is still writing in it. */
-    reconcileSandbox: (body: dto.CommandReconcileSandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseReconcileSandbox>(
-        "POST",
-        pathFor(routes.reconcileSandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Record the state of a Sandbox's instrumentation (logs, traces) as its provider reports it. */
-    recordInstrumentation: (body: dto.CommandRecordInstrumentation, options?: SendOptions) =>
-      transport.send<dto.ResponseRecordInstrumentation>(
-        "POST",
-        pathFor(routes.recordInstrumentation, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
-    /** Ask the Sandbox's provider for its current state. */
-    refreshSandbox: (body: dto.CommandRefreshSandbox, options?: SendOptions) =>
-      transport.send<dto.ResponseRefreshSandbox>(
-        "POST",
-        pathFor(routes.refreshSandbox, undefined, body),
-        body,
-        undefined,
-        options,
-      ),
+    deliver: (input: dto.CommandDeliver, options?: OperationOptions) =>
+      transport.call<dto.ResponseDeliver>(operations.CommandDeliver, input, options),
+    /**
+     * Deploy a Sandbox with its provider, from a source and parameters.
+     *
+     * Published over REST.
+     */
+    deploySandbox: (input: dto.CommandDeploySandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseDeploySandbox>(operations.CommandDeploySandbox, input, options),
+    /**
+     * Destroy a Sandbox nobody holds; with ``dry_run``, say what would go.
+     *
+     * Published over REST.
+     */
+    destroySandbox: (input: dto.CommandDestroySandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseDestroySandbox>(operations.CommandDestroySandbox, input, options),
+    /**
+     * What a workspace's change branch delivered: its branches and their review requests.
+     *
+     * Published over REST.
+     */
+    getDeliveryStatus: (input: dto.CommandGetDeliveryStatus, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetDeliveryStatus>(operations.CommandGetDeliveryStatus, input, options),
+    /**
+     * One Sandbox: its lifecycle, its Workspace and its deployment.
+     *
+     * Published over REST.
+     */
+    getSandbox: (input: dto.CommandGetSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseGetSandbox>(operations.CommandGetSandbox, input, options),
+    /**
+     * The Sandboxes no run may take now: reserved, or uncertain.
+     *
+     * Published over REST.
+     */
+    listOccupiedSandboxes: (input?: dto.CommandListOccupiedSandboxes, options?: OperationOptions) =>
+      transport.call<dto.ResponseListOccupiedSandboxes>(operations.CommandListOccupiedSandboxes, input ?? {}, options),
+    /**
+     * Who holds each Sandbox, or held it last.
+     *
+     * Published over REST.
+     */
+    listReservations: (input?: dto.CommandListReservations, options?: OperationOptions) =>
+      transport.call<dto.ResponseListReservations>(operations.CommandListReservations, input ?? {}, options),
+    /**
+     * The facts of the sandbox context — sandboxes, workspaces, deliveries — newest first.
+     *
+     * Published over REST.
+     */
+    listSandboxEvents: (input?: dto.CommandListSandboxEvents, options?: OperationOptions) =>
+      transport.call<dto.ResponseListSandboxEvents>(operations.CommandListSandboxEvents, input ?? {}, options),
+    /**
+     * Free a Sandbox left uncertain, once a person confirmed nothing is still writing in it.
+     *
+     * Published over REST.
+     */
+    reconcileSandbox: (input: dto.CommandReconcileSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseReconcileSandbox>(operations.CommandReconcileSandbox, input, options),
+    /**
+     * Record the state of a Sandbox's instrumentation (logs, traces) as its provider reports it.
+     *
+     * Published over REST.
+     */
+    recordInstrumentation: (input: dto.CommandRecordInstrumentation, options?: OperationOptions) =>
+      transport.call<dto.ResponseRecordInstrumentation>(operations.CommandRecordInstrumentation, input, options),
+    /**
+     * Ask the Sandbox's provider for its current state.
+     *
+     * Published over REST.
+     */
+    refreshSandbox: (input: dto.CommandRefreshSandbox, options?: OperationOptions) =>
+      transport.call<dto.ResponseRefreshSandbox>(operations.CommandRefreshSandbox, input, options),
   }));
 }
