@@ -26,10 +26,13 @@ export type PipelineLayer = "feature" | "application_service";
 
 /** What caused a run from outside: an event delivered with its envelope continues its chain. */
 export type Cause = {
-  /** The id of what caused it — a delivered event's. */
+  /** The id of what caused it — a delivered message's. */
   readonly id: string;
   /** The chain it continues. */
   readonly correlationId: string;
+  /** The trace it continues (W3C), when the message carried one: the run's span is its child. */
+  readonly traceparent?: string;
+  readonly tracestate?: string;
 };
 
 /**

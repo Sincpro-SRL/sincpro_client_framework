@@ -76,9 +76,10 @@ module has only the layers it needs, and says what it offers in its own `index.t
   `class Cancel` gives `project/Cancel`, identity `project.Cancel`. Nothing on a service declares
   it. Commands and events route by exact constructor identity — a generated one by its identity
   or wire name.
-- **A wire name is declared, a class name is not one.** An event's `static eventName` and a
-  travelling Command's `static commandName` are the contract other processes read, with its
-  version; `name` is reserved for the event's.
+- **An event's name is declared; a Command's identity is the framework's.** `static eventName` is
+  required and dotted (`<context>.<aggregate>.vN.<fact>`); `name` is reserved for it. A Command's
+  identity is given when a bounded context registers it — `<context>.<Command>`, the backend's
+  `registered_name`, the key a generated contract carries —; `static commandName` fixes another.
 - **A replacement names what it replaces.** `feature(dto, { replaces: Service })` is refused
   unless `Service` is registered now for each DTO listed — all of them or none; its spans carry
   `sincpro.replaces`.
@@ -99,10 +100,12 @@ module has only the layers it needs, and says what it offers in its own `index.t
   writes a subscriber per event: registering a use case for the event is the subscription. A
   Command from a queue runs only when declared (`commands`), in the one bus that registered it;
   `CommandNotConsumed` otherwise. Two bounded contexts never share a name.
-- **Commands and events serialize differently.** An event: `{ kind: "event", envelope, data }`. A
-  Command: `{ kind: "command", type, id, correlationId, causationId, sentAt, data }`, the backend's
-  `Payload`. Written and read only through `eventMessageOf`/`commandMessageOf` and
-  `eventFrom`/`commandFrom`.
+- **Messages are the backend's: CloudEvents 1.0.** One shape for Commands and events — `type` is
+  the event's name or the Command's identity —; the route differs (N buses, or the one that
+  registered it, when declared). `readMessage` reads structured and binary mode (`ce_` headers),
+  as `Envelope.of`. A delivered message's `correlationid`, `causationid` and `traceparent` become
+  the run's `Cause`: its flow and its trace continue. Written and read only through
+  `eventMessageOf`/`commandMessageOf`, `readMessage` and `eventFrom`/`commandFrom`.
 - **A cron is a platform's, and not every platform has one.** Mobile's scheduler wakes a closed
   app (`CronWorker`, its job a Command); a browser runs nothing in a closed tab, so on the web a
   refresh is a screen's and scheduled work is the backend's. No cron piece lives here until web

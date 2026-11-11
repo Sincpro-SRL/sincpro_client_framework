@@ -21,6 +21,7 @@ import {
   type CommandDescriptor,
   type DomainEvent,
   type DtoKey,
+  EVENT_NAME,
   type EventClass,
   type EventDescriptor,
   type Executable,
@@ -584,12 +585,25 @@ export class BoundedContext<
         "A service is registered for a Command or a DomainEvent: its class, or a generated one's entry",
       );
     }
+    // A Command's identity is the framework's, as the backend's `registered_name`:
+    // `<context>.<Command>` — the key a generated contract's `operations` carry too.
+    if (isCommandClass(dto) && !Object.hasOwn(dto, "commandName") && dto.name !== "") {
+      Object.defineProperty(dto, "commandName", {
+        value: `${this.name}.${dto.name}`,
+        configurable: true,
+      });
+    }
     const known = keyIdentity(dto);
     if (
       known.kind === "event" &&
       (typeof known.wire !== "string" || known.wire.trim() === "")
     ) {
       throw new Error("A domain event needs a nonempty eventName");
+    }
+    if (known.kind === "event" && !EVENT_NAME.test(known.wire ?? "")) {
+      throw new Error(
+        `${known.wire} is not an event's name: <context>.<aggregate>.vN.<fact>`,
+      );
     }
     if (isCommandDescriptor(dto) && dto.identity.trim() === "") {
       throw new Error("A generated Command needs its identity");

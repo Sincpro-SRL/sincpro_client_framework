@@ -93,7 +93,7 @@ for (const style of [
         [
           ["common/PrintImage", "common.CommandPrintImage", undefined],
           ["common/PrintImage", undefined, "common.print.v1.requested"],
-          ["common/PrintImage", undefined, undefined],
+          ["common/PrintImage", "common.CommandReprint", undefined],
         ],
       );
       assert.equal(

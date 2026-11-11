@@ -21,17 +21,10 @@ export abstract class Response extends DataTransferObject {}
 declare const responseType: unique symbol;
 
 /**
- * A request for work. A Command that travels — a queue, another process — declares its identity,
- * `<context>.<Command>`, as the backend's `registered_name`: what its message says (`type`) and
- * what the receiving bus finds its class by.
- *
- *     class CommandIssueInvoice extends Command<ResponseInvoice> {
- *       static readonly commandName = "billing.CommandIssueInvoice";
- *       constructor(readonly order_id: string) { super(); }
- *     }
- *
- * Context: declared, never `constructor.name`, which a minifier renames. One that never leaves
- * the process needs none.
+ * A request for work, to one bus. Its identity is the framework's, taken when a bounded context
+ * registers it — `<context>.<Command>`, as the backend's `registered_name` —: what its message
+ * says (`type`), what the receiving bus finds its class by, and what a generated contract's
+ * `operations` carry. A production build keeps class names; `static commandName` fixes another.
  */
 export abstract class Command<R> extends DataTransferObject {
   /** Type-only association: absent from serialized DTOs and not a runtime validator. */
@@ -63,6 +56,9 @@ export abstract class DomainEvent extends DataTransferObject {
     return (this.constructor as Partial<EventNamed>).eventName ?? "";
   }
 }
+
+/** An event's wire name: dotted, as the backend's `<context>.<aggregate>.vN.<fact>`. */
+export const EVENT_NAME = /^[\w-]+(\.[\w-]+)+$/;
 
 /** What an event class declares: the name it is known by on the wire. */
 type EventNamed = { readonly eventName: string };

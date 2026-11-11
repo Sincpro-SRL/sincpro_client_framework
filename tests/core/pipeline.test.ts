@@ -109,7 +109,7 @@ test("an interceptor that passes on another class is refused: the bus routes by 
   context.interceptor(CommandCheckout)((_command, next) => next(new CommandPay(1)));
   await assert.rejects(
     context.execute(new CommandCheckout(1)),
-    /passed on a CommandPay where it received a CommandCheckout/,
+    /passed on a shop.CommandPay where it received a shop.CommandCheckout/,
   );
 });
 

@@ -11,6 +11,7 @@ import type {
 import { plainCodec } from "@sincpro/client-framework/context/adapters/plain-codec";
 import { CONTEXT_HEADER, travels } from "@sincpro/client-framework/context/domain/codec";
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
+import { traceparentOf } from "@sincpro/client-framework/observability/services/trace-context";
 import type { Criteria } from "@sincpro/criteria";
 
 /** Whether a value is a `Transport`: what a run binds to itself even without `BIND`. */
@@ -32,9 +33,9 @@ export function isTransport(value: unknown): value is Transport {
 export function headersOf(execution: Execution): Record<string, string> {
   const headers: Record<string, string> = {};
   const { span, context } = execution;
-  if (span.traceId !== "" && span.spanId !== "") {
-    headers["traceparent"] =
-      `00-${span.traceId}-${span.spanId}-${span.sampled ? "01" : "00"}`;
+  const traceparent = traceparentOf(span);
+  if (traceparent !== undefined) {
+    headers["traceparent"] = traceparent;
     if (span.state) headers["tracestate"] = span.state;
   }
   // Only what travels: an object or a function held in the context stays in this process.

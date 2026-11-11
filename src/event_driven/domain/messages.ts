@@ -1,39 +1,36 @@
 import type { JsonValue } from "@sincpro/client-framework/common/serialization";
-import type { Envelope } from "@sincpro/client-framework/event_driven/domain/envelope";
 
 /**
- * An event as it travels: its envelope — wire name, id, flow, cause — and its values. A fact:
- * every bounded context that registered it hears it.
+ * A Command or an event as it travels — CloudEvents 1.0, as sincpro_framework writes it on every
+ * queue (`Envelope`): `type` says what it is — an event's `name`, a Command's identity
+ * (`<context>.<Command>`) —, `data` is the DTO as JSON, the chain and the trace ride beside it.
  *
- *     { kind: "event", envelope: { name: "billing.invoice.v1.issued", id, correlationId, … },
- *       data: { invoice_id: "i-1", total: { amount: "10.00", currency: "BOB" } } }
+ *     { specversion: "1.0", id: "0193…", source: "urn:svc:billing", type: "billing.invoice.v1.issued",
+ *       time: "2026-11-11T03:00:00Z", correlationid: "0192…", causationid: "0191…",
+ *       traceparent: "00-…-01", datacontenttype: "application/json", data: { name: …, invoice_id: … } }
+ *
+ * Context: one shape for both; what differs is the route — an event to every bus that registered
+ * its name, a Command to the one bus that registered its identity, and only when declared. A
+ * broker's binary mode carries the same attributes as `ce_` headers (`readMessage`).
  */
-export type EventMessage = {
-  readonly kind: "event";
-  readonly envelope: Envelope;
-  readonly data: JsonValue;
-};
-
-/**
- * A Command as it travels — the backend's `Payload`: its identity (`type`, `<context>.<Command>`),
- * which the one bus that executes it finds its class by, its values and its flow.
- *
- *     { kind: "command", type: "billing.CommandIssueInvoice", id, correlationId, causationId,
- *       sentAt, data: { order_id: "o-1" } }
- *
- * Context: a Command is a request to one bus, not a fact many hear: it has no envelope and no
- * wire name, and a queue executes it only where it was declared consumable.
- */
-export type CommandMessage = {
-  readonly kind: "command";
-  readonly type: string;
+export type Message = {
+  readonly specversion: "1.0";
   readonly id: string;
-  readonly correlationId: string;
-  readonly causationId: string | null;
-  /** When it was sent, ISO. */
-  readonly sentAt: string;
+  readonly source: string;
+  readonly type: string;
+  readonly subject?: string;
+  /** When it was produced, ISO. */
+  readonly time: string;
+  readonly correlationid: string;
+  readonly causationid?: string;
+  readonly traceparent?: string;
+  readonly tracestate?: string;
+  readonly datacontenttype: "application/json";
   readonly data: JsonValue;
 };
 
-/** What a queue carries: an event, or a Command. */
-export type Message = EventMessage | CommandMessage;
+/** A message in a broker's binary mode: its attributes as headers, its data as the body. */
+export type BinaryMessage = {
+  readonly headers: Readonly<Record<string, string | Uint8Array | null | undefined>>;
+  readonly body: string | JsonValue;
+};

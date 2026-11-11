@@ -160,13 +160,10 @@ test("a Command from the queue runs only when declared, in the one bus that regi
 });
 
 test("a Command travels by its identity: one without it does not travel", () => {
-  assert.throws(
-    () => commandMessageOf(new CommandWithoutIdentity()),
-    /declares no commandName/,
-  );
+  assert.throws(() => commandMessageOf(new CommandWithoutIdentity()), /has no identity/);
   const message = commandMessageOf(new CommandIssueInvoice("o-1"));
-  assert.equal(message.correlationId, message.id);
-  assert.equal(message.causationId, null);
+  assert.equal(message.correlationid, message.id);
+  assert.equal(message.causationid, undefined);
   const rebuilt = commandFrom(CommandIssueInvoice, message.data);
   assert.ok(rebuilt instanceof CommandIssueInvoice && rebuilt.order_id === "o-1");
 });

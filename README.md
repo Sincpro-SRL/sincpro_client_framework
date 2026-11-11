@@ -124,16 +124,22 @@ replaced (`sincpro.replaces`). A dependency is replaced the same way.
 
 ## Commands and events: two DTOs that travel differently
 
-|                      | A Command                                                                                           | An event                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Is                   | a request to **one** bus                                                                            | a fact **N** buses hear                                         |
-| Known on the wire by | its identity, `static commandName = "billing.CommandIssueInvoice"`                                  | its wire name, `static eventName = "billing.invoice.v1.issued"` |
-| Travels as           | `{ kind: "command", type, id, correlationId, causationId, sentAt, data }` (the backend's `Payload`) | `{ kind: "event", envelope, data }`                             |
-| Written / read with  | `commandMessageOf(command, cause?)` / `commandFrom(type, data)`                                     | `eventMessageOf(event, envelope)` / `eventFrom(type, data)`     |
+|                      | A Command                                                                                                              | An event                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Is                   | a request to **one** bus                                                                                               | a fact **N** buses hear                                                            |
+| Known on the wire by | its identity, `<context>.<Command>` — given by the bounded context that registers it (the backend's `registered_name`) | its wire name, `static eventName = "billing.invoice.v1.issued"` — required, dotted |
+| Travels as           | CloudEvents 1.0, `type` = its identity                                                                                 | CloudEvents 1.0, `type` = its name; `data` repeats `name`                          |
+| Written / read with  | `commandMessageOf(command, cause?)` / `commandFrom(type, data)`                                                        | `eventMessageOf(event, envelope)` / `eventFrom(type, data)`                        |
 
-Both names are declared: they are the contract other processes read, with its version — never
-a class's name. A Command that never leaves the process needs no identity. A value that is not
-JSON (`Money`, `Decimal`, a day) comes back as such through the class's `static fromJSON`.
+Both travel as the backend writes them on every queue — CloudEvents 1.0: `id`, `source`, `type`,
+`time`, `correlationid`, `causationid`, `traceparent`, and the DTO's JSON as `data` —; what differs
+is the route. `readMessage` reads one structured, or in a broker's binary mode (the attributes as
+`ce_`, `ce-` or `cloudEvents:` headers, the type falling back to `sincpro-event`), as the backend's
+`Envelope.of`. A delivered message continues its flow and its trace: the run's span is a child of
+its `traceparent`. An event's name is declared — the contract other processes read, with its
+version; a Command's identity is the framework's, the one a generated contract's `operations`
+carry (`static commandName` fixes another). A value that is not JSON (`Money`, `Decimal`, a day)
+comes back as such through the class's `static fromJSON`.
 
 ```ts
 class InvoiceIssued extends DomainEvent {
@@ -211,7 +217,7 @@ new Subscriber({
   commands: [CommandIssueInvoice], // consumed from the queue: only when declared
 });
 
-await subscriber.receive(message); // an EventMessage or a CommandMessage: what each answered
+await subscriber.receive(message); // CloudEvents, structured or { headers, body }: what each answered
 ```
 
 - **An event** is handed to every bounded context that registered it, in the order named; one
@@ -246,7 +252,7 @@ What is defined here, and what each platform plugs behind the ports:
 | Piece             | Here                                                           | The platform's                         |
 | ----------------- | -------------------------------------------------------------- | -------------------------------------- |
 | `DomainEvent`     | the class, its `eventName`, its messages                       | —                                      |
-| `Command`         | its `commandName`, its messages                                | —                                      |
+| `Command`         | its identity (given at registration), its messages             | —                                      |
 | `Envelope`        | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
 | `EventQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
 | `EventStore` port | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
