@@ -42,6 +42,7 @@ Entrypoint -> BoundedContext.execute(Command) -> Feature or ApplicationService -
 | Event store        | Where a stored queue keeps its events — the platform's technology                  | the queue's own storage, the event table         | `EventStore` port, `memoryEventStore()`                                        |
 | Set aside          | Delivered no more: a failure every attempt would repeat (the dead-letter queue)    | `PERMANENT`, set aside by the forwarding         | `state: "set_aside"`                                                           |
 | Process listeners  | Hear every bounded context of the process at once                                  | the process's start/completion/failure listeners | `processListeners.onStart/onCompletion/onFailure`                              |
+| Circuit breaker    | Stops calling what keeps failing; one call tries again after its time              | `CircuitBreaker`, `CircuitOpen`, `COUNTED`       | `CircuitBreaker`, `CircuitOpen`, `COUNTED_KINDS`, `guardedTransport`           |
 
 ## Remote contracts are not local services
 

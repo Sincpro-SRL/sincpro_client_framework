@@ -1,3 +1,4 @@
+import type { Execution } from "@sincpro/client-framework/context/domain/execution";
 import type { ContextValues } from "@sincpro/client-framework/context/domain/store";
 import type { FeatureBus } from "@sincpro/client-framework/core/domain/bus";
 import type { Command, DomainEvent } from "@sincpro/client-framework/core/domain/dto";
@@ -35,6 +36,12 @@ export abstract class Feature<
   declare readonly logger: LayerLogger;
   /** What cancels this run, when it was executed with one: check it in a long loop. */
   declare readonly signal: AbortSignal | undefined;
+  /**
+   * This run: its id, use case, flow (`correlationId`) and cause. A subscriber of a delivered
+   * event finds the envelope's id as `causationId` — the key that makes executing it twice
+   * harmless.
+   */
+  declare readonly execution: Execution;
   abstract execute(command: C): R | Promise<R>;
 }
 
@@ -54,4 +61,5 @@ export const RESERVED_MEMBERS: ReadonlySet<string> = new Set([
   "span",
   "logger",
   "signal",
+  "execution",
 ]);

@@ -83,6 +83,13 @@ module has only the layers it needs, and says what it offers in its own `index.t
   store first, deliver in order, retry what may succeed, set aside what never will, never run a
   context twice — over an `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store
   only keeps records; it never decides.
+- **A circuit belongs where the dependency is.** `CircuitBreaker` (in the process's memory, the
+  backend's semantics: `COUNTED_KINDS`, half-open with one probe) guards a transport
+  (`guardedTransport`) or an adapter; its `CircuitOpen` declares `unavailable` and a wait, so
+  nothing else needs to know a circuit exists.
+- **Delivery is at least once.** A stored event may run twice in a context after a crash; a
+  subscriber keys its effect by `this.execution.causationId` (the envelope's id). `maxAttempts`
+  sets aside what keeps failing. One process drains a store. `execution` is reserved.
 - **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the
   `Problem` (the same over REST, JSON-RPC and gRPC), then a REST status. A transport of another
   wire, or another backend's adapter, declares the kind with `kindOfGrpcCode` /

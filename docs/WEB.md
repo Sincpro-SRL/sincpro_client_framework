@@ -39,7 +39,8 @@ await run(new CommandQuote(3)); // ResponseTotal
 indicator (a toast, a progress bar) hears every run of every bounded context. A hook passes the
 screen's `AbortSignal` (`execute(command, { signal })`): a screen that closes cancels its run and
 its requests, which end `aborted`, never reported. `failureOf(error)` tells the screen what to do
-— fix the form, sign in again, retry, refresh — whatever the wire.
+— fix the form, sign in again, retry, refresh — whatever the wire. A `CircuitBreaker` around a
+transport (`guardedTransport`) stops a screen from hammering a backend that is down.
 
 ## Events in a browser
 

@@ -64,6 +64,7 @@ export {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/domain/transport";
+export { guardedTransport } from "@sincpro/client-framework/client/services/guarded";
 export {
   bindable,
   bindTransport,

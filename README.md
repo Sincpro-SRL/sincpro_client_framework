@@ -210,9 +210,20 @@ in the order stored — the backend's store-and-forward, over whatever store the
 - A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
   it aside — the dead-letter queue — and never holds back what follows.
 - One that is not `ready` (no connection, no session) waits while the rest go on.
+- After `maxAttempts` (10) a failure a retry might still fix is set aside too: a bug of the
+  process (`internal`) never holds the line forever.
 
 The port only keeps records — `add`, `next(skip)`, `save` — so a SQLite table, IndexedDB or
 memory carry events the same way, with the same rules.
+
+Three things a platform keeps in mind:
+
+- **At least once.** A process that stops after a context executed an event and before the store
+  saved it runs it there again. A subscriber that must not act twice keys what it does by the
+  envelope's id, `this.execution.causationId` in its run.
+- **One drainer per store.** Two tabs over one IndexedDB claim it first (the Web Locks API).
+- **Values come back as JSON.** An event that carries a `Money`, a `Decimal` or a date declares
+  `static fromJSON` to read them back as such.
 
 The events a remote service publishes arrive as generated types (`DomainEvent` in
 `generated/domain.ts`, a union narrowed by `name`); a local event is a class, like a local
@@ -334,6 +345,22 @@ screen.abort(); // the run ends `aborted` at once; nothing is reported
 Its Features inherit the signal, a service reads it as `this.signal`, and every request its bound
 transport or generated client sends is cancelled with it — with nothing passed by hand.
 
+### A circuit breaker
+
+```ts
+const odoo = new CircuitBreaker("odoo", { failures: 5, openFor: 30_000 });
+const transport = guardedTransport(rpcTransport, odoo); // every call through the circuit
+await odoo.call(() => printer.print(receipt)); // or one call; odoo.wrap(fn) for a function
+```
+
+The backend's `CircuitBreaker`, in this process's memory. After `failures` counted failures in a
+row — the dependency did not answer (`unavailable`, `unknown_outcome`, `exhausted`, `internal`) —
+it opens: calls fail at once with `CircuitOpen`, `unavailable` with the time left as its
+`retryAfter`, so `failureOf`, a stored queue (which waits that long) and a screen already know
+what to do. After `openFor`, one call tries: an answer closes it, a counted failure opens it
+again. A refusal is an answer and never counts. Put it where the dependency is — the transport, an
+adapter —, not in each Feature.
+
 ## Observability
 
 The platform plugs the implementations once, at startup; nothing breaks without them:
@@ -431,6 +458,7 @@ its own. `values` is the same object until it changes, so a screen can hand it t
 | `memoryTransport(tables)`      | the same contract in memory, copying by the wire's rules — for tests and demos        |
 | `entity(key, routes)`          | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
 | `retryKeys()`                  | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
+| `guardedTransport(t, breaker)` | every call of a transport — of any wire — through a circuit breaker                   |
 | `screensTransport(transport)`  | screen reads and writes run as use cases of `screens`: traced and reported            |
 | `parquetDecoder` (`./parquet`) | large pages read as Parquet through the same transport                                |
 
@@ -538,6 +566,7 @@ Each module is laid out as sincpro_framework's are, and says what it offers in i
 ```text
 src/
   common/          the values of the wire, and what kind of failure an error is
+  circuit_breaker/ CircuitBreaker, CircuitOpen
   context/
     domain/          ContextStore and ContextCodec ports, what travels, Execution
     adapters/        memoryContexts, plainCodec

@@ -72,8 +72,11 @@ server-side render, in a script and in a test, unchanged.**
 11. **Event-driven, as ports (`event_driven`).** How every platform publishes domain events and
     subscribes to them the same way: the envelope that travels beside an event (its flow and
     its cause), the `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, a
-    `Subscriber` over the bounded contexts that hear, and the queue that delivers in the call,
-    in memory. The guidelines and the contracts are here; durable delivery is the platform's.
+    `Subscriber` over the bounded contexts that hear, the queue that delivers in the call, and
+    the stored queue's rules over an `EventStore` the platform plugs. The guidelines, the rules
+    and the contracts are here; where events are kept is the platform's.
+12. **Resilience.** What a failure is (`failureOf`, the backend's kinds on every wire) and the
+    backend's circuit breaker, guarding any transport or adapter.
 
 ## What it is not
 

@@ -7,7 +7,8 @@
  * as sincpro_framework's are — `domain/` (ports and rules), `adapters/` (their implementations),
  * `services/`, `infrastructure/`, `entrypoint/` — and says what it offers in its own `index.ts`:
  *
- *   common/         the values of the wire, as the backend writes them
+ *   common/         the values of the wire, as the backend writes them; what a failure is
+ *   circuit_breaker/  stop calling what keeps failing; try it again once it may be back
  *   context/        the context's levels, where they live, what travels, the execution
  *   observability/  tracing, error reporting and logging: ports, console, loggers
  *   client/         the seam with a server: transports, entities, the client contract
@@ -19,6 +20,7 @@
  * The generator is `@sincpro/client-framework/codegen`, and the in-memory observability
  * `@sincpro/client-framework/testing`: neither is part of what an application runs.
  */
+export * from "@sincpro/client-framework/circuit_breaker";
 export * from "@sincpro/client-framework/client";
 export * from "@sincpro/client-framework/common";
 export * from "@sincpro/client-framework/context";
