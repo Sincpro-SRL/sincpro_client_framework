@@ -4,6 +4,7 @@ import {
   BoundedContext,
   Command,
   commandMessageOf,
+  commandOf,
   configureProcess,
   DomainEvent,
   envelopeOf,
@@ -11,6 +12,7 @@ import {
   Feature,
   Publisher,
   readMessage,
+  type RemoteCommand,
   Subscriber,
   syncQueue,
 } from "@sincpro/client-framework";
@@ -189,4 +191,40 @@ test("a delivered message continues the backend's trace and flow; what a run pub
   await shopBoundedContext.execute(new CommandPay());
   const pay = tracer.spans.find((span) => span.name === "shop/Pay");
   assert.equal(published[0], `00-${pay?.traceId}-${pay?.spanId}-01`);
+});
+
+test("a generated Command and a generated event travel and come back the same way as classes", async () => {
+  /** What the generator writes: types and entries — no class. */
+  type CommandArchiveIssue = { issue_id: string };
+  type IssueClosed = { name: "project.issue.v1.closed"; issue_id: string };
+  const operations = {
+    CommandArchiveIssue: { identity: "project.CommandArchiveIssue", role: "command" },
+  } as const;
+  const events = { IssueClosed: { name: "project.issue.v1.closed" } } as const;
+  const heard: string[] = [];
+  class Archive extends Feature<IssueClosed | RemoteCommand<CommandArchiveIssue>, void> {
+    execute(input: IssueClosed | RemoteCommand<CommandArchiveIssue>): void {
+      heard.push(`${"name" in input ? input.name : "command"} ${input.issue_id}`);
+    }
+  }
+  const projectBoundedContext = new BoundedContext("project");
+  projectBoundedContext.feature([events.IssueClosed, operations.CommandArchiveIssue])(
+    Archive,
+  );
+  const subscriber = new Subscriber({
+    boundedContexts: [projectBoundedContext],
+    commands: [operations.CommandArchiveIssue],
+  });
+
+  const command = commandMessageOf(
+    commandOf(operations.CommandArchiveIssue, { issue_id: "i-7" }),
+  );
+  assert.equal(command.type, "project.CommandArchiveIssue");
+  assert.deepEqual(command.data, { issue_id: "i-7" });
+  const closed: IssueClosed = { name: "project.issue.v1.closed", issue_id: "i-8" };
+  const event = eventMessageOf(closed, envelopeOf(closed));
+  // Over the wire and back, as JSON.
+  await subscriber.receive(JSON.parse(JSON.stringify(command)));
+  await subscriber.receive(JSON.parse(JSON.stringify(event)));
+  assert.deepEqual(heard, ["command i-7", "project.issue.v1.closed i-8"]);
 });
