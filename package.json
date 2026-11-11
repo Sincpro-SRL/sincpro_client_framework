@@ -40,7 +40,7 @@
     }
   },
   "bin": {
-    "sincpro-client": "./dist/codegen/entrypoint/cli.js"
+    "sincpro-client": "dist/codegen/entrypoint/cli.js"
   },
   "files": [
     "dist",

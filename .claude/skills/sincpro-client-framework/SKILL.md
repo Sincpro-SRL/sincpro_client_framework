@@ -77,7 +77,7 @@ src/
       infrastructure/                    dependencies.ts, bounded_context.ts (service bases)
       entrypoints/                       the doors — they translate, they decide nothing
         queue/                             EventSubscribers; index.ts exports the Subscriptions
-        cron/                              the platform's scheduler, each tick a Command
+        cron/                              mobile only — its scheduler, each tick a Command
       index.ts                           export const <context>BoundedContext — ready to execute
 ```
 
@@ -86,6 +86,9 @@ src/
   a folder inside it, with its Features and ApplicationServices grouped by what they are about.
 - **Entrypoints translate.** A screen, a cron and an `EventSubscriber` build a Command and execute
   it; several use cases with decisions between them are an ApplicationService they execute.
+- **A cron exists only where the platform has a scheduler** — mobile's `CronWorker`. A browser
+  has none (a closed tab runs nothing): on the web, refreshing a screen is the screen's (a query's
+  refetch interval) and scheduled work is the backend's `Crons`. This package has no cron.
 - **Names say what a thing is.** `salesBoundedContext`, `ticketsSubscriptions` — never `sales`,
   `ctx` or `bc`; `context` is the run's (`this.context`).
 
