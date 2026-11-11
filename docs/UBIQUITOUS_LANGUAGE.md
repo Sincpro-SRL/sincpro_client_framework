@@ -14,30 +14,34 @@ Entrypoint -> BoundedContext.execute(Command) -> Feature or ApplicationService -
                                                     Feature
 ```
 
-| Word               | Meaning                                                                            | Backend                                         | Client core                                                                    |
-| ------------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------ |
-| Bounded context    | Owns one model, dependencies and use-case registrations; it is a bus               | `UseFramework(name)`                            | `new BoundedContext<Dependencies>(name)`                                       |
-| Command            | A request for work, not a fact already confirmed                                   | DTO class                                       | `class Request extends Command<Result>`                                        |
-| Response           | The result of that execution, not of all later event consumers                     | DTO, object, list or None                       | DTO, object, page, primitive or void; `Response` is an optional class base     |
-| Feature            | Executes one registered operation                                                  | `feature(Command)(Service)`                     | `feature(Command)(Service)` or standard decorator syntax                       |
-| ApplicationService | Composes Features of its own context                                               | `app_service(Command)(Service)`                 | `appService(Command)(Service)`                                                 |
-| Feature bus        | Executes only Features in the current generation, under its parent execution       | `self.feature_bus`                              | `this.featureBus`                                                              |
-| Dependencies       | Registered adapters, available as typed service attributes                         | `add_dependency`, `self.client`                 | `addDependency`, `this.client`                                                 |
-| Generation         | One snapshot of registrations, adapters and service instances                      | Built lazily; in-flight work keeps its snapshot | Same; `buildRootBus()` and `fresh()` are explicit                              |
-| Use case           | One operation run through the bus, with one execution and span                     | A registered DTO                                | A registered Command                                                           |
-| Error handler      | Answers a failure instead of raising it; throwing hands it to the next one         | `add_global_error_handler`, `add_feature_…`     | `addGlobalErrorHandler`, `addFeatureErrorHandler`, `addAppServiceErrorHandler` |
-| Expected error     | An error the bounded context declares the business answering: not reported         | `ignore_sentry_exceptions(*types)`              | `expectErrors(...types)`: the run ends `refused`                               |
-| Domain event       | A fact that already happened, executed by its subscriber through the bus           | `DomainEvent`, `name`, `bus(event)`             | `class X extends DomainEvent`, `static eventName`, `execute(event)`            |
-| Subscriber         | The Feature or ApplicationService registered for an event class, one per BC        | `feature(EventClass)(Service)`                  | `feature(EventClass)(Service)`                                                 |
-| Replacement        | A service that takes the place of the one registered for a class                   | `feature(dto, replaces=Service)`                | `feature(dto, { replaces: Service })`, `handlerOf(dto)`                        |
-| Interceptor        | Control around a run: look, veto, adjust (same class) or answer                    | `@bus.interceptor(*commands)`                   | `interceptor(...classes)(fn)`, `withoutInterceptor(fn)`                        |
-| Listener           | Observation of a run: it started, answered, or a failure escaped; never changes it | `on_start`, `on_completion`, `on_failure`       | `onStart`, `onCompletion`, `onFailure`                                         |
-| Extension          | A component wired into a bounded context in one place                              | `bus.extend(fn)`                                | `extend(fn)`                                                                   |
-| Publisher          | What a Feature holds to put events into a queue, bound to its run                  | `Publisher(queue)`                              | `new Publisher(queue)`                                                         |
-| Subscriber         | Executes an event in every bounded context that hears it                           | `Subscriber(*buses)`                            | `new Subscriber(...contexts)`                                                  |
-| Queue              | What carries an event: in the call, or durably — the platform's                    | `Queue`, `SyncQueue`, `BackgroundQueue`         | `EventQueue` port, `syncQueue`                                                 |
-| Envelope           | What travels beside an event: name, id, flow and cause                             | `Envelope`, the event's own chain fields        | `Envelope`: `correlationId`, `causationId`                                     |
-| Correlation        | The flow a run or event belongs to; causation, what directly caused it             | `correlation_id`, `causation_id`                | `execution.correlationId`, `execution.causationId`                             |
+| Word               | Meaning                                                                            | Backend                                          | Client core                                                                    |
+| ------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Bounded context    | Owns one model, dependencies and use-case registrations; it is a bus               | `UseFramework(name)`                             | `new BoundedContext<Dependencies>(name)`                                       |
+| Command            | A request for work, not a fact already confirmed                                   | DTO class                                        | `class Request extends Command<Result>`                                        |
+| Response           | The result of that execution, not of all later event consumers                     | DTO, object, list or None                        | DTO, object, page, primitive or void; `Response` is an optional class base     |
+| Feature            | Executes one registered operation                                                  | `feature(Command)(Service)`                      | `feature(Command)(Service)` or standard decorator syntax                       |
+| ApplicationService | Composes Features of its own context                                               | `app_service(Command)(Service)`                  | `appService(Command)(Service)`                                                 |
+| Feature bus        | Executes only Features in the current generation, under its parent execution       | `self.feature_bus`                               | `this.featureBus`                                                              |
+| Dependencies       | Registered adapters, available as typed service attributes                         | `add_dependency`, `self.client`                  | `addDependency`, `this.client`                                                 |
+| Generation         | One snapshot of registrations, adapters and service instances                      | Built lazily; in-flight work keeps its snapshot  | Same; `buildRootBus()` and `fresh()` are explicit                              |
+| Use case           | One operation run through the bus, with one execution and span                     | A registered DTO                                 | A registered Command                                                           |
+| Error handler      | Answers a failure instead of raising it; throwing hands it to the next one         | `add_global_error_handler`, `add_feature_…`      | `addGlobalErrorHandler`, `addFeatureErrorHandler`, `addAppServiceErrorHandler` |
+| Expected error     | An error the bounded context declares the business answering: not reported         | `ignore_sentry_exceptions(*types)`               | `expectErrors(...types)`: the run ends `refused`                               |
+| Domain event       | A fact that already happened, executed by its subscriber through the bus           | `DomainEvent`, `name`, `bus(event)`              | `class X extends DomainEvent`, `static eventName`, `execute(event)`            |
+| Subscriber         | The Feature or ApplicationService registered for an event class, one per BC        | `feature(EventClass)(Service)`                   | `feature(EventClass)(Service)`                                                 |
+| Replacement        | A service that takes the place of the one registered for a class                   | `feature(dto, replaces=Service)`                 | `feature(dto, { replaces: Service })`, `handlerOf(dto)`                        |
+| Interceptor        | Control around a run: look, veto, adjust (same class) or answer                    | `@bus.interceptor(*commands)`                    | `interceptor(...classes)(fn)`, `withoutInterceptor(fn)`                        |
+| Listener           | Observation of a run: it started, answered, or a failure escaped; never changes it | `on_start`, `on_completion`, `on_failure`        | `onStart`, `onCompletion`, `onFailure`                                         |
+| Extension          | A component wired into a bounded context in one place                              | `bus.extend(fn)`                                 | `extend(fn)`                                                                   |
+| Publisher          | What a Feature holds to put events into a queue, bound to its run                  | `Publisher(queue)`                               | `new Publisher(queue)`                                                         |
+| Subscriber         | Executes an event in every bounded context that hears it                           | `Subscriber(*buses)`                             | `new Subscriber(...contexts)`                                                  |
+| Queue              | What carries an event: in the call, or durably — the platform's                    | `Queue`, `SyncQueue`, `BackgroundQueue`          | `EventQueue` port, `syncQueue`                                                 |
+| Envelope           | What travels beside an event: name, id, flow and cause                             | `Envelope`, the event's own chain fields         | `Envelope`: `correlationId`, `causationId`                                     |
+| Correlation        | The flow a run or event belongs to; causation, what directly caused it             | `correlation_id`, `causation_id`                 | `execution.correlationId`, `execution.causationId`                             |
+| Stored queue       | Stores an event, then delivers it in order: retries, sets aside, never twice       | `Forwarding` (held and forwarded in order)       | `storedQueue({ store, subscriber })`                                           |
+| Event store        | Where a stored queue keeps its events — the platform's technology                  | the queue's own storage, the event table         | `EventStore` port, `memoryEventStore()`                                        |
+| Set aside          | Delivered no more: a failure every attempt would repeat (the dead-letter queue)    | `PERMANENT`, set aside by the forwarding         | `state: "set_aside"`                                                           |
+| Process listeners  | Hear every bounded context of the process at once                                  | the process's start/completion/failure listeners | `processListeners.onStart/onCompletion/onFailure`                              |
 
 ## Remote contracts are not local services
 
@@ -64,17 +68,20 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 
 ## Process, context and telemetry
 
-| Word          | Meaning                                                                                     |
-| ------------- | ------------------------------------------------------------------------------------------- |
-| Process       | Ports configured once at application startup through `configureProcess`                     |
-| Context       | Values an execution runs with: process, bounded context, then explicit scope                |
-| ContextStore  | Synchronous values/version/subscription port; persistence belongs to the platform           |
-| Execution     | One run: id, service identity, context snapshot, span and parent                            |
-| Tracer        | Opens a span; the application supplies/export configures its implementation                 |
-| ErrorReporter | Reports unexpected failures with trace/execution correlation                                |
-| Outcome       | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident               |
-| Logger        | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter |
-| Log layer     | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`          |
+| Word          | Meaning                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Process       | Ports configured once at application startup through `configureProcess`                        |
+| Context       | Values an execution runs with: process, bounded context, then explicit scope                   |
+| ContextStore  | Synchronous values/version/subscription port; persistence belongs to the platform              |
+| Execution     | One run: id, service identity, context snapshot, span and parent                               |
+| Tracer        | Opens a span; the application supplies/export configures its implementation                    |
+| ErrorReporter | Reports unexpected failures with trace/execution correlation                                   |
+| Outcome       | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                  |
+| Failure       | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`         |
+| Failure kind  | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it |
+| Cancellation  | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                 |
+| Logger        | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter    |
+| Log layer     | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`             |
 
 Span names use `<bounded context>/<serviceName>` and use-case identity
 `<bounded context>.<serviceName>`. Stable metadata is required because a production build can

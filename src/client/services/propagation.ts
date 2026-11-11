@@ -44,11 +44,13 @@ export function headersOf(execution: Execution): Record<string, string> {
  *
  * Context: the transport's own headers (`restTransport({ headers })`) are the session's — the
  * token, the tenant — the same for every call; these are the use case's, different for two use
- * cases running at once, so they travel per call (`CallOptions`).
+ * cases running at once, so they travel per call (`CallOptions`). A call that gives no signal of
+ * its own is cancelled with the run.
  */
 export function bindTransport(transport: Transport, execution: Execution): Transport {
   const own = headersOf(execution);
-  if (Object.keys(own).length === 0) return transport;
+  const cancels = execution.signal;
+  if (Object.keys(own).length === 0 && cancels === undefined) return transport;
   const call = <O extends CallOptions>(options?: O): O =>
     ({ ...options, headers: { ...own, ...options?.headers } }) as O;
   const bound: Transport = {
@@ -57,25 +59,25 @@ export function bindTransport(transport: Transport, execution: Execution): Trans
       criteria: Criteria<T>,
       signal?: AbortSignal,
       options?: CallOptions,
-    ) => transport.list<T>(route, criteria, signal, call(options)),
+    ) => transport.list<T>(route, criteria, signal ?? cancels, call(options)),
     one: <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
-      transport.one<T>(route, signal, call(options)),
+      transport.one<T>(route, signal ?? cancels, call(options)),
     send: <T>(
       method: Parameters<Transport["send"]>[0],
       route: string,
       body: unknown,
       signal?: AbortSignal,
       options?: SendOptions,
-    ) => transport.send<T>(method, route, body, signal, call(options)),
+    ) => transport.send<T>(method, route, body, signal ?? cancels, call(options)),
   };
   const read = transport.read;
   if (read !== undefined)
     bound.read = <T>(route: string, signal?: AbortSignal, options?: CallOptions) =>
-      read.call(transport, route, signal, call(options)) as Promise<T>;
+      read.call(transport, route, signal ?? cancels, call(options)) as Promise<T>;
   const download = transport.download;
   if (download !== undefined)
     bound.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
-      download.call(transport, route, signal, call(options));
+      download.call(transport, route, signal ?? cancels, call(options));
   return bound;
 }
 

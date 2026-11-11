@@ -33,6 +33,8 @@ export abstract class Feature<
   declare readonly span: Span;
   /** This run's logger: every line carries its use case, execution and trace. */
   declare readonly logger: LayerLogger;
+  /** What cancels this run, when it was executed with one: check it in a long loop. */
+  declare readonly signal: AbortSignal | undefined;
   abstract execute(command: C): R | Promise<R>;
 }
 
@@ -51,4 +53,5 @@ export const RESERVED_MEMBERS: ReadonlySet<string> = new Set([
   "context",
   "span",
   "logger",
+  "signal",
 ]);

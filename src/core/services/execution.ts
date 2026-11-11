@@ -65,6 +65,8 @@ export interface ExecutionOptions {
   readonly parent?: Execution;
   /** What caused a root run from outside: a delivered event's envelope continues its chain. */
   readonly cause?: Cause;
+  /** What cancels a root run; a child inherits its parent's. */
+  readonly signal?: AbortSignal;
   readonly featureBus: (execution: Execution) => object;
   /** What runs around the service, outermost first. */
   readonly interceptors: readonly Interceptor[];
@@ -77,6 +79,37 @@ export interface ExecutionOptions {
 }
 
 const REPORTED_BY_EXECUTION = new WeakMap<Execution, Set<unknown>>();
+
+/** What a cancelled run fails with: an `AbortError`, whatever the signal was aborted with. */
+function abortedBy(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error && reason.name === "AbortError") return reason;
+  return Object.assign(new Error("The run was cancelled"), {
+    name: "AbortError",
+    cause: reason,
+  });
+}
+
+/**
+ * What `running` answers — or the cancellation, the moment `signal` aborts: the caller stops
+ * waiting even when the service does not look at its signal.
+ */
+function untilAborted<T>(running: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(abortedBy(signal));
+    signal.addEventListener("abort", abort, { once: true });
+    running.then(
+      (answer) => {
+        signal.removeEventListener("abort", abort);
+        resolve(answer);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
 
 /** Observability adapters are best-effort; their failures must not replace a business result. */
 function observe<T>(work: () => T, fallback: T): T {
@@ -100,6 +133,7 @@ function serviceView(
       if (property === "context") return execution.context;
       if (property === "span") return execution.span;
       if (property === "logger") return logger;
+      if (property === "signal") return execution.signal;
       if (property === "featureBus" && options.layer === "application_service") {
         return (features ??= options.featureBus(execution));
       }
@@ -125,6 +159,7 @@ function serviceView(
         property === "context" ||
         property === "span" ||
         property === "logger" ||
+        property === "signal" ||
         property === "featureBus" ||
         (typeof property === "string" && options.dependencies.has(property))
       ) {
@@ -190,6 +225,7 @@ export async function executeService(
     parent: options.parent,
     correlationId,
     causationId,
+    signal: options.signal ?? options.parent?.signal,
     span,
     context,
   };
@@ -249,13 +285,16 @@ export async function executeService(
     Promise.resolve(Reflect.apply(target.execute, view, [current]));
   let answer: unknown;
   try {
-    answer = await runAround(options.interceptors, service, command, {
+    const signal = execution.signal;
+    if (signal?.aborted) throw abortedBy(signal);
+    const running = runAround(options.interceptors, service, command, {
       boundedContext: options.boundedContext,
       useCase,
       layer: options.layer,
       execution,
       logger: executionLogger(options.layer, execution),
     });
+    answer = signal === undefined ? await running : await untilAborted(running, signal);
   } catch (error) {
     finish({ value: error });
     if (options.handlers.length === 0) throw error;

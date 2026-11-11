@@ -13,6 +13,15 @@ export {
   totalOf,
 } from "@sincpro/client-framework/common/collection";
 export { Decimal, type DecimalLike } from "@sincpro/client-framework/common/decimal";
+export {
+  type DeclaredFailure,
+  type Failure,
+  failureOf,
+  kindOfGrpcCode,
+  kindOfHttpStatus,
+  kindOfJsonRpcCode,
+  PERMANENT_KINDS,
+} from "@sincpro/client-framework/common/failures";
 export { isEntityId, momentOf, newEntityId } from "@sincpro/client-framework/common/ids";
 export { Money } from "@sincpro/client-framework/common/money";
 export {

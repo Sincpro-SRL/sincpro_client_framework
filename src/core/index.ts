@@ -20,6 +20,7 @@ export type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/do
 export type {
   CallNext,
   Cause,
+  ExecuteOptions,
   ExecutionCompleted,
   ExecutionFailed,
   ExecutionStarted,
@@ -36,6 +37,7 @@ export {
   type RegistrationOptions,
 } from "@sincpro/client-framework/core/entrypoint/bounded-context";
 export { screensTransport } from "@sincpro/client-framework/core/entrypoint/screens";
+export { processListeners } from "@sincpro/client-framework/core/infrastructure/listeners";
 export {
   configureLogger,
   configureProcess,

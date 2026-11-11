@@ -32,6 +32,21 @@ export type Cause = {
   readonly correlationId: string;
 };
 
+/**
+ * How a Command or an event is executed: what cancels it, and — for a delivered event — what
+ * caused it.
+ *
+ *     await sales.execute(new CommandQuote(3), { signal: screen.signal });
+ *
+ * Context: a screen that closes, a navigation that leaves, a user who gives up stop waiting; the
+ * run ends `aborted` (not reported), its Features inherit the signal, and the requests its
+ * transport sends are cancelled with it.
+ */
+export type ExecuteOptions = {
+  readonly signal?: AbortSignal;
+  readonly cause?: Cause;
+};
+
 /** The run an interceptor wraps: who runs, inside which execution, writing where. */
 export type InterceptedRun = {
   readonly boundedContext: string;

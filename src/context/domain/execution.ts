@@ -25,6 +25,11 @@ export type Execution = {
   readonly correlationId: string;
   /** What directly caused it: its parent run, or the event it executes; none for a root. */
   readonly causationId: string | undefined;
+  /**
+   * What cancels it: the signal it was executed with, inherited by its Features — and by every
+   * request its bound transport sends.
+   */
+  readonly signal: AbortSignal | undefined;
   readonly span: Span;
   /** What it runs with, read once where the gesture started and inherited by every child. */
   readonly context: Readonly<Record<string, unknown>>;
