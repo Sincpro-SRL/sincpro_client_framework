@@ -703,7 +703,7 @@ src/
       infrastructure/                  dependencies.ts, bounded_context.ts (service bases)
       entrypoints/                     the doors: they translate, they decide nothing
         queue/                           EventSubscribers: event → Command → bus; index.ts: Subscriptions
-        cron/                            the platform's scheduler: tick → Command → bus
+        cron/                            mobile only — its scheduler: tick → Command → bus
       index.ts                         export const <context>BoundedContext — ready to execute
 ```
 
@@ -714,6 +714,12 @@ src/
 - **Entrypoints translate.** A subscriber, a cron and a screen build a Command and execute it;
   a workflow of several use cases is an ApplicationService they execute. `sincpro-client check`
   refuses a service that imports an entrypoint.
+- **A cron is a platform's door, and only where the platform has a scheduler.** A phone wakes a
+  closed app on a schedule (mobile's `CronWorker`); a browser does not — Periodic Background Sync
+  is Chromium-only, for an installed PWA, and the browser decides when. On the web, refreshing
+  what a screen shows is the screen's (a query's refetch interval), not a cron, and work on a
+  schedule is the backend's (`Crons`). This package has no cron: the day web needs one, its
+  registry and a `Scheduler` port come here, as `Subscriptions` did.
 - **A bounded context is named for what it is**: `salesBoundedContext`, never `sales` (an
   entity?) or `ctx` — `context` is already the run's (`this.context`).
 

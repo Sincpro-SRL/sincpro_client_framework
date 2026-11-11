@@ -91,6 +91,10 @@ module has only the layers it needs, and says what it offers in its own `index.t
   it. An event may instead be the input of a use case (`feature(Event)(Service)`) when the use
   case exists because of it. A `Subscriptions` is named apart from every bounded context: the
   queue keeps who heard an event by name, and `Subscriber` refuses two of one name.
+- **A cron is a platform's, and not every platform has one.** Mobile's scheduler wakes a closed
+  app (`CronWorker`, its job a Command); a browser runs nothing in a closed tab, so on the web a
+  refresh is a screen's and scheduled work is the backend's. No cron piece lives here until web
+  needs one — then a registry and a `Scheduler` port, as `Subscriptions` came.
 - **A bounded context injected into a run is bound to it** (`BIND`): what it executes is a child
   of the caller — span, flow, cause, signal, one report — with its own dependencies, context and
   handlers. A failure keeps the outcome where it first failed, so a caller does not report what

@@ -69,7 +69,22 @@ The same `Publisher` and `Subscriber` as on a phone; what changes is the queue:
   event (`subscriber.eventTypeOf(name)`) and hands it to `subscriber.handle(event, envelope)`.
 
 Events a backend publishes are generated types when its contract is exported with `--events`;
-a screen narrows `DomainEvent` by `name`.
+a screen narrows `DomainEvent` by `name`. A module's `entrypoints/queue/` holds its
+`EventSubscriber`s and their `Subscriptions`, as on a phone.
+
+## Work on a schedule
+
+A web application has no cron: a closed tab runs nothing, and Periodic Background Sync is
+Chromium-only, for an installed PWA, at the browser's choosing. What looks like one is something
+else:
+
+- **Keeping a screen fresh** is the screen's — a query's refetch interval, or polling while a
+  stream is down (synthesis's execution view) —, executing a Query through its bounded context.
+- **Work that must happen on time** is the backend's `Crons`; the web hears its result as an
+  event or reads it.
+
+So a web module has no `entrypoints/cron/`. When a web application needs scheduled work of its
+own, a cron registry and a `Scheduler` port come to the client framework, as `Subscriptions` did.
 
 ## Adoption order
 
