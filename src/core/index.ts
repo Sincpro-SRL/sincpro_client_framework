@@ -17,6 +17,18 @@ export {
   Response,
 } from "@sincpro/client-framework/core/domain/dto";
 export type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
+export type {
+  CallNext,
+  Cause,
+  ExecutionCompleted,
+  ExecutionFailed,
+  ExecutionStarted,
+  Extension,
+  InterceptedRun,
+  Interceptor,
+  Listener,
+  PipelineLayer,
+} from "@sincpro/client-framework/core/domain/pipeline";
 export { ApplicationService, Feature } from "@sincpro/client-framework/core/domain/services";
 export {
   BoundedContext,

@@ -20,15 +20,28 @@ import {
   type ResponseClass,
 } from "@sincpro/client-framework/core/domain/dto";
 import type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
+import type {
+  Cause,
+  ExecutionCompleted,
+  ExecutionFailed,
+  ExecutionStarted,
+  Extension,
+  Interceptor,
+  Listener,
+} from "@sincpro/client-framework/core/domain/pipeline";
 import {
   ApplicationService,
   Feature,
   RESERVED_MEMBERS,
 } from "@sincpro/client-framework/core/domain/services";
 import { handled } from "@sincpro/client-framework/core/services/error-handlers";
-import { executeService } from "@sincpro/client-framework/core/services/execution";
+import { executeService, failedAt } from "@sincpro/client-framework/core/services/execution";
 import type { LayerLogger } from "@sincpro/client-framework/observability/domain/logging";
-import type { Attributes } from "@sincpro/client-framework/observability/domain/tracing";
+import type {
+  Attributes,
+  Outcome,
+} from "@sincpro/client-framework/observability/domain/tracing";
+import { observabilityNow } from "@sincpro/client-framework/observability/infrastructure/registry";
 import {
   boundedContextLogger,
   logHandled,
@@ -75,11 +88,12 @@ type GenerationDispatch = (
   parent?: Execution,
   featureOnly?: boolean,
   scope?: Readonly<object>,
+  cause?: Cause,
 ) => Promise<unknown>;
 
 /** One generation: the root (through the global handlers) and the dispatch its runs share. */
 type Generation = {
-  root: (executable: Executable, scope: Readonly<object>) => Promise<unknown>;
+  root: (executable: Executable, scope: Readonly<object>, cause?: Cause) => Promise<unknown>;
 };
 
 function isExecutor(value: unknown): value is Executor<Executable, unknown> {
@@ -98,6 +112,37 @@ function isEventClass(dto: DtoClass): dto is EventClass<DomainEvent> {
 function nameOf(Service: unknown): string {
   const named = Service as { serviceName?: unknown; name?: unknown } | undefined;
   return String(named?.serviceName ?? named?.name ?? Service);
+}
+
+/** An interceptor or a listener, and the classes it is for — every class when it names none. */
+type Hearing<F> = { readonly what: F; readonly dtos: readonly DtoClass[] };
+
+function concerns(dtos: readonly DtoClass[], executable: Executable): boolean {
+  return dtos.length === 0 || dtos.includes(Object.getPrototypeOf(executable)?.constructor);
+}
+
+function isCause(value: unknown): value is Cause {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as Partial<Cause>).id === "string" &&
+    typeof (value as Partial<Cause>).correlationId === "string"
+  );
+}
+
+/** Each listener that hears it, in turn; one that fails is ignored. */
+function announceTo<E extends { executable: Executable }>(
+  hearing: ReadonlySet<Hearing<Listener<E>>>,
+  heard: E,
+): void {
+  for (const one of [...hearing]) {
+    if (!concerns(one.dtos, heard.executable)) continue;
+    try {
+      one.what(heard);
+    } catch {
+      // Hearing never changes the answer, as tracing, reporting and logging never do.
+    }
+  }
 }
 
 /**
@@ -137,6 +182,12 @@ export class BoundedContext<
     application_service: [],
   };
   private readonly expected: ErrorClass[] = [];
+  private readonly interceptors: Hearing<Interceptor>[] = [];
+  private readonly listeners = {
+    started: new Set<Hearing<Listener<ExecutionStarted>>>(),
+    completed: new Set<Hearing<Listener<ExecutionCompleted>>>(),
+    failed: new Set<Hearing<Listener<ExecutionFailed>>>(),
+  };
   private revision = 0;
   private builtRevision = -1;
   private built: Generation | undefined;
@@ -241,6 +292,58 @@ export class BoundedContext<
     return undefined;
   }
 
+  /**
+   * Runs `interceptor` around every execution of these classes — of every one when none is
+   * named —, outermost first in the order registered. It may look, veto (throw), adjust what it
+   * passes on (of the same class) or answer by itself. Registered after a call, it wraps from
+   * the next one.
+   */
+  interceptor<T extends Executable = Executable>(
+    ...dtos: (abstract new (...args: never[]) => T)[]
+  ): <F extends Interceptor<T>>(interceptor: F) => F {
+    return (interceptor) => {
+      if (typeof interceptor !== "function")
+        throw new TypeError("An interceptor is a function");
+      // Registered for these classes only, it is called only with them.
+      this.interceptors.push({ what: interceptor as unknown as Interceptor, dtos });
+      this.revision++;
+      return interceptor;
+    };
+  }
+
+  /** Stops `interceptor` wherever it was registered; from the next call. */
+  withoutInterceptor(interceptor: (...args: never[]) => unknown): this {
+    const kept = this.interceptors.filter((one) => one.what !== (interceptor as unknown));
+    this.interceptors.splice(0, this.interceptors.length, ...kept);
+    this.revision++;
+    return this;
+  }
+
+  /** Hears every run of these classes (every one when none is named) begin. Answers how to stop. */
+  onStart(listener: Listener<ExecutionStarted>, ...dtos: DtoClass[]): () => void {
+    return this.listen(this.listeners.started, listener, dtos);
+  }
+
+  /** Hears every run of these classes whose service answered — not an answer a handler gave. */
+  onCompletion(listener: Listener<ExecutionCompleted>, ...dtos: DtoClass[]): () => void {
+    return this.listen(this.listeners.completed, listener, dtos);
+  }
+
+  /** Hears every failure that escapes a call — after every handler —, once, where it failed. */
+  onFailure(listener: Listener<ExecutionFailed>, ...dtos: DtoClass[]): () => void {
+    return this.listen(this.listeners.failed, listener, dtos);
+  }
+
+  /**
+   * Wires a component into this bounded context — its dependencies, services, interceptors,
+   * listeners, handlers — in one place: a module of an application, a plugin. `fresh()` copies
+   * all it registered.
+   */
+  extend(extension: Extension<this>): this {
+    extension(this);
+    return this;
+  }
+
   /** Answers a failure that reaches `execute` (or a scope's): after every layer's handlers. */
   addGlobalErrorHandler(handler: ErrorHandler): this {
     return this.addErrorHandler("global", handler);
@@ -271,10 +374,12 @@ export class BoundedContext<
 
   /** Executes a Command — its Response, inferred —, or a domain event — its subscriber's answer. */
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
-  execute(event: DomainEvent): Promise<unknown>;
-  execute(executable: Executable): Promise<unknown> {
-    // As with Python's return_type, the answer is not validated at runtime.
-    return this.generation().root(executable, {});
+  execute(event: DomainEvent, cause?: Cause): Promise<unknown>;
+  execute(executable: Executable, cause?: unknown): Promise<unknown> {
+    // As with Python's return_type, the answer is not validated at runtime. A delivered event's
+    // envelope continues its chain.
+    const delivered = executable instanceof DomainEvent && isCause(cause) ? cause : undefined;
+    return this.generation().root(executable, {}, delivered);
   }
 
   scoped(context: Partial<C>): CommandBus {
@@ -298,8 +403,42 @@ export class BoundedContext<
       fresh.handlers[where].push(...this.handlers[where]);
     }
     fresh.expected.push(...this.expected);
+    fresh.interceptors.push(...this.interceptors);
+    for (const moment of ["started", "completed", "failed"] as const) {
+      for (const one of this.listeners[moment]) fresh.listeners[moment].add(one as never);
+    }
     fresh.revision = this.revision;
     return fresh;
+  }
+
+  private listen<E>(
+    hearing: Set<Hearing<Listener<E>>>,
+    listener: Listener<E>,
+    dtos: readonly DtoClass[],
+  ): () => void {
+    if (typeof listener !== "function") throw new TypeError("A listener is a function");
+    const one = { what: listener, dtos };
+    hearing.add(one);
+    return () => void hearing.delete(one);
+  }
+
+  /** What escaped a call, told once, from where it first failed. */
+  private escaped(executable: Executable, error: unknown, expected: (e: unknown) => boolean) {
+    const at = failedAt(error);
+    let outcome: Outcome = "failed";
+    try {
+      outcome =
+        at?.outcome ?? (expected(error) ? "refused" : observabilityNow().outcomeOf(error));
+    } catch {
+      // An outcome that cannot be told is a failure.
+    }
+    announceTo(this.listeners.failed, {
+      executable: at?.executable ?? executable,
+      execution: at?.execution,
+      layer: at?.layer,
+      error,
+      outcome,
+    });
   }
 
   private addErrorHandler(where: keyof Handlers, handler: ErrorHandler): this {
@@ -402,6 +541,11 @@ export class BoundedContext<
     };
     const expectedTypes = [...this.expected];
     const expected = (error: unknown) => expectedTypes.some((type) => error instanceof type);
+    const interceptors = [...this.interceptors];
+    const announce = {
+      started: (heard: ExecutionStarted) => announceTo(this.listeners.started, heard),
+      completed: (heard: ExecutionCompleted) => announceTo(this.listeners.completed, heard),
+    };
     const instances = new Map<Registration, Executor<Executable, unknown>>();
     for (const registration of registrations.values()) {
       const instance = new registration.Service();
@@ -415,6 +559,7 @@ export class BoundedContext<
       parent,
       featureOnly = false,
       scope = {},
+      cause,
     ) => {
       // Exact constructor identity: a subclass of a registered class is another one.
       const target = registrations.get(Object.getPrototypeOf(executable)?.constructor);
@@ -438,21 +583,34 @@ export class BoundedContext<
         dependencies,
         context: () => ({ ...processContext.values, ...this.context.values, ...scope }),
         ...(parent ? { parent } : {}),
+        ...(cause ? { cause } : {}),
         featureBus: (execution) =>
           new FeatureBus((child) => dispatch(child, execution, true)),
         expected,
         handlers: handlers[target.layer],
+        interceptors: interceptors
+          .filter((one) => concerns(one.dtos, executable))
+          .map((one) => one.what),
+        announce,
       });
     };
     return {
-      root: async (executable, scope) => {
+      root: async (executable, scope, cause) => {
         try {
-          return await dispatch(executable, undefined, false, scope);
+          return await dispatch(executable, undefined, false, scope, cause);
         } catch (error) {
-          if (handlers.global.length === 0) throw error;
-          const answer = await handled(handlers.global, error);
-          logHandled("bounded_context", { boundedContext: this.name });
-          return answer;
+          let escaping = error;
+          if (handlers.global.length > 0) {
+            try {
+              const answer = await handled(handlers.global, error);
+              logHandled("bounded_context", { boundedContext: this.name });
+              return answer;
+            } catch (thrown) {
+              escaping = thrown;
+            }
+          }
+          this.escaped(executable, escaping, expected);
+          throw escaping;
         }
       },
     };

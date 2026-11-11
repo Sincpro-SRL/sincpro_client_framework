@@ -115,36 +115,43 @@ engine, combined with the console through `combineLoggers`.
 
 ## Events and their subscribers
 
-A subscriber of mobile's queue becomes a Feature (or ApplicationService) registered for the
-event class in its bounded context — observed, reported and answered by error handlers like any
-use case. The queue keeps what is mobile's: storing the event, delivering it, retrying, the DLQ.
+Mobile's `EventBus` splits along the line this package draws: what is the same on every
+platform comes from here; what a phone does to deliver durably stays in mobile, behind the
+`EventQueue` port.
+
+| Today in mobile                                           | With the client framework                                             |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| `Subscriber` with `listen` and `process(event)`           | a Feature registered for the event class: `context.feature(Event)(…)` |
+| `EventBus.on(subscriber)`, several per event              | one per bounded context; `new Subscriber(...contexts)` fans out       |
+| `EventBus.publish` / `publishSync`                        | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue` |
+| `event_chain`, `applyChain`, `runWithChain`               | the `Envelope` and `execution.correlationId` / `causationId`          |
+| event interceptors (`interceptEvent`, `"*"`)              | `context.interceptor(Event)(…)`, `context.interceptor()(…)`           |
+| `static replaces = CoreSubscriber`                        | `context.feature(Event, { replaces: CoreSubscriber })(…)`             |
+| `publishActivity` running / succeeded / failed            | `onStart`, `onCompletion`, `onFailure`                                |
+| `RepeatableFailure`, `DomainNetworkError`                 | kept by mobile's queue: what it retries                               |
+| SQLite table, DLQ, `AppState`, `requiresNetwork`, backoff | mobile's `EventQueue` adapter                                         |
 
 ```ts
-class PrintRequested extends DomainEvent {
-  static readonly eventName = "common.print.v1.requested";
-  constructor(readonly document_id: string) {
-    super();
-  }
-}
+// mobile's queue, behind the port: store now, deliver when it can
+const sqliteQueue: EventQueue = {
+  async put(event, envelope) {
+    await DomainEventRepository.save({ ...envelope, payload: valuesOf(event) });
+    worker.trigger();
+  },
+};
 
-printing.feature(PrintRequested)(PrintImage); // was: a subscriber of "common.print.v1.requested"
-
-// the worker, for each stored event: every bounded context that hears its name executes it
-for (const context of boundedContexts) {
-  const Event = context.eventTypeOf(stored.name);
-  if (Event) await context.execute(rebuild(Event, stored.payload));
+// the worker, for each stored event
+const Event = subscriber.eventTypeOf(stored.name);
+if (Event) {
+  const handled = await subscriber.handle(rebuild(Event, stored.payload), stored.envelope);
+  // a failure: retry when it is repeatable, the DLQ otherwise — mobile's policy
 }
 ```
 
-`rebuild` is mobile's: how a stored payload becomes an instance of its class. One subscriber per
-bounded context; two modules that hear the same event are two bounded contexts, each with its
-own. Event interceptors around subscribers become the pipeline (spans, logs) and error handlers;
-`static replaces = CoreSubscriber` becomes `feature(PrintRequested, { replaces: PrintImage })`.
-
-The events a backend publishes reach mobile as generated types when its contract is exported
-with `--events`: each a type with its wire `name`, `DomainEvent` their union, `events` in
-`client.ts` as data. This package exports no entity interface to implement; entity identity,
-persisted events and queue metadata stay in mobile.
+`rebuild` is mobile's: how a stored payload becomes an instance of its class (its `from`). The
+events a backend publishes reach mobile as generated types when its contract is exported with
+`--events`. This package exports no entity interface to implement; entity identity and persisted
+events stay in mobile.
 
 ## Adoption order
 

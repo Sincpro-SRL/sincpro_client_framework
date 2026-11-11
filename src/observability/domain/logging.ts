@@ -32,6 +32,8 @@ export type LogRecord = {
   readonly boundedContext?: string;
   readonly useCase?: string;
   readonly executionId?: string;
+  /** The chain the run belongs to: every run and event of one flow share it. */
+  readonly correlationId?: string;
   readonly traceId?: string;
   readonly spanId?: string;
   readonly outcome?: Outcome;

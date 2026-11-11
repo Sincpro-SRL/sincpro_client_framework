@@ -18,6 +18,13 @@ export type Execution = {
   readonly boundedContext: string;
   /** The run that executed this one: an ApplicationService, for its Features. */
   readonly parent: Execution | undefined;
+  /**
+   * The chain it belongs to: the id of what started it all — the root run, or the first event
+   * of a flow it continues. Every run and event of one flow share it.
+   */
+  readonly correlationId: string;
+  /** What directly caused it: its parent run, or the event it executes; none for a root. */
+  readonly causationId: string | undefined;
   readonly span: Span;
   /** What it runs with, read once where the gesture started and inherited by every child. */
   readonly context: Readonly<Record<string, unknown>>;

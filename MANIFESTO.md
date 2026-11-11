@@ -28,8 +28,11 @@ server-side render, in a script and in a test, unchanged.**
 1. **Services.** A `Feature` executes a registered Command through `execute(dto)`;
    an `ApplicationService` composes its context's Features through `featureBus`, never another
    ApplicationService. Dependencies are typed attributes supplied by the bounded context.
-2. **Execution.** Every command enters one internal execution pipeline. Context, tracing,
-   outcomes and error reporting are supplied there, not handwritten by each service.
+2. **Execution.** Every Command and event enters one execution pipeline, defined here: context,
+   chain, span, log lines, outcome, report, error handlers — not handwritten by each service. An
+   application changes it from outside through its extension points, as the backend's
+   `bus_pipeline`: interceptors control a run (look, veto, adjust, answer); listeners hear it
+   start, answer or fail, and never change it; an extension wires a component in one place.
 3. **Observability, as ports.** `Tracer`, `ErrorReporter` and `Logger` are the contracts: one span per use
    case, named `<bounded context>/<serviceName>`; the unexpected reported
    with its trace id; what the server already explained (a validation, a conflict), or what a
@@ -66,6 +69,11 @@ server-side render, in a script and in a test, unchanged.**
     and the backend's error handlers — global, feature and application service — with the
     errors a bounded context expects. The internal engine uses
     the injected process ports. Remote clients and mapping remain distinct.
+11. **Event-driven, as ports (`event_driven`).** How every platform publishes domain events and
+    subscribes to them the same way: the envelope that travels beside an event (its flow and
+    its cause), the `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, a
+    `Subscriber` over the bounded contexts that hear, and the queue that delivers in the call,
+    in memory. The guidelines and the contracts are here; durable delivery is the platform's.
 
 ## What it is not
 
@@ -85,9 +93,10 @@ server-side render, in a script and in a test, unchanged.**
 - **Not where application-specific business rules live.** The package supplies execution
   abstractions; a registered use case may delegate to a server or use a local domain. A remote
   adapter does not authorize reimplementing the server's rules.
-- **Not an event delivery system.** A bounded context executes a domain event by its
-  subscriber, as the backend does; carrying it to every bounded context that hears it — a
-  publisher, a queue, an outbox, a broker, synchronization — is the platform's.
+- **Not a durable event delivery system.** It defines how events are published, carried and
+  executed — the ports, the envelope, the in-call queue — so web and mobile do it alike; storing
+  them, retrying, a dead-letter queue, waiting for a connection, other tabs, a broker are the
+  platform's adapters behind `EventQueue`.
 
 ## What we believe
 
@@ -154,9 +163,18 @@ the wire and never reaches the local bus.
 **Each module is laid out as the backend's.** `domain/`, `adapters/`, `services/`,
 `infrastructure/`, `entrypoint/`, only those a module needs; `domain/` depends only on `domain/`.
 
-**Next:** web and mobile adopt it in their own releases; generated readers that validate and
-convert what arrives, when a use needs them; durable delivery, designed apart from
-instrumentation.
+**The pipeline is the core's, and open.** The flow of a run is defined once; interceptors,
+listeners and extensions change or hear it from outside, without touching a service.
+
+**Events travel the same way on every platform.** A Feature publishes through a `Publisher`;
+a `Subscriber` executes the event in every bounded context that hears it, in the same flow
+(`correlationId`, caused by the run that published it). In memory and in the call here; durably
+behind `EventQueue` on each platform.
+
+**Next:** web and mobile adopt it in their own releases — mobile's SQLite queue and web's
+in-memory or IndexedDB one behind `EventQueue`; events from the server live, with the backend's
+server-sent events; generated readers that validate and convert what arrives, when a use needs
+them.
 
 ## How we decide
 
