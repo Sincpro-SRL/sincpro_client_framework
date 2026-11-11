@@ -33,7 +33,7 @@ module has only the layers it needs, and says what it offers in its own `index.t
 | `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation   |
 | `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                    |
 | `src/core/`          | DTOs and events, bus, services, handlers, extension points; pipeline; `BoundedContext`; process |
-| `src/event_driven/`  | `Envelope`, `EventQueue`/`Subscribes` ports; queues; `Publisher`, `Subscriber`, `Subscriptions` |
+| `src/event_driven/`  | `Envelope`, messages, `EventQueue`/`Subscribes` ports; queues; `Publisher`, `Subscriber`        |
 | `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed          |
 | `src/testing/`       | The public entry of the in-memory observability adapters                                        |
 | `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts       |
@@ -70,31 +70,43 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **A service is a singleton of its generation.** What a method writes on `this` lands on the
   instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
-- **A span uses stable service metadata, not constructor.name.** `serviceName = "Cancel"` gives
-  `project/Cancel`, identity `project.Cancel`. Commands and events route by exact constructor
-  identity. An event declares `static eventName` (its wire name) for the same reason; `name` is
-  reserved for it.
+- **A service's name is the framework's, taken at registration.** A standard decorator hands it
+  the class's name as the code wrote it (`context.name`, untouched by a minifier); otherwise the
+  class's `name` — so a production build keeps class names (`keep_classnames`, `keepNames`).
+  `class Cancel` gives `project/Cancel`, identity `project.Cancel`. Nothing on a service declares
+  it. Commands and events route by exact constructor identity — a generated one by its identity
+  or wire name.
+- **A wire name is declared, a class name is not one.** An event's `static eventName` and a
+  travelling Command's `static commandName` are the contract other processes read, with its
+  version; `name` is reserved for the event's.
 - **A replacement names what it replaces.** `feature(dto, { replaces: Service })` is refused
-  unless `Service` is registered now for `dto`; its spans carry `sincpro.replaces`. A service
-  meant to be subclassed declares `static readonly serviceName: string = "…"`, or the literal
-  type stops a subclass from renaming itself.
+  unless `Service` is registered now for each DTO listed — all of them or none; its spans carry
+  `sincpro.replaces`.
+- **A service takes N DTOs; a DTO has one service.** `feature([CommandX, EventY])`, as the
+  backend's `DTORegistration`; one instance per service and generation.
+- **Dependencies are the context's.** `servicesWith<Dependencies>()` gives the bases every
+  dependency typed — the backend's `class Feature(_Feature, DependencyContextType)` —; a service
+  never declares one. A scaffold writes `dependencies.ts` and `framework.ts`; the instance lives in
+  `framework.ts` because ES modules run their imports first.
 - **How events are carried is here; where they are kept is the platform's.** One use case of an
-  event per bounded context, one `EventSubscriber` per event per `Subscriptions`; a `Subscriber`
-  executes an event in each. `storedQueue` holds the rules — store first, deliver in order,
+  event per bounded context; the queue's one `Subscriber` executes an event in each. `storedQueue` holds the rules — store first, deliver in order,
   retry what may succeed, set aside what never will, never run one who heard it twice — over an
   `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store only keeps records; it
   never decides.
-- **A subscriber is an entrypoint, not a use case.** An `EventSubscriber` reads the event and
-  executes Commands on a bounded context it was given, as a cron does on a tick; what to decide,
-  and a workflow of several use cases, is a Feature or an ApplicationService it executes. Its run
-  is layer `entrypoint`: no interceptor wraps it, no listener hears it, no error handler answers
-  it. An event may instead be the input of a use case (`feature(Event)(Service)`) when the use
-  case exists because of it. A `Subscriptions` is named apart from every bounded context: the
-  queue keeps who heard an event by name, and `Subscriber` refuses two of one name.
+- **The Subscriber is the queue's only entrypoint.** It hears a list of events or every event its
+  bounded contexts registered, recognizes a message (an event by name, a Command by identity),
+  rebuilds and executes it — as the backend's `Subscriber(*buses)` / `QueueGateway`. Nobody
+  writes a subscriber per event: registering a use case for the event is the subscription. A
+  Command from a queue runs only when declared (`commands`), in the one bus that registered it;
+  `CommandNotConsumed` otherwise. Two bounded contexts never share a name.
+- **Commands and events serialize differently.** An event: `{ kind: "event", envelope, data }`. A
+  Command: `{ kind: "command", type, id, correlationId, causationId, sentAt, data }`, the backend's
+  `Payload`. Written and read only through `eventMessageOf`/`commandMessageOf` and
+  `eventFrom`/`commandFrom`.
 - **A cron is a platform's, and not every platform has one.** Mobile's scheduler wakes a closed
   app (`CronWorker`, its job a Command); a browser runs nothing in a closed tab, so on the web a
   refresh is a screen's and scheduled work is the backend's. No cron piece lives here until web
-  needs one — then a registry and a `Scheduler` port, as `Subscriptions` came.
+  needs one — then a registry and a `Scheduler` port.
 - **A bounded context injected into a run is bound to it** (`BIND`): what it executes is a child
   of the caller — span, flow, cause, signal, one report — with its own dependencies, context and
   handlers. A failure keeps the outcome where it first failed, so a caller does not report what
@@ -105,10 +117,8 @@ module has only the layers it needs, and says what it offers in its own `index.t
   backend's semantics: `COUNTED_KINDS`, half-open with one probe) guards a transport
   (`guardedTransport`) or an adapter; its `CircuitOpen` declares `unavailable` and a wait, so
   nothing else needs to know a circuit exists.
-- **Delivery is at least once.** A stored event may run twice after a crash. A use case of the
-  event keys its effect by `this.execution.causationId` (the envelope's id); an `EventSubscriber`
-  finds the same id in its own run and hands it in the Command it executes — the use case's
-  `causationId` is the subscriber's run —, or the effect is keyed by the entity the event names.
+- **Delivery is at least once.** A stored message may run twice after a crash. The use case keys
+  its effect by `this.execution.causationId` (the message's id) or by the entity the event names.
   `maxAttempts` sets aside what keeps failing. One process drains a store. `execution` is
   reserved.
 - **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the

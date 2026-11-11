@@ -123,7 +123,6 @@ class LogCommand extends Command<void> {
   }
 }
 class LogFeature extends Feature<LogCommand, void> {
-  static readonly serviceName = "LogFeature";
   declare readonly adapterLogger: LayerLogger;
   async execute() {
     await Promise.resolve();

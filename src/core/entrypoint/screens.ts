@@ -65,7 +65,6 @@ class Send<T> extends Command<T> {
 }
 
 class EntityList extends Feature<List<unknown>, Page<unknown>> {
-  static readonly serviceName = "EntityReads.list";
   declare readonly transport: Transport;
   execute<T>(dto: List<T>): Promise<Page<T>> {
     this.span.set({ "http.route": dto.route });
@@ -74,7 +73,6 @@ class EntityList extends Feature<List<unknown>, Page<unknown>> {
 }
 
 class EntityGet extends Feature<Get<unknown>, One<unknown>> {
-  static readonly serviceName = "EntityReads.one";
   declare readonly transport: Transport;
   execute<T>(dto: Get<T>): Promise<One<T>> {
     this.span.set({ "http.route": dto.route });
@@ -83,7 +81,6 @@ class EntityGet extends Feature<Get<unknown>, One<unknown>> {
 }
 
 class EntityRead extends Feature<Read<unknown>, unknown> {
-  static readonly serviceName = "EntityReads.read";
   declare readonly transport: Transport;
   execute<T>(dto: Read<T>): Promise<T> {
     this.span.set({ "http.route": dto.route });
@@ -98,7 +95,6 @@ class EntityRead extends Feature<Read<unknown>, unknown> {
 }
 
 class EntityExport extends Feature<Export, Download> {
-  static readonly serviceName = "EntityReads.download";
   declare readonly transport: Transport;
   execute(dto: Export): Promise<Download> {
     this.span.set({ "http.route": dto.route });
@@ -113,7 +109,6 @@ class EntityExport extends Feature<Export, Download> {
 }
 
 class EntitySend extends Feature<Send<unknown>, unknown> {
-  static readonly serviceName = "EntityWrites.send";
   declare readonly transport: Transport;
   execute<T>(dto: Send<T>): Promise<T> {
     this.span.set({ "http.method": dto.method, "http.route": dto.route });

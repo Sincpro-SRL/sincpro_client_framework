@@ -98,10 +98,10 @@ export function boundedContextLogger(name: string): LayerLogger {
   return layerLogger("bounded_context", processSink, { boundedContext: name });
 }
 
-/** A run's layer: an entrypoint's (an `EventSubscriber`), a Feature's or an ApplicationService's. */
-type RunLogLayer = Extract<LogLayer, "entrypoint" | "feature" | "application_service">;
+/** A run's layer: a Feature's or an ApplicationService's. */
+type RunLogLayer = Extract<LogLayer, "feature" | "application_service">;
 
-/** @internal — what a run (a use case, an entrypoint) finds as `this.logger` while it runs. */
+/** @internal — what a Feature or ApplicationService finds as `this.logger` while it runs. */
 export function executionLogger(layer: RunLogLayer, execution: Execution): LayerLogger {
   return layerLogger(layer, processSink, correlationOf(execution));
 }

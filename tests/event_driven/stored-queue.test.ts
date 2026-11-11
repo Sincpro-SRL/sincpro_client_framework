@@ -48,7 +48,6 @@ class Refused extends Error {
 /** Fails as told, in order, then answers: a backend that is down, then back. */
 function flaky(name: string, failures: unknown[], seen: string[]) {
   class Hear extends Feature<OrderPaid, string> {
-    static readonly serviceName = `Hear${name}`;
     execute(event: OrderPaid): string {
       const failure = failures.shift();
       if (failure !== undefined) throw failure;
@@ -158,7 +157,6 @@ test("an event not ready waits while the rest go on; nobody hearing it is no fai
 test("a class that says how to read itself is rebuilt that way", async () => {
   const heard: string[] = [];
   class Close extends Feature<RouteClosed, void> {
-    static readonly serviceName = "Close";
     execute(event: RouteClosed): void {
       heard.push(event.route);
     }
@@ -218,7 +216,6 @@ test("an open circuit makes the queue wait what the circuit asks", async () => {
     breaker.call(() => Promise.reject(new TransportError("/x", 503, null))),
   );
   class Push extends Feature<OrderPaid, void> {
-    static readonly serviceName = "Push";
     execute(): Promise<void> {
       return breaker.call(() => undefined);
     }
@@ -258,7 +255,6 @@ test("a subscriber keys what it does by the envelope's id; fromJSON reads a Mone
   const keys: (string | undefined)[] = [];
   const totals: string[] = [];
   class Record extends Feature<InvoicePaid, void> {
-    static readonly serviceName = "Record";
     execute(event: InvoicePaid): void {
       keys.push(this.execution.causationId);
       totals.push(event.total.plus(new Money("1.00", "BOB")).amount.toString());

@@ -9,26 +9,17 @@ import type {
  *
  * Context: a line says which layer wrote it, the way sincpro_framework's architecture names
  * them: the application layer (a bounded context and its ApplicationServices and Features,
- * through `projectBoundedContext.logger` and `this.logger`), the entrypoints that call it (an
- * `EventSubscriber`'s `this.logger`), its adapters (`loggerAdapter`) and the infrastructure
- * around them (`logger`). A line written inside a use case carries that
+ * through `projectBoundedContext.logger` and `this.logger`), its adapters (`loggerAdapter`) and
+ * the infrastructure around them (`logger`). A line written inside a use case carries that
  * execution's identity; nothing writes a DTO, a response, an error body or the session's
  * context on its own.
  */
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
-/**
- * The layer a line comes from: the infrastructure, an adapter, an entrypoint that calls use cases
- * (an `EventSubscriber`), a bounded context, an ApplicationService, a Feature.
- */
+/** The layer a line comes from. */
 export type LogLayer =
-  | "infrastructure"
-  | "adapter"
-  | "entrypoint"
-  | "bounded_context"
-  | "application_service"
-  | "feature";
+  "infrastructure" | "adapter" | "bounded_context" | "application_service" | "feature";
 
 /** Structured logging never implicitly includes a DTO, response, error body or session context. */
 export type LogRecord = {

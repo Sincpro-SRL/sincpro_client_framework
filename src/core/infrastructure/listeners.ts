@@ -1,14 +1,11 @@
+import type { DtoKey } from "@sincpro/client-framework/core/domain/dto";
 import type {
   ExecutionCompleted,
   ExecutionFailed,
   ExecutionStarted,
   Listener,
 } from "@sincpro/client-framework/core/domain/pipeline";
-import {
-  type ExecutableClass,
-  type Hearing,
-  listenIn,
-} from "@sincpro/client-framework/core/services/listening";
+import { type Hearing, listenIn } from "@sincpro/client-framework/core/services/listening";
 
 /**
  * Who hears every bounded context of this process — the backend's process listeners: an
@@ -33,18 +30,15 @@ export function processHearing(): typeof hearing {
 
 export const processListeners = {
   /** Hears every run of every bounded context begin. Answers how to stop. */
-  onStart(listener: Listener<ExecutionStarted>, ...dtos: ExecutableClass[]): () => void {
+  onStart(listener: Listener<ExecutionStarted>, ...dtos: DtoKey[]): () => void {
     return listenIn(hearing.started, listener, dtos);
   },
   /** Hears every service that answered, in every bounded context. */
-  onCompletion(
-    listener: Listener<ExecutionCompleted>,
-    ...dtos: ExecutableClass[]
-  ): () => void {
+  onCompletion(listener: Listener<ExecutionCompleted>, ...dtos: DtoKey[]): () => void {
     return listenIn(hearing.completed, listener, dtos);
   },
   /** Hears every failure that escapes a call, once, where it failed. */
-  onFailure(listener: Listener<ExecutionFailed>, ...dtos: ExecutableClass[]): () => void {
+  onFailure(listener: Listener<ExecutionFailed>, ...dtos: DtoKey[]): () => void {
     return listenIn(hearing.failed, listener, dtos);
   },
 };

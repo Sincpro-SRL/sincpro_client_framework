@@ -33,7 +33,6 @@ class CommandPay extends Command<string> {
 
 /** Pays, and tells whoever listens. */
 class Pay extends Feature<CommandPay, string> {
-  static readonly serviceName = "Pay";
   declare readonly publisher: Publisher;
   async execute(command: CommandPay): Promise<string> {
     await this.publisher.publish(new OrderPaid(command.order_id));
@@ -42,7 +41,6 @@ class Pay extends Feature<CommandPay, string> {
 }
 
 class SendReceipt extends Feature<OrderPaid, string> {
-  static readonly serviceName = "SendReceipt";
   declare readonly sent: string[];
   execute(event: OrderPaid): string {
     if (event.fail) throw event.fail;
@@ -52,7 +50,6 @@ class SendReceipt extends Feature<OrderPaid, string> {
 }
 
 class Reserve extends Feature<OrderPaid, string> {
-  static readonly serviceName = "Reserve";
   declare readonly sent: string[];
   execute(event: OrderPaid): string {
     this.sent.push(`reserved ${event.order_id}`);

@@ -136,7 +136,6 @@ test("the outcome follows the failure: a declared refusal is not reported", asyn
   }
   class CommandClose extends Command<void> {}
   class Close extends Feature<CommandClose, void> {
-    static readonly serviceName = "Close";
     execute(): void {
       throw new IssueClosed("already closed");
     }

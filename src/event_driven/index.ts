@@ -1,15 +1,15 @@
 /**
  * Event-driven: the ports and the in-memory pieces that let every platform publish domain events
- * and subscribe to them the same way — as sincpro_framework's `event_driven`. Delivering them
- * durably (SQLite on a phone, IndexedDB in a browser, a broker) is each platform's, behind
- * `EventQueue`.
+ * and hand what a queue carries to the bus the same way — as sincpro_framework's `event_driven`.
+ * Delivering them durably (SQLite on a phone, IndexedDB in a browser, a broker) is each
+ * platform's, behind `EventQueue`.
  *
- *   domain/      the envelope and the ports: EventQueue, Subscribes, EventStore
+ *   domain/      the envelope, the messages (an event, a Command) and the ports: EventQueue,
+ *                Subscribes, EventStore
+ *   services/    writing and reading messages: a Command by its identity, an event by its name
  *   adapters/    syncQueue (in the call), storedQueue (store, then deliver, retry, set aside),
  *                memoryEventStore
- *   entrypoint/  Publisher (what a Feature holds), Subscriber (the queue's door: everyone who
- *                hears), Subscriptions and EventSubscriber (the entrypoint that hears an event and
- *                calls use cases)
+ *   entrypoint/  Publisher (what a Feature holds), Subscriber (the queue's only entrypoint)
  */
 export {
   type MemoryEventStore,
@@ -26,7 +26,14 @@ export {
   envelopeOf,
 } from "@sincpro/client-framework/event_driven/domain/envelope";
 export type {
+  CommandMessage,
+  EventMessage,
+  Message,
+} from "@sincpro/client-framework/event_driven/domain/messages";
+export type {
+  CommandType,
   EventQueue,
+  EventType,
   Handled,
   Subscribes,
 } from "@sincpro/client-framework/event_driven/domain/queue";
@@ -38,12 +45,14 @@ export type {
 } from "@sincpro/client-framework/event_driven/domain/store";
 export { Publisher } from "@sincpro/client-framework/event_driven/entrypoint/publisher";
 export {
+  CommandNotConsumed,
   type HearingContext,
   Subscriber,
+  type SubscriberOptions,
 } from "@sincpro/client-framework/event_driven/entrypoint/subscriber";
 export {
-  EventSubscriber,
-  type Subscribing,
-  type SubscriptionOptions,
-  Subscriptions,
-} from "@sincpro/client-framework/event_driven/entrypoint/subscriptions";
+  commandFrom,
+  commandMessageOf,
+  eventFrom,
+  eventMessageOf,
+} from "@sincpro/client-framework/event_driven/services/messages";

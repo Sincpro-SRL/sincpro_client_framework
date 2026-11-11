@@ -36,7 +36,7 @@ test("only direct screen requests use the screen wrapper; plain adapters add no 
   assert.equal(screensTransport(screens), screens);
   await screens.send("POST", "/x", {});
   assert.equal(logger.records.length, 2);
-  assert.ok(logger.records.every((record) => record.useCase === "screens.EntityWrites.send"));
+  assert.ok(logger.records.every((record) => record.useCase === "screens.EntitySend"));
 });
 
 test("what a screen reads and writes is a use case of `screens`: traced, its route said, the trace and the context on the request", async () => {
@@ -47,7 +47,7 @@ test("what a screen reads and writes is a use case of `screens`: traced, its rou
   const screens = screensTransport(restTransport({ document: null, fetch: recording(sent) }));
   await screens.send("POST", "/issues/acme-3/close", {});
   const [span] = tracer.spans;
-  assert.equal(span?.name, "screens/EntityWrites.send");
+  assert.equal(span?.name, "screens/EntitySend");
   assert.equal(span?.attributes["http.route"], "/issues/acme-3/close");
   assert.equal(span?.attributes["http.method"], "POST");
   assert.equal(sent[0]?.headers["traceparent"], `00-${span?.traceId}-${span?.spanId}-01`);
@@ -74,7 +74,7 @@ test("a screen's read that breaks is reported once, as the use case it was; a re
   await assert.rejects(screens.send("POST", "/issues", {}), broken);
   assert.deepEqual(
     reporter.reports.map(({ about }) => about.useCase),
-    ["screens.EntityWrites.send"],
+    ["screens.EntitySend"],
   );
   assert.deepEqual(
     tracer.spans.map(({ outcome }) => outcome),

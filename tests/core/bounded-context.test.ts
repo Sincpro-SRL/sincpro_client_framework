@@ -204,7 +204,6 @@ class CounterResponse extends Response {
 }
 class CounterCommand extends Command<CounterResponse> {}
 class Counter extends Feature<CounterCommand, CounterResponse> {
-  static readonly serviceName = "Counter";
   private count = 0;
   execute() {
     return new CounterResponse(++this.count);
@@ -224,7 +223,6 @@ class RecursiveApplication extends ApplicationService<
   CommandRequestCancellation,
   ResponseCancelIssue
 > {
-  static readonly serviceName = "RecursiveApplication";
   execute(command: CommandRequestCancellation) {
     return this.featureBus.execute(command);
   }
@@ -249,7 +247,6 @@ test("in-flight execution retains its generation even before it calls a Feature"
     CommandRequestCancellation,
     ResponseCancelIssue
   > {
-    static readonly serviceName = "DeferredCancellation";
     declare readonly wait: () => Promise<void>;
     async execute(command: CommandRequestCancellation): Promise<ResponseCancelIssue> {
       await this.wait();

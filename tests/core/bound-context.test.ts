@@ -30,7 +30,6 @@ class CommandConfirmOrder extends Command<string> {
 const signals: (AbortSignal | undefined)[] = [];
 
 class ReserveStock extends Feature<CommandReserveStock, string> {
-  static readonly serviceName = "ReserveStock";
   async execute(command: CommandReserveStock): Promise<string> {
     if (command.fail) throw command.fail;
     signals.push(this.signal);
@@ -42,7 +41,6 @@ class ReserveStock extends Feature<CommandReserveStock, string> {
 type SalesDependencies = { stockBoundedContext: BoundedContext };
 
 class ConfirmOrder extends Feature<CommandConfirmOrder, string> {
-  static readonly serviceName = "ConfirmOrder";
   declare readonly stockBoundedContext: BoundedContext;
   execute(command: CommandConfirmOrder): Promise<string> {
     return this.stockBoundedContext.execute(

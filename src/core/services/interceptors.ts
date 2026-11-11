@@ -3,6 +3,7 @@ import type {
   InterceptedRun,
   Interceptor,
 } from "@sincpro/client-framework/core/domain/pipeline";
+import { describeDto, sameDto } from "@sincpro/client-framework/core/services/dto-keys";
 
 /**
  * `handler` run on `executable`, wrapped by `interceptors` — the first the outermost.
@@ -12,8 +13,8 @@ import type {
  *     runAround([<passes another class on>], …)         ->  TypeError, naming both classes
  *
  * 1. Each interceptor gets a `next` bound to the position after it.
- * 2. What reaches `next` must be of the class the call started with: the bus routes by class,
- *    so another class would be another use case under this one's name.
+ * 2. What reaches `next` must be the DTO the call started with — its class, or its generated
+ *    identity: the bus routes by it, so another would be another use case under this one's name.
  * Final: the outermost interceptor's answer — the service's, when none answers by itself.
  */
 export function runAround(
@@ -22,11 +23,10 @@ export function runAround(
   executable: Executable,
   run: InterceptedRun,
 ): Promise<unknown> {
-  const started = Object.getPrototypeOf(executable)?.constructor;
   const at = async (position: number, current: Executable): Promise<unknown> => {
-    if (Object.getPrototypeOf(current)?.constructor !== started) {
+    if (current !== executable && !sameDto(current, executable)) {
       throw new TypeError(
-        `An interceptor of ${run.useCase} passed on a ${current?.constructor?.name} where it received a ${started?.name}`,
+        `An interceptor of ${run.useCase} passed on a ${describeDto(current)} where it received a ${describeDto(executable)}`,
       );
     }
     const interceptor = interceptors[position];

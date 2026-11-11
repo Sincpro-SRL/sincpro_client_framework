@@ -50,7 +50,7 @@ export type ExecuteOptions = {
 /** The run an interceptor wraps: who runs, inside which execution, writing where. */
 export type InterceptedRun = {
   readonly boundedContext: string;
-  /** `<bounded context>.<serviceName>`. */
+  /** `<bounded context>.<Service>`: the service's name as registered. */
   readonly useCase: string;
   readonly layer: PipelineLayer;
   /** Its id, span, context and chain. */

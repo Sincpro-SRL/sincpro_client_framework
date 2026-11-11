@@ -16,7 +16,6 @@ class CommandPing extends Command<string> {
 }
 
 class Ping extends Feature<CommandPing, string> {
-  static readonly serviceName = "Ping";
   execute(command: CommandPing): string {
     if (command.fail) throw new Error("down");
     return "pong";

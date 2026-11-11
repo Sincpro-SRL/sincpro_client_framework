@@ -152,18 +152,29 @@ for (const style of [
       );
     });
 
-    test("validates static service metadata after class initialization", () => {
-      class Unnamed extends Feature<CommandCancelIssue, ResponseCancelIssue> {
-        static readonly serviceName = "";
+    test("the service's name is the framework's to take at registration: its class's, as written", async () => {
+      const tracer = memoryTracer();
+      configureProcess({ tracer, logger: { engine: false } });
+      class CancelForGood extends Feature<CommandCancelIssue, ResponseCancelIssue> {
         execute(dto: CommandCancelIssue) {
           return new ResponseCancelIssue(dto.issue_id, "cancelled");
         }
       }
-      const { context } = contextOf();
-      assert.throws(
-        () => registerClass(style, Unnamed, context.feature(CommandCancelIssue)),
-        /nonempty/,
-      );
+      const context = new BoundedContext("project");
+      registerClass(style, CancelForGood, context.feature(CommandCancelIssue));
+      await context.execute(new CommandCancelIssue("i-1"));
+      assert.equal(tracer.spans[0]?.name, "project/CancelForGood");
+      const Anonymous = (() =>
+        class extends Feature<CommandCancelIssue, ResponseCancelIssue> {
+          execute(dto: CommandCancelIssue) {
+            return new ResponseCancelIssue(dto.issue_id, "cancelled");
+          }
+        })();
+      if (style === "function")
+        assert.throws(
+          () => new BoundedContext("other").feature(CommandCancelIssue)(Anonymous),
+          /named class/,
+        );
     });
   });
 }

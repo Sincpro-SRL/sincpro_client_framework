@@ -20,206 +20,216 @@ platform storage: what a platform must give, it gives through a port.
 
 ## A bounded context
 
+Laid out as a backend's context (`sincpro_mcp_odoo/domains/helpdesk`): what its services count on
+(`dependencies.ts`), its bases and its instance (`framework.ts`), and one file per use case.
+
 ```ts
-import {
-  ApplicationService,
-  BoundedContext,
-  Command,
-  Feature,
-  Response,
-} from "@sincpro/client-framework";
+// domains/sales/infrastructure/dependencies.ts — the backend's DependencyContextType
+export interface SalesDependencies {
+  prices: PriceList;
+  taxRate: number;
+}
+export function registerDependencies(boundedContext: BoundedContext<SalesDependencies>) {
+  boundedContext.addDependency("prices", new PriceList());
+  boundedContext.addDependency("taxRate", 0.13);
+  return boundedContext;
+}
 
-class ResponseTotal extends Response {
-  constructor(readonly total: number) {
+// domains/sales/infrastructure/framework.ts — the bases inherit every dependency, typed
+export const { Feature, ApplicationService } = servicesWith<SalesDependencies>();
+export const salesBoundedContext = registerDependencies(
+  new BoundedContext<SalesDependencies>("sales"),
+);
+
+// domains/sales/services/quote/total.feature.ts
+export class CommandTotal extends Command<ResponseTotal> {
+  constructor(
+    readonly sku: string,
+    readonly quantity: number,
+  ) {
     super();
   }
 }
 
-class CommandTotal extends Command<ResponseTotal> {
-  constructor(readonly quantity: number) {
-    super();
-  }
-}
-
-class CommandQuote extends Command<ResponseTotal> {
-  constructor(readonly quantity: number) {
-    super();
-  }
-}
-
-class Total extends Feature<CommandTotal, ResponseTotal> {
-  static readonly serviceName = "Total";
-  declare readonly unitPrice: number; // a dependency, typed
-
+@salesBoundedContext.feature(CommandTotal)
+export class Total extends Feature<CommandTotal, ResponseTotal> {
   execute(command: CommandTotal): ResponseTotal {
     this.logger.info("Totalling", { quantity: command.quantity });
-    return new ResponseTotal(command.quantity * this.unitPrice);
+    const unit = this.prices.of(command.sku) * (1 + this.taxRate); // declared nowhere else
+    return new ResponseTotal(unit * command.quantity);
   }
 }
 
-class Quote extends ApplicationService<CommandQuote, ResponseTotal> {
-  static readonly serviceName = "Quote";
-
+// domains/sales/services/quote/quote.app-service.ts
+@salesBoundedContext.appService(CommandQuote)
+export class Quote extends ApplicationService<CommandQuote, ResponseTotal> {
   execute(command: CommandQuote): Promise<ResponseTotal> {
-    return this.featureBus.execute(new CommandTotal(command.quantity));
+    return this.featureBus.execute(new CommandTotal(command.sku, command.quantity));
   }
 }
 
-const salesBoundedContext = new BoundedContext<{ unitPrice: number }>("sales");
-salesBoundedContext.addDependency("unitPrice", 10);
-salesBoundedContext.feature(CommandTotal)(Total);
-salesBoundedContext.appService(CommandQuote)(Quote);
-
-const answer = await salesBoundedContext.execute(new CommandQuote(3)); // ResponseTotal — total 30
+const answer = await salesBoundedContext.execute(new CommandQuote("a1", 3)); // ResponseTotal
 ```
 
 A Command names, by its type, the Response it answers: `execute` infers it, with no second
 argument (the backend's `bus(dto, ResponseType)` is accepted too, and checked in TypeScript
 only). A Response may be a class, a plain object, a page, a primitive or `void`.
 
-- **One Command, one service.** A Command class is registered once, across both layers, and
-  dispatched by its exact constructor. `serviceName` names the service in spans and logs —
-  stable, where a minifier renames classes.
-- **Dependencies are attributes.** `addDependency` supplies them; a service declares their types
-  (`declare readonly client: …`), usually once on a base class per bounded context, as
-  `sincpro-client scaffold` writes it. Declaring registers nothing; reading a missing one fails.
+- **Dependencies are the context's, never a service's.** `servicesWith<SalesDependencies>()` gives
+  the bases every dependency typed on `this` — the backend's `class Feature(_Feature,
+DependencyContextType)` —; `addDependency` supplies them, and reading one never supplied fails.
   A replacement names what it replaces: `addDependency(name, next, { replaces: previous })`.
-- **A service is a singleton of its generation.** What belongs to one request goes in the
-  Command or the context, never on `this`. Use TypeScript `private`, not `#private`: a run sees
-  the instance through a view of its own.
+- **The framework names a service when it registers it**: its class, as the code wrote it — a
+  standard decorator hands the name over before any minifier runs —, else the class's `name`. A
+  production build keeps class names (`keep_classnames` in Metro's minifier, `keepNames` in
+  esbuild and Vite). Nothing on the class declares it.
+- **One service, N DTOs.** `feature([CommandX, EventY])` registers one service for each, as the
+  backend's `DTORegistration`; a DTO still has one service, across both layers, dispatched by
+  its exact class — or, generated, by its identity.
+- **A service is a singleton of its generation**, one instance whatever the number of DTOs it
+  takes. What belongs to one request goes in the Command or the context, never on `this`. Use
+  TypeScript `private`, not `#private`: a run sees the instance through a view of its own.
 - **Generations.** The first call (or `buildRootBus()`) builds one; what is registered later
   answers from the next call, and a running call keeps its own. `fresh()` copies the
   registrations; `scoped({ company_id: 2 })` runs with more context and the same instances.
 - **Composition.** An ApplicationService runs its context's Features through `this.featureBus`,
-  as children of its own execution; never another ApplicationService.
+  as children of its own execution; never another ApplicationService. A bounded context injected
+  into another's services (the backend's `common_mcp`) is bound to the run: what it executes is
+  a child of it.
 
-### Decorators, when the project has them
+### Registering: a decorator, or a call
 
-```ts
-@salesBoundedContext.feature(CommandTotal)
-class Total extends Feature<CommandTotal, ResponseTotal> { … }
-```
-
-The same functions work as standard decorators and as legacy ones (`experimentalDecorators`);
-without a decorator transform, call them: `salesBoundedContext.feature(CommandTotal)(Total)`. No DI library
-and no `reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's
-transform (Vite, Metro/Babel) is each application's to configure and test.
+The same functions work as standard decorators, as legacy ones (`experimentalDecorators`), and
+called: `salesBoundedContext.feature(CommandTotal)(Total)`. No DI library and no
+`reflect-metadata`. The tests compile both decorator forms with TypeScript; a bundler's transform
+(Vite, Metro/Babel) is each application's to configure and test. A service registers itself
+where it is written; `services/index.ts` imports each file, so all are registered before anyone
+executes.
 
 ### Replacing a service
 
 An application takes the place of a service a module registered, as the backend's `replaces=`:
 
 ```ts
+@printingBoundedContext.feature(CommandPrint, { replaces: Print })
 class PrintOnBixolon extends Print {
-  static override readonly serviceName = "PrintOnBixolon";
   override execute(command: CommandPrint) { … }
 }
-printingBoundedContext.feature(CommandPrint, { replaces: Print })(PrintOnBixolon);
 printingBoundedContext.handlerOf(CommandPrint); // PrintOnBixolon
 ```
 
-`replaces` names the service registered now for that class, or the registration is refused. The
-next call answers with the new one; its spans say which it replaced (`sincpro.replaces`). A
-service meant to be replaced by a subclass widens its name — `static readonly serviceName:
-string = "Print"` —, or TypeScript keeps the literal and the subclass cannot rename itself. A
-dependency is replaced the same way: `addDependency(name, next, { replaces: previous })`.
+`replaces` names the service registered now for each DTO listed, or the registration is
+refused — all of them or none. The next call answers with the new one; its spans say which it
+replaced (`sincpro.replaces`). A dependency is replaced the same way.
 
-## Domain events
+## Commands and events: two DTOs that travel differently
 
-A fact that already happened — `OrderPaid` — is heard in one of two ways:
+|                      | A Command                                                                                           | An event                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Is                   | a request to **one** bus                                                                            | a fact **N** buses hear                                         |
+| Known on the wire by | its identity, `static commandName = "billing.CommandIssueInvoice"`                                  | its wire name, `static eventName = "billing.invoice.v1.issued"` |
+| Travels as           | `{ kind: "command", type, id, correlationId, causationId, sentAt, data }` (the backend's `Payload`) | `{ kind: "event", envelope, data }`                             |
+| Written / read with  | `commandMessageOf(command, cause?)` / `commandFrom(type, data)`                                     | `eventMessageOf(event, envelope)` / `eventFrom(type, data)`     |
 
-| What hears it                                                                                 | When                                                                                       |
-| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| **A use case of the event**: a Feature or ApplicationService whose input _is_ the event       | the use case exists because of the event, and nothing else calls it                        |
-| **An `EventSubscriber`**: an entrypoint that reads the event and executes Commands on the bus | the event starts use cases that have their own Command — a screen or a cron calls them too |
-
-A subscriber is not a use case — it is a door, as a cron or a screen is: it decides nothing. Work
-of several steps is an ApplicationService (the workflow) that the subscriber executes, never
-logic in the subscriber.
-
-### A use case of the event
-
-The event is executed as a Command is: by the Feature or ApplicationService registered for its
-class in this bounded context, through the same pipeline (span, log lines, error handlers,
-report):
+Both names are declared: they are the contract other processes read, with its version — never
+a class's name. A Command that never leaves the process needs no identity. A value that is not
+JSON (`Money`, `Decimal`, a day) comes back as such through the class's `static fromJSON`.
 
 ```ts
-class OrderPaid extends DomainEvent {
-  static readonly eventName = "shop.order.v1.paid"; // its wire name, as the backend's `name`
-  constructor(readonly order_id: string) {
+class InvoiceIssued extends DomainEvent {
+  static readonly eventName = "billing.invoice.v1.issued";
+  static fromJSON(values: {
+    invoice_id: string;
+    total: { amount: string; currency: string };
+  }) {
+    return new InvoiceIssued(
+      values.invoice_id,
+      new Money(values.total.amount, values.total.currency),
+    );
+  }
+  constructor(
+    readonly invoice_id: string,
+    readonly total: Money,
+  ) {
     super();
   }
 }
-
-class ThankCustomer extends Feature<OrderPaid, void> {
-  static readonly serviceName = "ThankCustomer";
-  async execute(event: OrderPaid) { … }
-}
-
-shopBoundedContext.feature(OrderPaid)(ThankCustomer);
-await shopBoundedContext.execute(new OrderPaid("o-1")); // span shop/ThankCustomer, sincpro.event = its name
 ```
 
-- **`eventName` is declared**, as `serviceName` is: a minifier renames classes. `event.name`
-  reads it; `name` is reserved, and a subclass cannot make it a field.
-- **One use case per event in a bounded context.** Another context that hears the event
-  registers its own; the queue's `Subscriber` executes it in each.
-- An ApplicationService can take the event too, and compose Features — of Commands or of events
-  — through `featureBus`. `execute(event)` answers whatever its use case returns (`unknown`).
+`event.name` reads `eventName`; `name` is reserved, and a subclass cannot make it a field.
 
-### An `EventSubscriber`: the entrypoint that hears an event
+### What the generator writes is recognized on the bus
+
+A contract's Commands and events are generated as types and data, never classes. The bus takes
+their entries — `operations.X` (an identity), `events.X` (a wire name) — as what a service is
+registered for, and executes them as data:
 
 ```ts
-// entrypoints/queue/logged-successfully.subscriber.ts — reads the event, executes the Command
-export class LoggedSuccessfully extends EventSubscriber<OdooLoggedIn> {
-  static readonly subscriberName = "LoggedSuccessfully";
-  declare readonly ticketsBoundedContext: BoundedContext<TicketsDependencies>;
+import { events, operations } from "../generated/client";
+import type * as remote from "../generated/domain";
 
-  async handle(event: OdooLoggedIn) {
-    await this.ticketsBoundedContext.execute(new CommandStartDay(event.uid)); // an ApplicationService
-  }
+@projectBoundedContext.feature([events.IssueClosed, operations.CommandArchiveIssue])
+class Archive extends Feature<remote.IssueClosed | RemoteCommand<remote.CommandArchiveIssue>, void> {
+  execute(input: remote.IssueClosed | RemoteCommand<remote.CommandArchiveIssue>) { … }
 }
 
-// entrypoints/queue/index.ts — who hears what, and what they call
-export const ticketsSubscriptions = new Subscriptions<TicketsEntrypoints>(
-  "tickets-subscriptions",
-);
-ticketsSubscriptions.addDependency("ticketsBoundedContext", ticketsBoundedContext);
-ticketsSubscriptions.subscribe(OdooLoggedIn)(LoggedSuccessfully);
+await projectBoundedContext.execute(issueClosed); // the event's data: its `name` says which
+await projectBoundedContext.execute(commandOf(operations.CommandArchiveIssue, { issue_id }));
 ```
 
-- **Each delivery is a run of its own**, `tickets-subscriptions/LoggedSuccessfully` in the layer
-  `entrypoint`: its span, its log lines, `this.logger`, `this.execution`. It continues the
-  envelope's flow, and the use cases it executes are its children.
-- **A bounded context it was given is bound to it** (`BIND`), as a transport is: what it executes
-  runs under the subscriber's span, in the same flow, caused by it, cancelled with it — and still
-  with its own dependencies, context, interceptors and handlers. A Feature that calls another
-  bounded context injected into it gets the same.
-- **One subscriber per event in a `Subscriptions`**; a second is refused, a replacement names the
-  one it replaces (`subscribe(Event, { replaces: Old })`). Several reactions to one event are one
-  ApplicationService, or subscribers of different registries.
-- **It is not a use case**: interceptors and listeners see the use cases it calls, not it. A
-  failure is reported once along the flow, where it happened, with the outcome its bounded
-  context gave it (`expectErrors` holds).
-- **Its name is its identity** in spans, logs and the stored queue's record of who already
-  heard an event, so it differs from every bounded context's (`<context>-subscriptions`).
+`commandOf` tags the input with the operation's identity — never serialized with its data.
 
-### Publishing and subscribing
+## Domain events
+
+Registering a use case for an event **is** the subscription — the backend's
+`@accounting.feature(InvoiceIssued)`. Several bounded contexts may register it; each hears it once.
 
 ```ts
-import { Publisher, Subscriber, syncQueue } from "@sincpro/client-framework";
+@accountingBoundedContext.feature(InvoiceIssued)
+class Book extends Feature<InvoiceIssued, void> { … }
 
-// the queue's door: every bounded context with a use case of the event, every Subscriptions
-const subscriber = new Subscriber(
-  mailBoundedContext,
-  stockBoundedContext,
-  ticketsSubscriptions,
-);
-const queue = syncQueue(subscriber); // in the call, in memory — or a platform's
+@billingBoundedContext.feature([CommandIssueInvoice, OrderPaid]) // a screen, or the event
+class IssueInvoice extends Feature<CommandIssueInvoice | OrderPaid, ResponseInvoice> { … }
+```
+
+A use case of an event runs through the same pipeline (span `<context>/<Service>` with
+`sincpro.event`, log lines, error handlers, report). An ApplicationService may take the event and
+compose Features; `execute(event)` answers whatever its use case returns (`unknown`).
+
+### The Subscriber: the queue's only entrypoint
+
+One per queue — the backend's `Subscriber(*buses)` and `QueueGateway`. What arrives is
+recognized (an event by its name, a Command by its identity), rebuilt and executed on the bus
+that registered it. Nobody writes a subscriber per event.
+
+```ts
+new Subscriber(accountingBoundedContext, billingBoundedContext); // every event they registered
+
+new Subscriber({
+  boundedContexts: [accountingBoundedContext, billingBoundedContext],
+  events: [InvoiceIssued, events.IssueClosed], // only these
+  commands: [CommandIssueInvoice], // consumed from the queue: only when declared
+});
+
+await subscriber.receive(message); // an EventMessage or a CommandMessage: what each answered
+```
+
+- **An event** is handed to every bounded context that registered it, in the order named; one
+  that fails does not stop the others, and each is said under its name — which a stored queue
+  keeps, so a redelivery never runs one again. Two bounded contexts never share a name.
+- **A Command** is executed by the one bounded context that registered it, continuing the
+  message's flow — **only when declared** (`commands`). A bus never hands all its Commands to
+  whoever can publish on a queue: an undeclared one fails `CommandNotConsumed`
+  (`permission_denied`).
+
+### Publishing
+
+```ts
+const queue = syncQueue(new Subscriber(mailBoundedContext, stockBoundedContext)); // or storedQueue
 shopBoundedContext.addDependency("publisher", new Publisher(queue));
 
+@shopBoundedContext.feature(CommandPay)
 class Pay extends Feature<CommandPay, string> {
-  declare readonly publisher: Publisher;
   async execute(command: CommandPay) {
     await this.publisher.publish(new OrderPaid(command.order_id)); // its Envelope
     return command.order_id;
@@ -228,21 +238,19 @@ class Pay extends Feature<CommandPay, string> {
 ```
 
 The `Publisher` is bound to the run that holds it, so the event joins that run's flow: its
-envelope carries the run's `correlationId` and names the run as its cause. The `Subscriber`
-executes it in `mail`, in `stock` and in `tickets-subscriptions` — `execute(event, envelope)`
-—, so their runs continue the same flow; one that fails does not stop the others. Two of them
-never share a name.
+envelope carries the run's `correlationId` and names the run as its cause, and every use case
+that hears it continues that flow.
 
 What is defined here, and what each platform plugs behind the ports:
 
 | Piece             | Here                                                           | The platform's                         |
 | ----------------- | -------------------------------------------------------------- | -------------------------------------- |
-| `DomainEvent`     | the class, its `eventName`, its execution                      | —                                      |
-| `EventSubscriber` | the entrypoint, its run, `Subscriptions`                       | —                                      |
+| `DomainEvent`     | the class, its `eventName`, its messages                       | —                                      |
+| `Command`         | its `commandName`, its messages                                | —                                      |
 | `Envelope`        | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
 | `EventQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
 | `EventStore` port | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
-| `Subscribes` port | `Subscriber(...hearing)`, `eventTypeOf(name)`                  | —                                      |
+| `Subscriber`      | recognize, rebuild, execute; events heard, Commands declared   | where messages come from (a socket)    |
 
 ### Stored events: one way to carry them, any store
 
@@ -280,9 +288,9 @@ memory carry events the same way, with the same rules.
 Three things a platform keeps in mind:
 
 - **At least once.** A process that stops after a context executed an event and before the store
-  saved it runs it there again. What must not act twice keys what it does by the envelope's id —
-  `this.execution.causationId` in a use case of the event, or in an `EventSubscriber`, which hands
-  it to the Command it executes — or by what the event names (the entity's own id).
+  saved it runs it there again. What must not act twice keys what it does by the message's id —
+  `this.execution.causationId` in the use case that received it — or by what the event names
+  (the entity's own id).
 - **One drainer per store.** Two tabs over one IndexedDB claim it first (the Web Locks API).
 - **Values come back as JSON.** An event that carries a `Money`, a `Decimal` or a date declares
   `static fromJSON` to read them back as such.
@@ -445,7 +453,7 @@ configureProcess({
 });
 ```
 
-Every execution opens a span `<bounded context>/<serviceName>`; an ApplicationService's Features
+Every execution opens a span `<bounded context>/<Service>`; an ApplicationService's Features
 are its children, on the same trace. A dependency that is a `Transport` or a generated client is
 bound to the run, so each request carries `traceparent` (and `tracestate`) and
 `sincpro-context` — the backend continues the trace. A tracer, reporter or logger that fails is
@@ -601,8 +609,9 @@ sincpro-client check --root src
 Each method takes the operation's input and answers its answer, as `domain.ts` types them — a
 search answers its `Response…` with its records and cursor, as the backend's callers get it, on
 every wire. `scaffold` writes, once, the application's own files: its dependencies (the client
-over the `operations` the application exports — `--operations <module>` —), its service bases
-and `registerServices`. `check` enforces the application's layers and bounded-context
+over the `operations` the application exports — `--operations <module>` —), its `framework.ts`
+(the service bases with every dependency typed, and the instance) and `services/index.ts`. `check`
+enforces the application's layers and bounded-context
 boundaries.
 
 **Domain events, on demand.** A backend leaves its events out of the contract unless it is
@@ -699,27 +708,29 @@ src/
           <entity of the aggregate>/     payments/: a related entity with use cases of its own
             register-payment.feature.ts
             reconcile-payments.app-service.ts
-        index.ts                         registerServices: each Command with its service
-      infrastructure/                  dependencies.ts, bounded_context.ts (service bases)
+        index.ts                         imports each service: it registers itself (a decorator)
+      infrastructure/
+        dependencies.ts                  <Context>Dependencies and registerDependencies
+        framework.ts                     servicesWith<…>() bases, and <context>BoundedContext
       entrypoints/                     the doors: they translate, they decide nothing
-        queue/                           EventSubscribers: event → Command → bus; index.ts: Subscriptions
         cron/                            mobile only — its scheduler: tick → Command → bus
-      index.ts                         export const <context>BoundedContext — ready to execute
+      index.ts                         <context>BoundedContext, ready to execute
 ```
 
 - **Services by aggregate.** A simple entity is one folder with its Features (a CRUD). When an
   aggregate holds related entities with use cases of their own — the payments of a sale order —,
   they get a folder inside it, and its Features and ApplicationServices live there, grouped by
   what they are about.
-- **Entrypoints translate.** A subscriber, a cron and a screen build a Command and execute it;
-  a workflow of several use cases is an ApplicationService they execute. `sincpro-client check`
-  refuses a service that imports an entrypoint.
+- **Entrypoints translate.** A screen and a cron build a Command and execute it; what a queue
+  carries goes through the one `Subscriber` (`entrypoints/main.ts`). A workflow of several use
+  cases is an ApplicationService. `sincpro-client check` refuses a service that imports an
+  entrypoint.
 - **A cron is a platform's door, and only where the platform has a scheduler.** A phone wakes a
   closed app on a schedule (mobile's `CronWorker`); a browser does not — Periodic Background Sync
   is Chromium-only, for an installed PWA, and the browser decides when. On the web, refreshing
   what a screen shows is the screen's (a query's refetch interval), not a cron, and work on a
   schedule is the backend's (`Crons`). This package has no cron: the day web needs one, its
-  registry and a `Scheduler` port come here, as `Subscriptions` did.
+  registry and a `Scheduler` port come here.
 - **A bounded context is named for what it is**: `salesBoundedContext`, never `sales` (an
   entity?) or `ctx` — `context` is already the run's (`this.context`).
 
@@ -755,9 +766,11 @@ src/
     entrypoint/      BoundedContext, screensTransport
     infrastructure/  configureProcess, configureLogger, processListeners
   event_driven/
-    domain/          Envelope, the EventQueue, Subscribes and EventStore ports
+    domain/          Envelope, the messages (an event's, a Command's), the EventQueue,
+                     Subscribes and EventStore ports
+    services/        writing and reading messages
     adapters/        syncQueue, storedQueue, memoryEventStore
-    entrypoint/      Publisher, Subscriber (the queue's door), Subscriptions, EventSubscriber
+    entrypoint/      Publisher, Subscriber (the queue's only entrypoint)
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger
 ```

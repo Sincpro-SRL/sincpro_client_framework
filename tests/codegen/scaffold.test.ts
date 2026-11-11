@@ -16,8 +16,8 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
   const files = scaffoldFilesOf(project);
   assert.deepEqual(Object.keys(files).sort(), [
     "index.ts",
-    "infrastructure/bounded_context.ts",
     "infrastructure/dependencies.ts",
+    "infrastructure/framework.ts",
     "services/index.ts",
   ]);
   assert.ok(
@@ -30,30 +30,33 @@ test("a bounded context's skeleton is the backend's layout, named after the cont
       'boundedContext.addDependency("client", clientOf(operations));',
     ),
   );
+  const framework = files["infrastructure/framework.ts"] ?? "";
   assert.ok(
-    files["infrastructure/bounded_context.ts"]?.includes(
-      "export abstract class Feature<C extends Command<R> | DomainEvent, R> extends BaseFeature<C, R>",
+    framework.includes(
+      "export const { Feature, ApplicationService } = servicesWith<ProjectDependencies>();",
     ),
   );
   assert.ok(
-    files["index.ts"]?.includes(
+    framework.includes(
       'export const projectBoundedContext = configProjectBoundedContext("project", operations);',
     ),
   );
   assert.ok(
-    files["index.ts"]?.includes(
-      'import { operations } from "../common/infrastructure/operations";',
+    framework.includes(
+      'import { operations } from "../../common/infrastructure/operations";',
     ),
   );
   assert.ok(
-    scaffoldFilesOf(project, { operations: "@/app/operations" })["index.ts"]?.includes(
-      'import { operations } from "@/app/operations";',
-    ),
+    scaffoldFilesOf(project, { operations: "@/app/operations" })[
+      "infrastructure/framework.ts"
+    ]?.includes('import { operations } from "@/app/operations";'),
   );
+  assert.ok(files["index.ts"]?.includes('import "./services";'));
 });
 
 test("the constant says it is a bounded context, whatever the alias: never a bare word or an abbreviation", () => {
-  const named = (alias: string) => scaffoldFilesOf({ ...project, alias })["index.ts"] ?? "";
+  const named = (alias: string) =>
+    scaffoldFilesOf({ ...project, alias })["infrastructure/framework.ts"] ?? "";
   assert.ok(named("import").includes("export const importBoundedContext ="));
   assert.ok(named("operations").includes("export const operationsBoundedContext ="));
   assert.ok(named("sales-orders").includes("export const salesOrdersBoundedContext ="));
@@ -73,6 +76,24 @@ test("the skeleton compiles as it is written, beside what the generator writes",
     mkdirSync(join(own, name, ".."), { recursive: true });
     writeFileSync(join(own, name), source);
   }
+  // A service the application writes: it uses `this.client` and declares no dependency.
+  mkdirSync(join(own, "services", "project"), { recursive: true });
+  writeFileSync(
+    join(own, "services", "project", "count.feature.ts"),
+    [
+      'import { Command } from "@sincpro/client-framework";',
+      'import { Feature, projectBoundedContext } from "../../infrastructure/framework";',
+      "export class CommandCount extends Command<number> {}",
+      "export class Count extends Feature<CommandCount, number> {",
+      "  execute(): number {",
+      '    return typeof this.client === "object" ? 1 : 0;',
+      "  }",
+      "}",
+      "projectBoundedContext.feature(CommandCount)(Count);",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(join(own, "services", "index.ts"), 'import "./project/count.feature";\n');
   mkdirSync(join(root, "domains", "common", "infrastructure"), { recursive: true });
   writeFileSync(
     join(root, "domains", "common", "infrastructure", "operations.ts"),

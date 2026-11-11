@@ -35,7 +35,6 @@ class CommandNotify extends Command<string> {
 }
 
 class Notify extends Feature<CommandNotify, string> {
-  static readonly serviceName = "Notify";
   declare readonly sent: string[];
   execute(command: CommandNotify): string {
     this.sent.push(command.text);
@@ -44,7 +43,6 @@ class Notify extends Feature<CommandNotify, string> {
 }
 
 class ThankCustomer extends Feature<OrderPaid, string> {
-  static readonly serviceName = "ThankCustomer";
   declare readonly sent: string[];
   execute(event: OrderPaid): string {
     if (event.fail) throw event.fail;
@@ -54,7 +52,6 @@ class ThankCustomer extends Feature<OrderPaid, string> {
 }
 
 class ShipAndNotify extends ApplicationService<OrderShipped, void> {
-  static readonly serviceName = "ShipAndNotify";
   async execute(event: OrderShipped): Promise<void> {
     await this.featureBus.execute(new CommandNotify(`shipped ${event.order_id}`));
     await this.featureBus.execute(new OrderPaid(event.order_id));
@@ -128,11 +125,9 @@ test("an event needs its name, one name means one event, and one event has one s
     static readonly eventName = "shop.order.v1.paid";
   }
   class Listener extends Feature<DomainEvent, void> {
-    static readonly serviceName = "Listener";
     execute() {}
   }
   class Other extends Feature<DomainEvent, void> {
-    static readonly serviceName = "Other";
     execute() {}
   }
   const { context } = shop();
@@ -146,7 +141,6 @@ test("an event needs its name, one name means one event, and one event has one s
 test("only a Command or a DomainEvent class has a service", () => {
   class Plain {}
   class Listener extends Feature<CommandNotify, string> {
-    static readonly serviceName = "Listener";
     execute() {
       return "";
     }

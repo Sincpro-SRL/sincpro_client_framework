@@ -1,14 +1,10 @@
 import { failureOf } from "@sincpro/client-framework/common/failures";
-import {
-  type JsonValue,
-  readValues,
-  rebuilt,
-  valuesOf,
-} from "@sincpro/client-framework/common/serialization";
-import type { DomainEvent, EventClass } from "@sincpro/client-framework/core/domain/dto";
+import { type JsonValue, valuesOf } from "@sincpro/client-framework/common/serialization";
+import type { DomainEvent, RemoteEvent } from "@sincpro/client-framework/core/domain/dto";
 import type { Envelope } from "@sincpro/client-framework/event_driven/domain/envelope";
 import type {
   EventQueue,
+  EventType,
   Subscribes,
 } from "@sincpro/client-framework/event_driven/domain/queue";
 import type {
@@ -16,6 +12,7 @@ import type {
   EventStore,
   StoredEvent,
 } from "@sincpro/client-framework/event_driven/domain/store";
+import { eventFrom } from "@sincpro/client-framework/event_driven/services/messages";
 import { loggerAdapter } from "@sincpro/client-framework/observability/services/logging";
 
 export type StoredQueueOptions = {
@@ -28,7 +25,7 @@ export type StoredQueueOptions = {
    * has one, else its values set on an instance of it — as JSON gave them: an event that carries
    * a `Money`, a `Decimal` or a date declares `fromJSON` to read them back as such.
    */
-  readonly rebuild?: (type: EventClass<DomainEvent>, payload: JsonValue) => DomainEvent;
+  readonly rebuild?: (type: EventType, payload: JsonValue) => DomainEvent | RemoteEvent;
   /**
    * Whether an event may be delivered now — a phone asks for a connection, or a session. One
    * that is not waits while the rest go on; `drain()` again when what it waits for comes back.
@@ -50,13 +47,6 @@ export type StoredQueueOptions = {
 
 /** A stored queue, and the door to deliver what waits — on a timer, back online, in the foreground. */
 export type StoredQueue = EventQueue & { drain(): Promise<void> };
-
-function rebuildEvent(type: EventClass<DomainEvent>, payload: JsonValue): DomainEvent {
-  const values = readValues(payload);
-  if (typeof (type as { fromJSON?: unknown }).fromJSON === "function")
-    return rebuilt(values, type as unknown as (values: unknown) => DomainEvent);
-  return Object.assign(Object.create(type.prototype) as DomainEvent, values);
-}
 
 function described(boundedContext: string, error: unknown): DeliveryFailure {
   const failure = failureOf(error);
@@ -94,8 +84,8 @@ function described(boundedContext: string, error: unknown): DeliveryFailure {
  *
  * Delivery is at least once: a process that stops after a context executed an event and before
  * the store saved it executes it there again on the next drain. What must not act twice keys what
- * it does by the envelope's id — `this.execution.causationId` in a use case of the event, or in an
- * `EventSubscriber`, which hands it to the Command it executes — or by the entity the event names.
+ * it does by the envelope's id — `this.execution.causationId` in the use case of the event — or
+ * by the entity the event names.
  * And one process drains a store: two tabs over one IndexedDB claim it first (the Web Locks API).
  */
 export function storedQueue(options: StoredQueueOptions): StoredQueue {
@@ -104,7 +94,7 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
   const longestWait = options.longestWait ?? 60_000;
   const maxAttempts = options.maxAttempts ?? 10;
   if (!(maxAttempts >= 1)) throw new TypeError("A stored queue needs one attempt at least");
-  const rebuild = options.rebuild ?? rebuildEvent;
+  const rebuild = options.rebuild ?? eventFrom;
   let draining: Promise<void> | undefined;
   let again = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -152,7 +142,7 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
         await settle({ ...head, state: "delivered", attempts, retryAt: null, failures: [] });
         continue;
       }
-      let event: DomainEvent;
+      let event: DomainEvent | RemoteEvent;
       try {
         event = rebuild(type, head.payload);
       } catch (error) {
@@ -209,7 +199,7 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
   };
 
   const queue: StoredQueue = {
-    async put(event: DomainEvent, envelope: Envelope) {
+    async put(event: DomainEvent | RemoteEvent, envelope: Envelope) {
       await store.add({
         envelope,
         payload: valuesOf(event),

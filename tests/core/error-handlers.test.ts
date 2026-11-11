@@ -35,14 +35,12 @@ class CommandFindTwice extends Command<ResponseIssue> {
 }
 
 class Find extends Feature<CommandFind, ResponseIssue> {
-  static readonly serviceName = "Find";
   execute(command: CommandFind): ResponseIssue {
     if (command.error) throw command.error;
     return new ResponseIssue(true);
   }
 }
 class FindTwice extends ApplicationService<CommandFindTwice, ResponseIssue> {
-  static readonly serviceName = "FindTwice";
   async execute(command: CommandFindTwice): Promise<ResponseIssue> {
     const first = await this.featureBus.execute(new CommandFind(command.error));
     return new ResponseIssue(first.found);

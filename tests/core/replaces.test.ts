@@ -20,7 +20,6 @@ class CommandPrint extends Command<string> {
 
 /** A core service meant to be replaced by a subclass widens its name to `string`. */
 class Print extends Feature<CommandPrint, string> {
-  static readonly serviceName: string = "Print";
   execute(command: CommandPrint): string {
     return `core ${command.text}`;
   }
@@ -28,7 +27,6 @@ class Print extends Feature<CommandPrint, string> {
 
 /** What an application ships instead: a subclass of the core's, or a class of its own. */
 class PrintOnBixolon extends Print {
-  static override readonly serviceName = "PrintOnBixolon";
   override execute(command: CommandPrint): string {
     return `bixolon ${command.text}`;
   }
@@ -37,14 +35,12 @@ class PrintOnBixolon extends Print {
 class CommandCheckout extends Command<string> {}
 
 class Checkout extends ApplicationService<CommandCheckout, string> {
-  static readonly serviceName = "Checkout";
   execute(): Promise<string> {
     return this.featureBus.execute(new CommandPrint("receipt"));
   }
 }
 
 class CheckoutOffline extends ApplicationService<CommandCheckout, string> {
-  static readonly serviceName = "CheckoutOffline";
   execute(): string {
     return "queued";
   }
@@ -93,7 +89,6 @@ test("an ApplicationService is replaced the same way; a running call keeps its g
 
 class CommandCheckoutAgain extends Command<string> {}
 class CheckoutAgain extends ApplicationService<CommandCheckoutAgain, string> {
-  static readonly serviceName = "CheckoutAgain";
   execute(): string {
     return "again";
   }
@@ -107,7 +102,6 @@ test("a replacement names what is registered, or it is refused", () => {
   );
   class CommandUnregistered extends Command<string> {}
   class Unregistered extends Feature<CommandUnregistered, string> {
-    static readonly serviceName = "Unregistered";
     execute() {
       return "";
     }
