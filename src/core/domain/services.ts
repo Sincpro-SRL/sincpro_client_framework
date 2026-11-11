@@ -11,8 +11,7 @@ import type { LayerLogger } from "@sincpro/client-framework/observability/domain
 import type { Span } from "@sincpro/client-framework/observability/domain/tracing";
 
 /** What a service executes: a Command, a domain event, or a generated one. */
-export type ServiceInput<R> =
-  Command<R> | DomainEvent | RemoteEvent | RemoteCommand<unknown, R>;
+export type ServiceInput<R> = Command<R> | DomainEvent | RemoteEvent | RemoteCommand;
 
 /**
  * The services of the application layer, as sincpro_framework's: a Feature executes the DTOs it
