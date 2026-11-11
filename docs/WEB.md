@@ -35,16 +35,20 @@ const { run, busy, answer, error } = useExecute(sales);
 await run(new CommandQuote(3)); // ResponseTotal
 ```
 
-`onStart`, `onCompletion` and `onFailure` are where an application-wide indicator (a toast, a
-progress bar) hears every run without touching a service.
+`processListeners.onStart`, `onCompletion` and `onFailure` are where an application-wide
+indicator (a toast, a progress bar) hears every run of every bounded context. A hook passes the
+screen's `AbortSignal` (`execute(command, { signal })`): a screen that closes cancels its run and
+its requests, which end `aborted`, never reported. `failureOf(error)` tells the screen what to do
+— fix the form, sign in again, retry, refresh — whatever the wire.
 
 ## Events in a browser
 
 The same `Publisher` and `Subscriber` as on a phone; what changes is the queue:
 
 - **`syncQueue(subscriber)`** — in the call, in memory: what a single tab needs.
-- **IndexedDB** — an `EventQueue` adapter that stores an event with its envelope and delivers
-  it when it can: a point of sale that works offline.
+- **`storedQueue({ store, subscriber })`** — stored first, delivered in order, retried and set
+  aside by the same rules as on a phone. `memoryEventStore()` in a tab; an IndexedDB
+  `EventStore` for a point of sale that works offline.
 - **`BroadcastChannel`** — an adapter that also tells the other tabs; each tab's `Subscriber`
   executes the event in its own bounded contexts.
 - **From the server** — with the backend's server-sent events, an entrypoint that rebuilds each

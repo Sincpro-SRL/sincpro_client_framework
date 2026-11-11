@@ -40,17 +40,23 @@ export class Subscriber implements Subscribes {
   }
 
   /**
-   * 1. Every bounded context registered for the event's class, in the order named.
+   * 1. Every bounded context registered for the event's class, in the order named — but those
+   *    `skip` names, which already have it.
    * 2. Each executes it — continuing the envelope's flow when there is one —, and its answer or
    *    failure is kept; a failure does not stop the next.
    * Final: what each answered, or failed with.
    */
-  async handle(event: DomainEvent, envelope?: Envelope): Promise<Handled[]> {
+  async handle(
+    event: DomainEvent,
+    envelope?: Envelope,
+    skip: readonly string[] = [],
+  ): Promise<Handled[]> {
     const type = Object.getPrototypeOf(event)?.constructor as
       (abstract new (...args: never[]) => DomainEvent) | undefined;
     const handled: Handled[] = [];
     for (const context of this.contexts) {
       if (type === undefined || context.handlerOf(type) === undefined) continue;
+      if (skip.includes(context.name)) continue;
       try {
         handled.push({
           boundedContext: context.name,

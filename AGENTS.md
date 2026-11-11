@@ -78,10 +78,20 @@ module has only the layers it needs, and says what it offers in its own `index.t
   unless `Service` is registered now for `dto`; its spans carry `sincpro.replaces`. A service
   meant to be subclassed declares `static readonly serviceName: string = "…"`, or the literal
   type stops a subclass from renaming itself.
-- **Events are published and executed here; stored and retried by the platform.** One
-  subscriber per bounded context; a `Subscriber` executes an event in each. A durable queue is
-  an `EventQueue` adapter of the platform's: it stores the event with its envelope, asks
-  `eventTypeOf(name)`, rebuilds it and calls `subscriber.handle(event, envelope)`.
+- **How events are carried is here; where they are kept is the platform's.** One subscriber
+  per bounded context; a `Subscriber` executes an event in each. `storedQueue` holds the rules —
+  store first, deliver in order, retry what may succeed, set aside what never will, never run a
+  context twice — over an `EventStore` the platform plugs (SQLite, IndexedDB, memory). A store
+  only keeps records; it never decides.
+- **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the
+  `Problem` (the same over REST, JSON-RPC and gRPC), then a REST status. A transport of another
+  wire, or another backend's adapter, declares the kind with `kindOfGrpcCode` /
+  `kindOfJsonRpcCode` / `kindOfHttpStatus` — never a table of its own. Retrying, setting aside,
+  reporting and the outcome all follow from it.
+- **A run can be cancelled.** `execute(…, { signal })`: it ends `aborted` at once, its Features
+  inherit the signal, `this.signal` reads it, and a bound transport sends it with every request.
+  `signal` is reserved, like `context` and `logger`.
+- **No variable named `process`.** `make doctor` reads `process.` as Node outside `codegen/`.
 - **A run belongs to a flow.** `correlationId` is shared by every run and event of one flow;
   `causationId` names what directly caused it. A dependency carrying `BIND` (the `Publisher`)
   is bound to the run, so what it publishes joins that flow with nothing passed by hand.

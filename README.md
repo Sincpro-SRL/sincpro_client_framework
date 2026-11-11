@@ -179,12 +179,40 @@ continue the same flow; one that fails does not stop the others.
 
 What is defined here, and what each platform plugs behind the ports:
 
-| Piece                     | Here                                                        | The platform's                                                                 |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `DomainEvent`, subscriber | the class, its `eventName`, its execution                   | —                                                                              |
-| `Envelope`                | `name`, `id`, `correlationId`, `causationId`, `publishedAt` | storing it beside the event                                                    |
-| `EventQueue` port         | `syncQueue`: in the call, in memory                         | mobile: SQLite, retries, DLQ, connectivity; web: IndexedDB, `BroadcastChannel` |
-| `Subscribes` port         | `Subscriber(...contexts)`, `eventTypeOf(name)`              | rebuilding a stored event as its class                                         |
+| Piece                     | Here                                                           | The platform's                         |
+| ------------------------- | -------------------------------------------------------------- | -------------------------------------- |
+| `DomainEvent`, subscriber | the class, its `eventName`, its execution                      | —                                      |
+| `Envelope`                | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
+| `EventQueue` port         | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
+| `EventStore` port         | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
+| `Subscribes` port         | `Subscriber(...contexts)`, `eventTypeOf(name)`                 | —                                      |
+
+### Stored events: one way to carry them, any store
+
+```ts
+const queue = storedQueue({
+  store: sqliteEventStore(db), // the platform's EventStore; memoryEventStore() in a tab or a test
+  subscriber: new Subscriber(sales, stock, printing),
+  ready: (stored) => connectivity.online || !needsNetwork(stored.envelope.name),
+  onSettled: (stored) => activity.show(stored.envelope.name, stored.state),
+});
+shop.addDependency("publisher", new Publisher(queue));
+connectivity.onBack(() => queue.drain()); // and on coming back to the foreground
+```
+
+`publish` returns once the event is stored. Then the queue delivers what waits, one at a time,
+in the order stored — the backend's store-and-forward, over whatever store the platform plugs:
+
+- It is rebuilt as its class — `static fromJSON` when it has one — and executed in every
+  bounded context that hears it and does not have it yet: a retry never runs one twice.
+- A failure a retry may fix (`failureOf`: unavailable, no answer, a conflict…) is tried again
+  after the backoff or the wait it asks for, and what follows waits, so the order holds.
+- A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
+  it aside — the dead-letter queue — and never holds back what follows.
+- One that is not `ready` (no connection, no session) waits while the rest go on.
+
+The port only keeps records — `add`, `next(skip)`, `save` — so a SQLite table, IndexedDB or
+memory carry events the same way, with the same rules.
 
 The events a remote service publishes arrive as generated types (`DomainEvent` in
 `generated/domain.ts`, a union narrowed by `name`); a local event is a class, like a local
@@ -219,6 +247,8 @@ shop.extend(auditing);
 - **Listeners** hear each run start and each service that answered, filtered by class when
   named; a failure is heard once, when it escapes the call after every handler, from where it
   first failed. One that throws is ignored. Each `on…` answers how to stop.
+  `processListeners.onStart / onCompletion / onFailure` hear every bounded context at once — a
+  progress bar, a toast —, after each one's own.
 - **`extend(fn)`** is `fn(context)`, said as composition; `fresh()` copies everything an
   extension registered.
 
@@ -245,17 +275,64 @@ the answer, not whether the failure is seen; an answered one adds an `error.hand
 feature handler answers wherever the Feature ran, inside an ApplicationService too; the global
 chain wraps only `execute` and `scoped(...).execute`.
 
-How an error ended a use case:
+### What kind of failure it is
 
-| Outcome   | When                                                                         | Reported |
-| --------- | ---------------------------------------------------------------------------- | -------- |
-| `ok`      | it answered                                                                  | —        |
-| `refused` | the server answered a 4xx (`TransportError`), or the class is `expectErrors` | no       |
-| `aborted` | whoever asked stopped waiting (`AbortError`)                                 | no       |
-| `failed`  | anything else: a bug, a 5xx, a server nobody reached                         | yes      |
+`failureOf(error)` says what any error is, in the backend's words (`FailureKind`, `NextStep`
+from @sincpro/criteria), whatever raised it:
+
+```ts
+const failure = failureOf(error);
+failure.kind; // "conflict", "unavailable", "domain", "unknown_outcome"…
+failure.nextStep; // "refresh_and_retry", "retry_later", "authenticate", "do_not_retry"…
+failure.retryable; // may sending it again succeed
+failure.retryAfter; // seconds to wait first
+failure.permanent; // every attempt fails the same way: set it aside
+failure.fault; // the system's problem: reported
+failure.aborted; // whoever asked stopped waiting
+```
+
+It reads, in order: an `AbortError`; what the error declares (`failureKind`, `reason`,
+`retryAfter` — on itself or as a static of its class, as the backend's errors do); the `Problem`
+the server sent, the same over REST, JSON-RPC and gRPC; a REST status. Not every wire is REST: a
+JSON-RPC or gRPC transport — or another backend's adapter, such as Odoo's — makes errors that
+declare their kind, with the backend's own tables:
+
+```ts
+class RpcError extends Error {
+  constructor(
+    readonly code: number,
+    message: string,
+  ) {
+    super(message);
+  }
+  get failureKind() {
+    return kindOfJsonRpcCode(this.code); // kindOfGrpcCode, kindOfHttpStatus
+  }
+}
+```
+
+How an error ended a use case follows from it (`outcomeOf`):
+
+| Outcome   | When                                                                       | Reported |
+| --------- | -------------------------------------------------------------------------- | -------- |
+| `ok`      | it answered                                                                | —        |
+| `refused` | the caller's answer: a 4xx, a declared kind (`domain`…), or `expectErrors` | no       |
+| `aborted` | whoever asked stopped waiting: an `AbortError`, a cancelled run            | no       |
+| `failed`  | a fault: a bug, a 5xx, a server nobody reached                             | yes      |
 
 `configureProcess({ outcomeOf })` replaces the process-wide rule. `reportError(error, where)`
 reports what fails outside a use case — a view, a worker —, with the same rule.
+
+### Cancelling a run
+
+```ts
+const screen = new AbortController();
+const answer = sales.execute(new CommandQuote(3), { signal: screen.signal });
+screen.abort(); // the run ends `aborted` at once; nothing is reported
+```
+
+Its Features inherit the signal, a service reads it as `this.signal`, and every request its bound
+transport or generated client sends is cancelled with it — with nothing passed by hand.
 
 ## Observability
 
@@ -460,7 +537,7 @@ Each module is laid out as sincpro_framework's are, and says what it offers in i
 
 ```text
 src/
-  common/          the values of the wire
+  common/          the values of the wire, and what kind of failure an error is
   context/
     domain/          ContextStore and ContextCodec ports, what travels, Execution
     adapters/        memoryContexts, plainCodec
@@ -481,10 +558,10 @@ src/
                      ErrorHandler, the pipeline's extension points
     services/        the execution pipeline, interceptors, dependency binding, the handler chain
     entrypoint/      BoundedContext, screensTransport
-    infrastructure/  configureProcess, configureLogger
+    infrastructure/  configureProcess, configureLogger, processListeners
   event_driven/
-    domain/          Envelope, the EventQueue and Subscribes ports
-    adapters/        syncQueue: in the call, in memory
+    domain/          Envelope, the EventQueue, Subscribes and EventStore ports
+    adapters/        syncQueue, storedQueue, memoryEventStore
     entrypoint/      Publisher, Subscriber
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger

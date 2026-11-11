@@ -8,7 +8,11 @@ import {
   processContext,
   processStore,
 } from "@sincpro/client-framework/context/infrastructure/process";
-import { type CommandBus, FeatureBus } from "@sincpro/client-framework/core/domain/bus";
+import {
+  type CommandBus,
+  FeatureBus,
+  optionsOf,
+} from "@sincpro/client-framework/core/domain/bus";
 import {
   type Answer,
   type AnyCommand,
@@ -22,6 +26,7 @@ import {
 import type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
 import type {
   Cause,
+  ExecuteOptions,
   ExecutionCompleted,
   ExecutionFailed,
   ExecutionStarted,
@@ -34,8 +39,16 @@ import {
   Feature,
   RESERVED_MEMBERS,
 } from "@sincpro/client-framework/core/domain/services";
+import { processHearing } from "@sincpro/client-framework/core/infrastructure/listeners";
 import { handled } from "@sincpro/client-framework/core/services/error-handlers";
 import { executeService, failedAt } from "@sincpro/client-framework/core/services/execution";
+import {
+  announceTo,
+  concerns,
+  type ExecutableClass,
+  type Hearing,
+  listenIn,
+} from "@sincpro/client-framework/core/services/listening";
 import type { LayerLogger } from "@sincpro/client-framework/observability/domain/logging";
 import type {
   Attributes,
@@ -59,7 +72,7 @@ type ServiceClass<C extends Executable, R> = {
 };
 
 /** What a service is registered for: a Command's class or a domain event's. */
-type DtoClass = abstract new (...args: never[]) => Executable;
+type DtoClass = ExecutableClass;
 
 /** The service a registration takes the place of, as the backend's `replaces=`. */
 export type RegistrationOptions = { replaces?: abstract new (...args: never[]) => object };
@@ -88,12 +101,16 @@ type GenerationDispatch = (
   parent?: Execution,
   featureOnly?: boolean,
   scope?: Readonly<object>,
-  cause?: Cause,
+  options?: ExecuteOptions,
 ) => Promise<unknown>;
 
 /** One generation: the root (through the global handlers) and the dispatch its runs share. */
 type Generation = {
-  root: (executable: Executable, scope: Readonly<object>, cause?: Cause) => Promise<unknown>;
+  root: (
+    executable: Executable,
+    scope: Readonly<object>,
+    options: ExecuteOptions,
+  ) => Promise<unknown>;
 };
 
 function isExecutor(value: unknown): value is Executor<Executable, unknown> {
@@ -112,37 +129,6 @@ function isEventClass(dto: DtoClass): dto is EventClass<DomainEvent> {
 function nameOf(Service: unknown): string {
   const named = Service as { serviceName?: unknown; name?: unknown } | undefined;
   return String(named?.serviceName ?? named?.name ?? Service);
-}
-
-/** An interceptor or a listener, and the classes it is for — every class when it names none. */
-type Hearing<F> = { readonly what: F; readonly dtos: readonly DtoClass[] };
-
-function concerns(dtos: readonly DtoClass[], executable: Executable): boolean {
-  return dtos.length === 0 || dtos.includes(Object.getPrototypeOf(executable)?.constructor);
-}
-
-function isCause(value: unknown): value is Cause {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    typeof (value as Partial<Cause>).id === "string" &&
-    typeof (value as Partial<Cause>).correlationId === "string"
-  );
-}
-
-/** Each listener that hears it, in turn; one that fails is ignored. */
-function announceTo<E extends { executable: Executable }>(
-  hearing: ReadonlySet<Hearing<Listener<E>>>,
-  heard: E,
-): void {
-  for (const one of [...hearing]) {
-    if (!concerns(one.dtos, heard.executable)) continue;
-    try {
-      one.what(heard);
-    } catch {
-      // Hearing never changes the answer, as tracing, reporting and logging never do.
-    }
-  }
 }
 
 /**
@@ -321,17 +307,17 @@ export class BoundedContext<
 
   /** Hears every run of these classes (every one when none is named) begin. Answers how to stop. */
   onStart(listener: Listener<ExecutionStarted>, ...dtos: DtoClass[]): () => void {
-    return this.listen(this.listeners.started, listener, dtos);
+    return listenIn(this.listeners.started, listener, dtos);
   }
 
   /** Hears every run of these classes whose service answered — not an answer a handler gave. */
   onCompletion(listener: Listener<ExecutionCompleted>, ...dtos: DtoClass[]): () => void {
-    return this.listen(this.listeners.completed, listener, dtos);
+    return listenIn(this.listeners.completed, listener, dtos);
   }
 
   /** Hears every failure that escapes a call — after every handler —, once, where it failed. */
   onFailure(listener: Listener<ExecutionFailed>, ...dtos: DtoClass[]): () => void {
-    return this.listen(this.listeners.failed, listener, dtos);
+    return listenIn(this.listeners.failed, listener, dtos);
   }
 
   /**
@@ -372,19 +358,24 @@ export class BoundedContext<
     return this;
   }
 
-  /** Executes a Command — its Response, inferred —, or a domain event — its subscriber's answer. */
+  /**
+   * Executes a Command — its Response, inferred —, or a domain event — its subscriber's answer.
+   * `{ signal }` cancels the run (it ends `aborted`); a delivered event's envelope continues its
+   * flow (`execute(event, envelope)`).
+   */
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
-  execute(event: DomainEvent, cause?: Cause): Promise<unknown>;
-  execute(executable: Executable, cause?: unknown): Promise<unknown> {
-    // As with Python's return_type, the answer is not validated at runtime. A delivered event's
-    // envelope continues its chain.
-    const delivered = executable instanceof DomainEvent && isCause(cause) ? cause : undefined;
-    return this.generation().root(executable, {}, delivered);
+  execute<R>(command: Command<R>, options: ExecuteOptions): Promise<R>;
+  execute(event: DomainEvent, options?: ExecuteOptions | Cause): Promise<unknown>;
+  execute(executable: Executable, second?: unknown): Promise<unknown> {
+    // As with Python's return_type, the answer is not validated at runtime.
+    return this.generation().root(executable, {}, optionsOf(second));
   }
 
   scoped(context: Partial<C>): CommandBus {
     const scope = { ...context };
-    return new FeatureBus((executable) => this.generation().root(executable, scope));
+    return new FeatureBus((executable, options) =>
+      this.generation().root(executable, scope, options),
+    );
   }
 
   buildRootBus(): void {
@@ -411,17 +402,6 @@ export class BoundedContext<
     return fresh;
   }
 
-  private listen<E>(
-    hearing: Set<Hearing<Listener<E>>>,
-    listener: Listener<E>,
-    dtos: readonly DtoClass[],
-  ): () => void {
-    if (typeof listener !== "function") throw new TypeError("A listener is a function");
-    const one = { what: listener, dtos };
-    hearing.add(one);
-    return () => void hearing.delete(one);
-  }
-
   /** What escaped a call, told once, from where it first failed. */
   private escaped(executable: Executable, error: unknown, expected: (e: unknown) => boolean) {
     const at = failedAt(error);
@@ -432,13 +412,15 @@ export class BoundedContext<
     } catch {
       // An outcome that cannot be told is a failure.
     }
-    announceTo(this.listeners.failed, {
+    const heard: ExecutionFailed = {
       executable: at?.executable ?? executable,
       execution: at?.execution,
       layer: at?.layer,
       error,
       outcome,
-    });
+    };
+    announceTo(this.listeners.failed, heard);
+    announceTo(processHearing().failed, heard);
   }
 
   private addErrorHandler(where: keyof Handlers, handler: ErrorHandler): this {
@@ -542,9 +524,16 @@ export class BoundedContext<
     const expectedTypes = [...this.expected];
     const expected = (error: unknown) => expectedTypes.some((type) => error instanceof type);
     const interceptors = [...this.interceptors];
+    const everyContext = processHearing();
     const announce = {
-      started: (heard: ExecutionStarted) => announceTo(this.listeners.started, heard),
-      completed: (heard: ExecutionCompleted) => announceTo(this.listeners.completed, heard),
+      started: (heard: ExecutionStarted) => {
+        announceTo(this.listeners.started, heard);
+        announceTo(everyContext.started, heard);
+      },
+      completed: (heard: ExecutionCompleted) => {
+        announceTo(this.listeners.completed, heard);
+        announceTo(everyContext.completed, heard);
+      },
     };
     const instances = new Map<Registration, Executor<Executable, unknown>>();
     for (const registration of registrations.values()) {
@@ -559,7 +548,7 @@ export class BoundedContext<
       parent,
       featureOnly = false,
       scope = {},
-      cause,
+      options = {},
     ) => {
       // Exact constructor identity: a subclass of a registered class is another one.
       const target = registrations.get(Object.getPrototypeOf(executable)?.constructor);
@@ -583,9 +572,13 @@ export class BoundedContext<
         dependencies,
         context: () => ({ ...processContext.values, ...this.context.values, ...scope }),
         ...(parent ? { parent } : {}),
-        ...(cause ? { cause } : {}),
+        // Only an event comes from outside with a cause; a child continues its parent.
+        ...(options.cause && executable instanceof DomainEvent && !parent
+          ? { cause: options.cause }
+          : {}),
+        ...(options.signal ? { signal: options.signal } : {}),
         featureBus: (execution) =>
-          new FeatureBus((child) => dispatch(child, execution, true)),
+          new FeatureBus((child, options) => dispatch(child, execution, true, {}, options)),
         expected,
         handlers: handlers[target.layer],
         interceptors: interceptors
@@ -595,9 +588,9 @@ export class BoundedContext<
       });
     };
     return {
-      root: async (executable, scope, cause) => {
+      root: async (executable, scope, options) => {
         try {
-          return await dispatch(executable, undefined, false, scope, cause);
+          return await dispatch(executable, undefined, false, scope, options);
         } catch (error) {
           let escaping = error;
           if (handlers.global.length > 0) {

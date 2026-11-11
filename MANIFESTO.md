@@ -168,8 +168,13 @@ listeners and extensions change or hear it from outside, without touching a serv
 
 **Events travel the same way on every platform.** A Feature publishes through a `Publisher`;
 a `Subscriber` executes the event in every bounded context that hears it, in the same flow
-(`correlationId`, caused by the run that published it). In memory and in the call here; durably
-behind `EventQueue` on each platform.
+(`correlationId`, caused by the run that published it). In the call (`syncQueue`), or stored
+first and delivered by the backend's store-and-forward rules (`storedQueue`) over the
+`EventStore` each platform plugs — a SQLite table, IndexedDB, memory.
+
+**A failure means the same thing everywhere.** `failureOf` reads any error — whatever the wire,
+whatever backend — in the backend's kinds and next steps; retrying, setting aside, reporting and
+a screen's answer follow from it. A run can be cancelled, and its requests with it.
 
 **Next:** web and mobile adopt it in their own releases — mobile's SQLite queue and web's
 in-memory or IndexedDB one behind `EventQueue`; events from the server live, with the backend's

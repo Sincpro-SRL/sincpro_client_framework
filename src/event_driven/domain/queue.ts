@@ -31,6 +31,13 @@ export type Handled =
 export interface Subscribes {
   /** The class an event of that wire name is rebuilt as, or `undefined` when nobody hears it. */
   eventTypeOf(name: string): EventClass<DomainEvent> | undefined;
-  /** The event executed in every bounded context that hears it — what each answered. */
-  handle(event: DomainEvent, envelope?: Envelope): Promise<Handled[]>;
+  /**
+   * The event executed in every bounded context that hears it — but those `skip` names, which
+   * already have it — and what each answered.
+   */
+  handle(
+    event: DomainEvent,
+    envelope?: Envelope,
+    skip?: readonly string[],
+  ): Promise<Handled[]>;
 }

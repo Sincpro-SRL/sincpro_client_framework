@@ -119,39 +119,51 @@ Mobile's `EventBus` splits along the line this package draws: what is the same o
 platform comes from here; what a phone does to deliver durably stays in mobile, behind the
 `EventQueue` port.
 
-| Today in mobile                                           | With the client framework                                             |
-| --------------------------------------------------------- | --------------------------------------------------------------------- |
-| `Subscriber` with `listen` and `process(event)`           | a Feature registered for the event class: `context.feature(Event)(…)` |
-| `EventBus.on(subscriber)`, several per event              | one per bounded context; `new Subscriber(...contexts)` fans out       |
-| `EventBus.publish` / `publishSync`                        | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue` |
-| `event_chain`, `applyChain`, `runWithChain`               | the `Envelope` and `execution.correlationId` / `causationId`          |
-| event interceptors (`interceptEvent`, `"*"`)              | `context.interceptor(Event)(…)`, `context.interceptor()(…)`           |
-| `static replaces = CoreSubscriber`                        | `context.feature(Event, { replaces: CoreSubscriber })(…)`             |
-| `publishActivity` running / succeeded / failed            | `onStart`, `onCompletion`, `onFailure`                                |
-| `RepeatableFailure`, `DomainNetworkError`                 | kept by mobile's queue: what it retries                               |
-| SQLite table, DLQ, `AppState`, `requiresNetwork`, backoff | mobile's `EventQueue` adapter                                         |
+| Today in mobile                                 | With the client framework                                              |
+| ----------------------------------------------- | ---------------------------------------------------------------------- |
+| `Subscriber` with `listen` and `process(event)` | a Feature registered for the event class: `context.feature(Event)(…)`  |
+| `EventBus.on(subscriber)`, several per event    | one per bounded context; `new Subscriber(...contexts)` fans out        |
+| `EventBus.publish` / `publishSync`              | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue`  |
+| `event_chain`, `applyChain`, `runWithChain`     | the `Envelope` and `execution.correlationId` / `causationId`           |
+| event interceptors (`interceptEvent`, `"*"`)    | `context.interceptor(Event)(…)`, `context.interceptor()(…)`            |
+| `static replaces = CoreSubscriber`              | `context.feature(Event, { replaces: CoreSubscriber })(…)`              |
+| `publishActivity` running / succeeded / failed  | `processListeners`, or the stored queue's `onSettled`                  |
+| `RepeatableFailure`, `DomainNetworkError`       | errors that declare a kind (`unavailable`, `unknown_outcome`): retried |
+| `UserError`, `ValidationError` of mobile-odoo   | errors that declare `domain` / `invalid`: set aside, never retried     |
+| the drain loop, retries, backoff, DLQ           | `storedQueue` — the same rules on every platform                       |
+| `requiresNetwork`, `requiresAuth`               | `ready` of the stored queue: waits while the rest go on                |
+| SQLite table, `AppState`, NetInfo               | mobile's `EventStore`, and what calls `queue.drain()`                  |
 
 ```ts
-// mobile's queue, behind the port: store now, deliver when it can
-const sqliteQueue: EventQueue = {
-  async put(event, envelope) {
-    await DomainEventRepository.save({ ...envelope, payload: valuesOf(event) });
-    worker.trigger();
-  },
+// mobile writes only the store: a SQLite table, rows in the order added
+const sqliteEventStore: EventStore = {
+  add: (stored) => events.insert(stored),
+  next: (skip) => events.firstPendingNotIn(skip),
+  save: (stored) => events.update(stored),
 };
 
-// the worker, for each stored event
-const Event = subscriber.eventTypeOf(stored.name);
-if (Event) {
-  const handled = await subscriber.handle(rebuild(Event, stored.payload), stored.envelope);
-  // a failure: retry when it is repeatable, the DLQ otherwise — mobile's policy
-}
+const queue = storedQueue({
+  store: sqliteEventStore,
+  subscriber: new Subscriber(...boundedContexts),
+  ready: (stored) =>
+    (online || !requiresNetwork(stored)) && (signedIn || !requiresAuth(stored)),
+  onSettled: (stored) => publishActivity(stored),
+});
+AppState.addEventListener("change", (state) => state === "active" && queue.drain());
+NetInfo.addEventListener((net) => net.isConnected && queue.drain());
 ```
 
-`rebuild` is mobile's: how a stored payload becomes an instance of its class (its `from`). The
+The rules — store first, deliver in order, retry what may succeed after its wait, set aside what
+never will, never run a context twice — are the same as on the web; mobile keeps only the table,
+when to drain, and the screen that lists the set-aside events (`state: "set_aside"`). A stored
+event is rebuilt as its class — `static fromJSON` when it has one, as `from` is today. The
 events a backend publishes reach mobile as generated types when its contract is exported with
-`--events`. This package exports no entity interface to implement; entity identity and persisted
-events stay in mobile.
+`--events`. This package exports no entity interface to implement; entity identity stays in
+mobile.
+
+Errors of mobile-odoo declare their kind with the backend's JSON-RPC table
+(`kindOfJsonRpcCode`) or the one they mean (`domain`, `invalid`, `unavailable`): the queue, the
+outcome and the screens then decide the same way as everywhere.
 
 ## Adoption order
 
