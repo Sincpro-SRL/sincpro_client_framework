@@ -6,6 +6,7 @@ import {
   envelopeOf,
 } from "@sincpro/client-framework/event_driven/domain/envelope";
 import type { EventQueue } from "@sincpro/client-framework/event_driven/domain/queue";
+import { traceparentOf } from "@sincpro/client-framework/observability/services/trace-context";
 
 /**
  * Puts events into a queue — what a Feature holds to tell whoever listens, as the backend's
@@ -34,9 +35,12 @@ export class Publisher {
 
   /** The same publisher, publishing as `execution`: its events join that run's flow. */
   [BIND](execution: Execution): Publisher {
+    const traceparent = traceparentOf(execution.span);
     return new Publisher(this.queue, {
       id: execution.id,
       correlationId: execution.correlationId,
+      ...(traceparent ? { traceparent } : {}),
+      ...(execution.span.state ? { tracestate: execution.span.state } : {}),
     });
   }
 }

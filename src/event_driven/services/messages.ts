@@ -20,8 +20,8 @@ import {
 } from "@sincpro/client-framework/core/services/dto-keys";
 import type { Envelope } from "@sincpro/client-framework/event_driven/domain/envelope";
 import type {
-  CommandMessage,
-  EventMessage,
+  BinaryMessage,
+  Message,
 } from "@sincpro/client-framework/event_driven/domain/messages";
 import type {
   CommandType,
@@ -40,39 +40,136 @@ function instanceOf<T>(type: abstract new (...args: never[]) => T, values: unkno
   return Object.assign(Object.create(type.prototype) as object, values) as T;
 }
 
-/** `event` as it travels, beside its envelope. */
+/** The attributes a message carries besides its data: who produced it, about which entity. */
+export type MessageOptions = { readonly source?: string; readonly subject?: string };
+
+/**
+ * `event` as it travels, with its envelope — its `name` in the data too, as the backend's
+ * `as_json`, so a body read alone says which event it is.
+ */
 export function eventMessageOf(
   event: DomainEvent | RemoteEvent,
   envelope: Envelope,
-): EventMessage {
-  return { kind: "event", envelope, data: dataOf(event) };
+  options: MessageOptions = {},
+): Message {
+  return {
+    specversion: "1.0",
+    id: envelope.id,
+    source: options.source ?? "",
+    type: envelope.name,
+    ...(options.subject ? { subject: options.subject } : {}),
+    time: envelope.publishedAt,
+    correlationid: envelope.correlationId,
+    ...(envelope.causationId ? { causationid: envelope.causationId } : {}),
+    ...(envelope.traceparent ? { traceparent: envelope.traceparent } : {}),
+    ...(envelope.tracestate ? { tracestate: envelope.tracestate } : {}),
+    datacontenttype: "application/json",
+    data: { name: envelope.name, ...(dataOf(event) as Record<string, JsonValue>) },
+  };
 }
 
 /**
- * `command` as it travels — sent by the run `cause` names, or the head of its own flow.
+ * `command` as it travels — sent by the run `cause` names, or the head of its own flow; its
+ * `type` is its identity, which a bounded context gave it when it registered it.
  *
- *     commandMessageOf(new CommandIssueInvoice("o-1"))   ->  { kind: "command", type: "billing.CommandIssueInvoice", … }
- *     commandMessageOf(new CommandWithoutIdentity())     ->  TypeError: it declares no commandName
+ *     commandMessageOf(new CommandIssueInvoice("o-1"))   ->  { type: "billing.CommandIssueInvoice", … }
+ *     commandMessageOf(new CommandNobodyRegistered())    ->  TypeError: it has no identity
  */
 export function commandMessageOf(
   command: AnyCommand | RemoteCommand,
   cause?: Cause,
-): CommandMessage {
+  options: MessageOptions = {},
+): Message {
   const known = identityOf(command);
   if (known?.kind !== "command" || known.wire === undefined || known.wire.trim() === "") {
     throw new TypeError(
-      `${known?.type?.name ?? "This Command"} declares no commandName: a Command travels by its identity`,
+      `${known?.type?.name ?? "This Command"} has no identity: a bounded context gives it one when it registers it`,
     );
   }
   const id = newEntityId();
   return {
-    kind: "command",
-    type: known.wire,
+    specversion: "1.0",
     id,
-    correlationId: cause?.correlationId ?? id,
-    causationId: cause?.id ?? null,
-    sentAt: new Date().toISOString(),
+    source: options.source ?? "",
+    type: known.wire,
+    ...(options.subject ? { subject: options.subject } : {}),
+    time: new Date().toISOString(),
+    correlationid: cause?.correlationId ?? id,
+    ...(cause?.id ? { causationid: cause.id } : {}),
+    ...(cause?.traceparent ? { traceparent: cause.traceparent } : {}),
+    ...(cause?.tracestate ? { tracestate: cause.tracestate } : {}),
+    datacontenttype: "application/json",
     data: dataOf(command),
+  };
+}
+
+const PREFIXES = ["ce_", "ce-", "cloudEvents:", "cloudEvents_"] as const;
+
+/** A header as text: a broker may hand bytes. */
+function text(value: string | Uint8Array | null | undefined): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  return typeof value === "string" ? value : new TextDecoder().decode(value);
+}
+
+/**
+ * What arrived, as one message — structured already, or a broker's binary mode: the attributes
+ * under any CloudEvents binding's prefix (`ce_`, `ce-`, `cloudEvents:`), the type falling back to
+ * the `sincpro-event` header, as the backend's `Envelope.of` reads them.
+ */
+export function readMessage(arrived: Message | BinaryMessage): Message {
+  if (!("headers" in arrived)) return arrived;
+  const headers = arrived.headers;
+  const attribute = (name: string) => {
+    for (const prefix of PREFIXES) {
+      const found = text(headers[`${prefix}${name}`]);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const data =
+    typeof arrived.body === "string" ? (JSON.parse(arrived.body) as JsonValue) : arrived.body;
+  const id = attribute("id") ?? newEntityId();
+  const type =
+    attribute("type") ??
+    text(headers["sincpro-event"]) ??
+    String((data as { name?: unknown } | null)?.name ?? "");
+  const causationid = attribute("causationid");
+  const subject = attribute("subject");
+  const traceparent = text(headers["traceparent"]) ?? attribute("traceparent");
+  const tracestate = text(headers["tracestate"]) ?? attribute("tracestate");
+  return {
+    specversion: "1.0",
+    id,
+    source: attribute("source") ?? "",
+    type,
+    ...(subject ? { subject } : {}),
+    time: attribute("time") ?? new Date().toISOString(),
+    correlationid: attribute("correlationid") ?? id,
+    ...(causationid ? { causationid } : {}),
+    ...(traceparent ? { traceparent } : {}),
+    ...(tracestate ? { tracestate } : {}),
+    datacontenttype: "application/json",
+    data,
+  };
+}
+
+/** The cause a delivered message continues: its id, its chain and its trace. */
+export function causeOf(message: Message): Cause {
+  return {
+    id: message.id,
+    correlationId: message.correlationid,
+    ...(message.traceparent ? { traceparent: message.traceparent } : {}),
+    ...(message.tracestate ? { tracestate: message.tracestate } : {}),
+  };
+}
+
+/** A delivered event's envelope, as the queue and the run read it. */
+export function envelopeFrom(message: Message): Envelope {
+  return {
+    ...causeOf(message),
+    name: message.type,
+    causationId: message.causationid ?? null,
+    publishedAt: message.time,
   };
 }
 
@@ -84,7 +181,9 @@ export function eventFrom(type: EventType, data: JsonValue): DomainEvent | Remot
   const values = readValues(data);
   if (isEventDescriptor(type))
     return { ...(values as Record<string, unknown>), name: type.name } as RemoteEvent;
-  return instanceOf(type, values);
+  // `name` is the class's (its `eventName`): what the data repeats is not set on the instance.
+  const { name: _name, ...fields } = (values ?? {}) as Record<string, unknown>;
+  return instanceOf(type, fields);
 }
 
 /** A Command's values as what they are here: an instance of its class, or the generated Command. */
@@ -92,9 +191,4 @@ export function commandFrom(type: CommandType, data: JsonValue): AnyCommand | Re
   const values = readValues(data);
   if (isCommandDescriptor(type)) return commandOf(type, values as object);
   return instanceOf(type, values);
-}
-
-/** The cause a delivered Command continues: the message it came in. */
-export function causeOf(message: CommandMessage): Cause {
-  return { id: message.id, correlationId: message.correlationId };
 }

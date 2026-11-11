@@ -1,5 +1,9 @@
 import { newEntityId } from "@sincpro/client-framework/common/ids";
-import type { DomainEvent, RemoteEvent } from "@sincpro/client-framework/core/domain/dto";
+import {
+  type DomainEvent,
+  EVENT_NAME,
+  type RemoteEvent,
+} from "@sincpro/client-framework/core/domain/dto";
 import type { Cause } from "@sincpro/client-framework/core/domain/pipeline";
 
 /**
@@ -35,6 +39,9 @@ export function envelopeOf(event: DomainEvent | RemoteEvent, cause?: Cause): Env
       `${event.constructor.name} has no eventName: an event is published by its wire name`,
     );
   }
+  if (!EVENT_NAME.test(name)) {
+    throw new Error(`${name} is not an event's name: <context>.<aggregate>.vN.<fact>`);
+  }
   const id = newEntityId();
   return {
     name,
@@ -42,5 +49,7 @@ export function envelopeOf(event: DomainEvent | RemoteEvent, cause?: Cause): Env
     correlationId: cause?.correlationId ?? id,
     causationId: cause?.id ?? null,
     publishedAt: new Date().toISOString(),
+    ...(cause?.traceparent ? { traceparent: cause.traceparent } : {}),
+    ...(cause?.tracestate ? { tracestate: cause.tracestate } : {}),
   };
 }

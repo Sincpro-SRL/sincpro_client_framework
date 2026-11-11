@@ -26,8 +26,7 @@ export {
   envelopeOf,
 } from "@sincpro/client-framework/event_driven/domain/envelope";
 export type {
-  CommandMessage,
-  EventMessage,
+  BinaryMessage,
   Message,
 } from "@sincpro/client-framework/event_driven/domain/messages";
 export type {
@@ -51,8 +50,12 @@ export {
   type SubscriberOptions,
 } from "@sincpro/client-framework/event_driven/entrypoint/subscriber";
 export {
+  causeOf,
   commandFrom,
   commandMessageOf,
+  envelopeFrom,
   eventFrom,
   eventMessageOf,
+  type MessageOptions,
+  readMessage,
 } from "@sincpro/client-framework/event_driven/services/messages";

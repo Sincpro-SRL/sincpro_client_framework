@@ -13,7 +13,14 @@ export function optionsOf(second: unknown): ExecuteOptions {
   if (second === null || typeof second !== "object") return {};
   const given = second as ExecuteOptions & Partial<Cause>;
   if (typeof given.id === "string" && typeof given.correlationId === "string")
-    return { cause: { id: given.id, correlationId: given.correlationId } };
+    return {
+      cause: {
+        id: given.id,
+        correlationId: given.correlationId,
+        ...(given.traceparent ? { traceparent: given.traceparent } : {}),
+        ...(given.tracestate ? { tracestate: given.tracestate } : {}),
+      },
+    };
   return {
     ...(given.signal ? { signal: given.signal } : {}),
     ...(given.cause ? { cause: given.cause } : {}),

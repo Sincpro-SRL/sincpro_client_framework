@@ -26,6 +26,7 @@ import {
   logHandled,
 } from "@sincpro/client-framework/observability/services/logging";
 import { firstReport } from "@sincpro/client-framework/observability/services/reporting";
+import { remoteSpan } from "@sincpro/client-framework/observability/services/trace-context";
 
 type Layer = PipelineLayer;
 
@@ -215,10 +216,16 @@ export async function executeService(
     ...(causationId ? { "sincpro.causation_id": causationId } : {}),
     ...options.attributes,
   };
+  // A delivered message from another process continues its trace: its span is the parent.
+  const parentSpan =
+    above?.span ??
+    (options.cause?.traceparent
+      ? remoteSpan(options.cause.traceparent, options.cause.tracestate)
+      : undefined);
   const span: Span = observe(
     () =>
       ports.tracer.start(`${options.boundedContext}/${options.name}`, {
-        ...(above ? { parent: above.span } : {}),
+        ...(parentSpan ? { parent: parentSpan } : {}),
         attributes,
       }),
     NO_TRACER.start(useCase, {}),

@@ -18,7 +18,7 @@ Entrypoint -> BoundedContext.execute(Command | event) -> Feature or ApplicationS
 | ------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Bounded context    | Owns one model, dependencies and use-case registrations; it is a bus                       | `UseFramework(name)`                               | `const salesBoundedContext = new BoundedContext<Dependencies>("sales")`          |
 | Entrypoint         | A door that calls use cases — a screen, a cron, the queue's Subscriber; it decides nothing | REST/RPC/MCP gateways, `Crons`, `QueueGateway`     | screens, mobile's cron (`CronWorker`), `Subscriber`                              |
-| Command            | A request for work to one bus, not a fact already confirmed                                | DTO class; `registered_name` on the wire           | `class Request extends Command<Result>`; `static commandName` when it travels    |
+| Command            | A request for work to one bus, not a fact already confirmed                                | DTO class; `registered_name` on the wire           | `class Request extends Command<Result>`; identity given at registration          |
 | Response           | The result of that execution, not of all later event consumers                             | DTO, object, list or None                          | DTO, object, page, primitive or void; `Response` is an optional class base       |
 | Feature            | Executes the DTOs it is registered for — one or N                                          | `feature(dto)` / `feature([dto, …])`               | `@bc.feature(dto)` / `feature([dto, …])`; named at registration                  |
 | ApplicationService | Composes Features of its own context                                                       | `app_service(dto)`                                 | `appService(dto)`                                                                |
@@ -31,7 +31,7 @@ Entrypoint -> BoundedContext.execute(Command | event) -> Feature or ApplicationS
 | Expected error     | An error the bounded context declares the business answering: not reported                 | `ignore_sentry_exceptions(*types)`                 | `expectErrors(...types)`: the run ends `refused`                                 |
 | Domain event       | A fact that already happened, heard by N buses by its wire name                            | `DomainEvent`, `name`, `bus(event)`                | `class X extends DomainEvent`, `static eventName`, `execute(event)`              |
 | Subscription       | Registering a use case for an event: one per bounded context                               | `@bus.feature(SomeEvent)`                          | `@bc.feature(SomeEvent)`                                                         |
-| Message            | A DTO as it travels: an event with its envelope; a Command with its identity and flow      | the event and its chain; `Payload`                 | `EventMessage`, `CommandMessage`; `eventMessageOf`, `commandMessageOf`           |
+| Message            | A DTO as it travels: CloudEvents 1.0, `type` its name or identity, its flow and trace      | `Envelope` (CloudEvents) and the DTO's JSON        | `Message`, `readMessage`, `eventMessageOf`, `commandMessageOf`                   |
 | Generated DTO      | A contract's Command or event, executed on the bus as data                                 | the DTO itself                                     | `operations.X` / `events.X` registered; `commandOf`, `RemoteEvent`               |
 | Workflow           | Several use cases in order, with decisions between them: an ApplicationService             | an ApplicationService                              | an ApplicationService                                                            |
 | Replacement        | A service that takes the place of the one registered for a class                           | `feature(dto, replaces=Service)`                   | `feature(dto, { replaces: Service })`, `handlerOf(dto)`                          |
@@ -94,8 +94,8 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 Span names use `<bounded context>/<Service>` and use-case identity `<bounded context>.<Service>`:
 the service's class name, taken by the framework when it registers it (a standard decorator's
 `context.name`, untouched by a minifier; else the class's `name`, so a production build keeps
-class names). A message's identity is never a class name: an event's `eventName`, a Command's
-`commandName`, declared.
+class names). An event's wire name is declared (`eventName`, dotted); a Command's identity is the
+framework's too: `<context>.<Command>`, the backend's `registered_name`, given at registration.
 
 Context travels per call, never in a global async stack. An injected generated client is bound
 through `BIND` and propagates trace/context headers; an injected bounded context is bound the
@@ -142,8 +142,9 @@ A generic type annotation is not a reader, and a class constructor is not Pydant
 - Interceptors are functions, ordered by registration; the backend also has class interceptors
   with injected dependencies, `before=`/`after=`/`sequence=` and `replaces=`. Listeners are per
   bounded context; the backend also has process-wide ones and `publish_*` to a Publisher.
-- A Command's and an event's wire names are declared (`commandName`, `eventName`); the backend
-  defaults both to the class's name, which a client's minifier would change.
+- An event's wire name is declared (`eventName`); the backend defaults it to the class's name.
+  A Command's identity is computed as the backend's (`<context>.<Command>`), so production builds
+  keep class names.
 - Backend/client tracing attribute naming must evolve together when its canonical vocabulary
   changes; `sincpro.context` currently identifies the bounded context.
 - Web and mobile adopt it in their own releases. Mobile keeps SQLite, workers, outbox/DLQ,

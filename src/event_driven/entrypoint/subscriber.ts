@@ -12,7 +12,10 @@ import type {
 import type { Cause, ExecuteOptions } from "@sincpro/client-framework/core/domain/pipeline";
 import { identityOf, keyIdentity } from "@sincpro/client-framework/core/services/dto-keys";
 import type { Envelope } from "@sincpro/client-framework/event_driven/domain/envelope";
-import type { Message } from "@sincpro/client-framework/event_driven/domain/messages";
+import type {
+  BinaryMessage,
+  Message,
+} from "@sincpro/client-framework/event_driven/domain/messages";
 import type {
   CommandType,
   EventType,
@@ -22,7 +25,9 @@ import type {
 import {
   causeOf,
   commandFrom,
+  envelopeFrom,
   eventFrom,
+  readMessage,
 } from "@sincpro/client-framework/event_driven/services/messages";
 
 /** What the subscriber needs of a bounded context: what it registered, and running it. */
@@ -179,28 +184,36 @@ export class Subscriber implements Subscribes {
   }
 
   /**
-   * What a queue delivered, executed:
+   * What a queue delivered — CloudEvents, structured or in a broker's binary mode —, executed:
    *
-   * 1. An event: rebuilt as what it is known by here and handed to every bounded context that
-   *    registered it (`handle`); one nobody here hears answers nothing.
-   * 2. A Command: consumed only when declared (`CommandNotConsumed` otherwise), rebuilt, and
-   *    executed by the one bounded context that registered it, continuing the message's flow.
-   * Final: what each answered, or failed with.
+   * 1. An event this subscriber hears (by its `type`, the event's name): rebuilt as what it is
+   *    known by here and handed to every bounded context that registered it (`handle`).
+   * 2. A Command (its `type`, its identity): only when declared — `CommandNotConsumed` when a bus
+   *    registered it but this subscriber does not consume it —, rebuilt and executed by the one
+   *    bounded context that registered it.
+   * 3. Either continues the message's flow and trace.
+   * Final: what each answered, or failed with; nothing when nobody here knows it.
    */
-  async receive(message: Message, skip: readonly string[] = []): Promise<Handled[]> {
-    if (message.kind === "event") {
-      const type = this.eventTypeOf(message.envelope.name);
-      if (type === undefined) return [];
-      return this.handle(eventFrom(type, message.data), message.envelope, skip);
+  async receive(
+    arrived: Message | BinaryMessage,
+    skip: readonly string[] = [],
+  ): Promise<Handled[]> {
+    const message = readMessage(arrived);
+    const eventType = this.eventTypeOf(message.type);
+    if (eventType !== undefined)
+      return this.handle(eventFrom(eventType, message.data), envelopeFrom(message), skip);
+    const commandType = this.commandTypeOf(message.type);
+    if (commandType === undefined) {
+      if (this.contexts.some((one) => one.commandTypeOf(message.type) !== undefined))
+        throw new CommandNotConsumed(message.type);
+      return [];
     }
-    const type = this.commandTypeOf(message.type);
-    if (type === undefined) throw new CommandNotConsumed(message.type);
     const context = this.contexts.find(
       (one) => one.commandTypeOf(message.type) !== undefined,
     );
     if (context === undefined || skip.includes(context.name)) return [];
     try {
-      const answer = await context.execute(commandFrom(type, message.data), {
+      const answer = await context.execute(commandFrom(commandType, message.data), {
         cause: causeOf(message),
       });
       return [{ boundedContext: context.name, answer }];

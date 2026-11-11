@@ -42,7 +42,7 @@ piece; give it the tool and let it adopt it.
 | `BoundedContext`                                                                         | The bus of one bounded context: dependencies, services, handlers, interceptors, listeners. `execute(new Command(...))`.                | `@sincpro/client-framework`                   |
 | `Command<R>` / `Response`                                                                | Class DTOs. A Command names its Response by type; `execute` infers it.                                                                 | same                                          |
 | `DomainEvent`                                                                            | A fact N buses hear. `static eventName` is its wire name; registering a use case for it is the subscription.                           | same                                          |
-| `commandName` / `eventName`                                                              | The wire contract of a Command (`<context>.<Command>`) and an event (`<context>.<aggregate>.vN.<fact>`). Declared: they travel.        | same                                          |
+| `eventName` / a Command's identity                                                       | An event's wire name (`<context>.<aggregate>.vN.<fact>`): required. A Command's: `<context>.<Command>`, given at registration.         | same                                          |
 | `Feature` / `ApplicationService`                                                         | A use case for one DTO or N (`feature([CommandX, EventY])`). Its name is the framework's, taken at registration.                       | same                                          |
 | `servicesWith<Dependencies>()`                                                           | The context's bases: every dependency typed on `this`, declared nowhere else (the backend's `framework.py`).                           | same                                          |
 | `commandOf` / `RemoteEvent` / `RemoteCommand`                                            | A generated Command or event executed on the bus, registered by its `operations.X` / `events.X` entry.                                 | same                                          |
@@ -162,7 +162,6 @@ a service imports it to register itself, and ES modules run their imports first.
 ```ts
 // services/quote/quote.feature.ts
 export class CommandQuote extends Command<ResponseTotal> {
-  static readonly commandName = "sales.CommandQuote"; // only when it travels
   constructor(readonly quantity: number) {
     super();
   }
@@ -247,10 +246,11 @@ shopBoundedContext.addDependency("publisher", new Publisher(queue)); // a Featur
 - `syncQueue(subscriber)` delivers in the call; `storedQueue` stores first, then delivers in order,
   retries what may succeed, sets aside what never will (`state: "set_aside"`), and stops after
   `maxAttempts`.
-- **Commands and events travel differently.** An event: `{ kind: "event", envelope, data }`, by its
-  `eventName`, to N buses. A Command: `{ kind: "command", type, id, correlationId, causationId,
-sentAt, data }` — the backend's `Payload` —, by its `commandName`, to one bus, and only when the
-  Subscriber declared it (`CommandNotConsumed` otherwise).
+- **Messages are the backend's: CloudEvents 1.0**, for Commands and events alike — `type` is the
+  event's name or the Command's identity; an event goes to N buses, a Command to one and only when
+  the Subscriber declared it (`CommandNotConsumed` otherwise). `subscriber.receive(message)` takes
+  one structured or in binary mode (`{ headers, body }`, `ce_` headers). Its `correlationid` and
+  `traceparent` continue: the run is a child of the backend's trace.
 - Two bounded contexts never share a name: the queue keeps who heard a message by it.
 - Delivery is **at least once**: the use case keys its effect by `this.execution.causationId` (the
   message's id) or by the entity the event names.
@@ -317,7 +317,7 @@ backend; `memoryEventStore()` with `await queue.drain()` for events.
 - [ ] Every use case is registered (a decorator) for its DTOs and executed through its bounded context; no `serviceName`, no declared dependency.
 - [ ] Failures declare or carry their kind; screens decide with `failureOf`.
 - [ ] Events: `eventName`, `fromJSON` when they carry values, idempotent use cases. Commands that
-      travel: `commandName`. Crons only translate into Commands.
+      travel get their identity at registration. Crons only translate into Commands.
 - [ ] Services grouped by aggregate, a related entity's use cases in its own folder inside it.
 - [ ] The wire is injected (`operations`), never written into the code.
 - [ ] Tests run on the memory ports, in Node.
