@@ -187,8 +187,10 @@ await projectBoundedContext.execute(commandOf(operations.CommandArchiveIssue, { 
 
 ## Domain events
 
-Registering a use case for an event **is** the subscription — the backend's
-`@accounting.feature(InvoiceIssued)`. Several bounded contexts may register it; each hears it once.
+An event reaches a use case registered for it — the backend's `@accounting.feature(InvoiceIssued)`,
+when the event is that use case's input — or an event handler, the entrypoint that translates it
+into Commands (see the Subscriber below). Several bounded contexts may register it; each consumer
+gets it once.
 
 ```ts
 @accountingBoundedContext.feature(InvoiceIssued)
@@ -234,7 +236,7 @@ export class NotifySaleChanged extends EventHandler<SalePaid | SaleCancelled> {
 }
 appSubscriber.handler([InvoiceVoided])(OnInvoiceVoided); // the same, without a decorator
 
-// services/sale/on_sale_changed.handler.ts — a handler of the bus: a layer above its use cases
+// entrypoints/queue/sale_paid.handler.ts of the sales context — a handler of the bus, an entrypoint
 export const { Feature, ApplicationService, EventHandler } =
   servicesWith<SalesDependencies>();
 @salesBoundedContext.handler([SalePaid])
@@ -740,7 +742,8 @@ bus runs the use cases, the use cases use the adapters:
 
 ```text
 src/
-  entrypoints/main.ts(x)               configureProcess, the stored queue and its Subscriber
+  entrypoints/main.ts(x)               configureProcess, the stored queue
+  entrypoints/queue/                   the Subscriber (framework.ts) and its event handlers
   domains/
     common/infrastructure/operations.ts  export const operations — the wire every client uses
     <bounded context>/
@@ -758,6 +761,7 @@ src/
         dependencies.ts                  <Context>Dependencies and registerDependencies
         framework.ts                     servicesWith<…>() bases, and <context>BoundedContext
       entrypoints/                     the doors: they translate, they decide nothing
+        queue/                           the bus's event handlers: event → Command → bus
         cron/                            mobile only — its scheduler: tick → Command → bus
       index.ts                         <context>BoundedContext, ready to execute
 ```

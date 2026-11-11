@@ -41,7 +41,7 @@ piece; give it the tool and let it adopt it.
 | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | `BoundedContext`                                                                         | The bus of one bounded context: dependencies, services, handlers, interceptors, listeners. `execute(new Command(...))`.                                                                              | `@sincpro/client-framework`                   |
 | `Command<R>` / `Response`                                                                | Class DTOs. A Command names its Response by type; `execute` infers it.                                                                                                                               | same                                          |
-| `DomainEvent`                                                                            | A fact N buses hear. `static eventName` is its wire name; registering a use case for it is the subscription.                                                                                         | same                                          |
+| `DomainEvent`                                                                            | A fact N consumers hear: a use case registered for it, or an event handler. `static eventName` is its wire name.                                                                                     | same                                          |
 | `eventName` / a Command's identity                                                       | An event's wire name (`<context>.<aggregate>.vN.<fact>`): required. A Command's: `<context>.<Command>`, given at registration.                                                                       | same                                          |
 | `Feature` / `ApplicationService`                                                         | A use case for one DTO or N (`feature([CommandX, EventY])`). Its name is the framework's, taken at registration.                                                                                     | same                                          |
 | `servicesWith<Dependencies>()`                                                           | The context's bases: every dependency typed on `this`, declared nowhere else (the backend's `framework.py`).                                                                                         | same                                          |
@@ -67,7 +67,8 @@ piece; give it the tool and let it adopt it.
 
 ```text
 src/
-  entrypoints/main.ts(x)                 configureProcess; the stored queue and its Subscriber
+  entrypoints/main.ts(x)                 configureProcess; the stored queue
+  entrypoints/queue/                     the Subscriber (framework.ts) and its own event handlers
   domains/
     common/infrastructure/operations.ts  export const operations — the wire every client uses
     <bounded context>/
@@ -82,6 +83,7 @@ src/
         dependencies.ts                    <Context>Dependencies + registerDependencies
         framework.ts                       servicesWith<…>() bases + <context>BoundedContext
       entrypoints/                       the doors — they translate, they decide nothing
+        queue/                             the bus's event handlers: an event → its Commands
         cron/                              mobile only — its scheduler, each tick a Command
       index.ts                           export const <context>BoundedContext — ready to execute
 ```
