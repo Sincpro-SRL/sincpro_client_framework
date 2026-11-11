@@ -20,14 +20,12 @@ const never = () => new Promise<string>(() => {});
 
 /** A service that ignores its signal: the caller stops waiting anyway. */
 class Slow extends Feature<CommandSlow, string> {
-  static readonly serviceName = "Slow";
   execute(): Promise<string> {
     return never();
   }
 }
 
 class Both extends ApplicationService<CommandBoth, string> {
-  static readonly serviceName = "Both";
   execute(): Promise<string> {
     return this.featureBus.execute(new CommandSlow());
   }
@@ -58,7 +56,6 @@ test("a run executed with a signal already aborted does not reach its service", 
   let reached = false;
   class CommandMark extends Command<void> {}
   class Mark extends Feature<CommandMark, void> {
-    static readonly serviceName = "Mark";
     execute(): void {
       reached = true;
     }
@@ -110,7 +107,6 @@ test("the run's requests are cancelled with it: the bound transport carries its 
   };
   class CommandSend extends Command<unknown> {}
   class Send extends Feature<CommandSend, unknown> {
-    static readonly serviceName = "Send";
     declare readonly transport: Transport;
     execute(): Promise<unknown> {
       assert.equal(this.signal, screen.signal);

@@ -222,7 +222,6 @@ test("injected in a bounded context, the client carries the run's trace, context
   };
   class CommandNotify extends Command<unknown> {}
   class Notify extends Feature<CommandNotify, unknown> {
-    static readonly serviceName = "Notify";
     declare readonly client: ReturnType<typeof clientOf>;
     execute(): Promise<unknown> {
       return this.client.sendIssue({ issue_id: "acme-3", message: "hola" });

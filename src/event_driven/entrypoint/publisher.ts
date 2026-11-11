@@ -1,5 +1,5 @@
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
-import type { DomainEvent } from "@sincpro/client-framework/core/domain/dto";
+import type { DomainEvent, RemoteEvent } from "@sincpro/client-framework/core/domain/dto";
 import type { Cause } from "@sincpro/client-framework/core/domain/pipeline";
 import {
   type Envelope,
@@ -26,7 +26,7 @@ export class Publisher {
   ) {}
 
   /** `event` into the queue, with its envelope; answers the envelope once the queue took it. */
-  async publish(event: DomainEvent): Promise<Envelope> {
+  async publish(event: DomainEvent | RemoteEvent): Promise<Envelope> {
     const envelope = envelopeOf(event, this.cause);
     await this.queue.put(event, envelope);
     return envelope;

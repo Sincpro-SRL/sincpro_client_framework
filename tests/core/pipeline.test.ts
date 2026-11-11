@@ -40,7 +40,6 @@ class Paid extends DomainEvent {
 }
 
 class Pay extends Feature<CommandPay, string> {
-  static readonly serviceName = "Pay";
   execute(command: CommandPay): string {
     if (command.fail) throw command.fail;
     return `paid ${command.amount}`;
@@ -48,14 +47,12 @@ class Pay extends Feature<CommandPay, string> {
 }
 
 class Checkout extends ApplicationService<CommandCheckout, string> {
-  static readonly serviceName = "Checkout";
   execute(command: CommandCheckout): Promise<string> {
     return this.featureBus.execute(new CommandPay(command.amount));
   }
 }
 
 class Thank extends Feature<Paid, string> {
-  static readonly serviceName = "Thank";
   execute(): string {
     return "thanks";
   }

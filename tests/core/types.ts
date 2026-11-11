@@ -47,7 +47,6 @@ export class TypedDependencies extends ProjectFeature<
   CommandCancelIssue,
   ResponseCancelIssue
 > {
-  static readonly serviceName = "TypedDependencies";
   async execute(command: CommandCancelIssue): Promise<ResponseCancelIssue> {
     // @ts-expect-error Dependencies are declared once on the bounded context's base.
     void this.unknownAdapter;
@@ -65,7 +64,6 @@ export class WrongDecoratedFeature extends ProjectFeature<
   CommandSendIssue,
   ResponseSendIssue
 > {
-  static readonly serviceName = "WrongDecoratedFeature";
   execute(command: CommandSendIssue): ResponseSendIssue {
     return new ResponseSendIssue(command.issue_id, "run-1", command.message);
   }
@@ -85,7 +83,6 @@ class ResponseNamed extends Response {
 }
 
 class CloseWatcher extends ProjectFeature<CommandCancelIssue, ResponseCancelIssue> {
-  static readonly serviceName = "CloseWatcher";
   execute(command: CommandCancelIssue): ResponseCancelIssue {
     return new ResponseCancelIssue(command.issue_id, "watched");
   }

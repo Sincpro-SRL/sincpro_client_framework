@@ -3,17 +3,30 @@
  * Responses, Features and ApplicationServices, a bounded context that is their bus, its error
  * handlers — and the process they run in.
  *
- *   domain/          DTOs, the bus, the service bases, the error-handler contract
+ *   domain/          DTOs (classes, and generated ones the bus recognizes), the bus, the service
+ *                    bases (`servicesWith`: typed with a context's dependencies), the error handlers
  *   services/        the execution pipeline, dependency binding, the handler chain
  *   entrypoint/      `BoundedContext`, `screensTransport`
  *   infrastructure/  `configureProcess`, `configureLogger`
  */
 export { type CommandBus, FeatureBus } from "@sincpro/client-framework/core/domain/bus";
 export {
+  type AnyCommand,
   Command,
+  COMMAND_IDENTITY,
+  type CommandClass,
+  type CommandDescriptor,
+  type CommandNamed,
+  commandOf,
   DataTransferObject,
   DomainEvent,
+  type DtoKey,
   type EventClass,
+  type EventDescriptor,
+  type Executable,
+  type ExecutableOf,
+  type RemoteCommand,
+  type RemoteEvent,
   Response,
 } from "@sincpro/client-framework/core/domain/dto";
 export type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
@@ -30,7 +43,14 @@ export type {
   Listener,
   PipelineLayer,
 } from "@sincpro/client-framework/core/domain/pipeline";
-export { ApplicationService, Feature } from "@sincpro/client-framework/core/domain/services";
+export {
+  ApplicationService,
+  type ApplicationServiceWith,
+  Feature,
+  type FeatureWith,
+  type ServiceInput,
+  servicesWith,
+} from "@sincpro/client-framework/core/domain/services";
 export {
   BoundedContext,
   type Registrar,

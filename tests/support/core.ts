@@ -84,7 +84,6 @@ export abstract class ProjectApplicationService<
 }
 
 export class CancelIssue extends ProjectFeature<CommandCancelIssue, ResponseCancelIssue> {
-  static readonly serviceName = "CancelIssue";
   async execute(command: CommandCancelIssue): Promise<ResponseCancelIssue> {
     const result = await this.client.cancelIssue({ issue_id: command.issue_id });
     return new ResponseCancelIssue(result.issue_id, result.resolution);
@@ -95,7 +94,6 @@ export class RequestCancellation extends ProjectApplicationService<
   CommandRequestCancellation,
   ResponseCancelIssue
 > {
-  static readonly serviceName = "RequestCancellation";
   execute(command: CommandRequestCancellation): Promise<ResponseCancelIssue> {
     this.access.requireCancellation();
     return this.featureBus.execute(new CommandCancelIssue(command.issue_id));
@@ -103,7 +101,6 @@ export class RequestCancellation extends ProjectApplicationService<
 }
 
 export class SendIssue extends ProjectFeature<CommandSendIssue, ResponseSendIssue> {
-  static readonly serviceName = "SendIssue";
   async execute(command: CommandSendIssue): Promise<ResponseSendIssue> {
     const result = await this.client.sendIssue({
       issue_id: command.issue_id,

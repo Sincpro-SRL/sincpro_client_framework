@@ -34,7 +34,7 @@ server-side render, in a script and in a test, unchanged.**
    `bus_pipeline`: interceptors control a run (look, veto, adjust, answer); listeners hear it
    start, answer or fail, and never change it; an extension wires a component in one place.
 3. **Observability, as ports.** `Tracer`, `ErrorReporter` and `Logger` are the contracts: one span per use
-   case, named `<bounded context>/<serviceName>`; the unexpected reported
+   case, named `<bounded context>/<Service>`; the unexpected reported
    with its trace id; what the server already explained (a validation, a conflict), or what a
    bounded context declares expected, not reported.
    The platform plugs the implementation — OpenTelemetry, GlitchTip, a queue on the phone, memory
@@ -73,9 +73,9 @@ server-side render, in a script and in a test, unchanged.**
     the injected process ports. Remote clients and mapping remain distinct.
 11. **Event-driven, as ports (`event_driven`).** How every platform publishes domain events and
     subscribes to them the same way: the envelope that travels beside an event (its flow and
-    its cause), the `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, the
-    `EventSubscriber` — the entrypoint that hears an event and calls use cases, as a cron does on
-    a tick — and its `Subscriptions`, a `Subscriber` over everyone who hears, the queue that
+    its cause), how a Command and an event are written and read (each its own way), the
+    `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, the `Subscriber` — the
+    queue's only entrypoint: events heard, Commands consumed only when declared —, the queue that
     delivers in the call, and the stored queue's rules over an `EventStore` the platform plugs.
     The guidelines, the rules and the contracts are here; where events are kept is the
     platform's.

@@ -78,14 +78,12 @@ class TwiceCommand extends Command<number> {
   }
 }
 class Wait extends Feature<WaitCommand, number> {
-  static readonly serviceName = "Wait";
   async execute(dto: WaitCommand) {
     await later(dto.ms);
     return dto.ms;
   }
 }
 class Twice extends ApplicationService<TwiceCommand, number> {
-  static readonly serviceName = "Twice";
   async execute(dto: TwiceCommand) {
     await this.featureBus.execute(new WaitCommand(dto.ms));
     return this.featureBus.execute(new WaitCommand(dto.ms));
@@ -162,7 +160,6 @@ test("context precedence is process, bounded context, then execution scope", asy
 class ContextCommand extends Command<Readonly<Record<string, unknown>>> {}
 class DelayedContext extends Command<Readonly<Record<string, unknown>>> {}
 class ReadContext extends Feature<ContextCommand, Readonly<Record<string, unknown>>> {
-  static readonly serviceName = "ReadContext";
   execute() {
     return this.context;
   }
@@ -171,7 +168,6 @@ class ReadLater extends ApplicationService<
   DelayedContext,
   Readonly<Record<string, unknown>>
 > {
-  static readonly serviceName = "ReadLater";
   async execute() {
     await later(5);
     return this.featureBus.execute(new ContextCommand());
@@ -191,7 +187,6 @@ test("a root snapshots context once and children retain it after an await", asyn
 
 class FailCommand extends Command<never> {}
 class Fail extends Feature<FailCommand, never> {
-  static readonly serviceName = "Fail";
   declare readonly error: unknown;
   execute(): never {
     throw this.error;
@@ -252,7 +247,6 @@ test("throwing observability adapters do not replace business outcomes", async (
 
 class HelperCommand extends Command<string> {}
 class Helpers extends Feature<HelperCommand, string> {
-  static readonly serviceName = "Helpers";
   execute() {
     return this.helper();
   }
@@ -277,7 +271,22 @@ test("registration checks layers, duplicate service names and reserved dependenc
   assert.throws(() => context.feature(TwiceCommand)(Twice), /not an feature/);
   assert.throws(() => context.appService(WaitCommand)(Wait), /not an application_service/);
   context.feature(WaitCommand)(Wait);
-  assert.throws(() => context.feature(TwiceCommand)(Wait), /Service name already registered/);
+  // The same service may take another DTO; another service may not take its name.
+  context.feature(TwiceCommand)(Wait);
+  const Impostor = (() => {
+    // Another class that the code also named `Wait`.
+    class Wait extends Feature<WaitCommand, unknown> {
+      execute() {
+        return undefined;
+      }
+    }
+    return Wait;
+  })();
+  class OtherCommand extends Command<unknown> {}
+  assert.throws(
+    () => context.feature(OtherCommand)(Impostor),
+    /Service name already registered/,
+  );
   const reserved = new BoundedContext<{ featureBus: number }>("invalid");
   assert.throws(() => reserved.addDependency("featureBus", 1), /Reserved/);
 });
@@ -291,7 +300,6 @@ test("plain dependencies retain identity; transports and custom bindables receiv
     ProbeCommand,
     { now: number; bound: boolean; custom: boolean }
   > {
-    static readonly serviceName = "Probe";
     declare readonly clock: typeof clock;
     declare readonly transport: typeof transport;
     declare readonly client: typeof client;
@@ -323,7 +331,6 @@ test("plain dependencies retain identity; transports and custom bindables receiv
 
 class ComposedFailure extends Command<never> {}
 class Composed extends ApplicationService<ComposedFailure, never> {
-  static readonly serviceName = "Composed";
   execute() {
     return this.featureBus.execute(new FailCommand());
   }
@@ -399,7 +406,6 @@ test("dependencies registered after build reach the next generation", async () =
 
 class CountCommand extends Command<number> {}
 class Counter extends Feature<CountCommand, number> {
-  static readonly serviceName = "Counter";
   private count = 0;
   execute() {
     return ++this.count;
@@ -437,7 +443,6 @@ test("foreign Promise implementations remain inside the execution span until set
   class ForeignCommand extends Command<number> {}
   const foreign: Promise<number> = runInNewContext("Promise.resolve(42)");
   class Foreign extends Feature<ForeignCommand, number> {
-    static readonly serviceName = "Foreign";
     execute() {
       return foreign;
     }

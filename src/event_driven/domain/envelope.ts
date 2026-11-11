@@ -1,5 +1,5 @@
 import { newEntityId } from "@sincpro/client-framework/common/ids";
-import type { DomainEvent } from "@sincpro/client-framework/core/domain/dto";
+import type { DomainEvent, RemoteEvent } from "@sincpro/client-framework/core/domain/dto";
 import type { Cause } from "@sincpro/client-framework/core/domain/pipeline";
 
 /**
@@ -28,9 +28,9 @@ export type Envelope = Cause & {
  * The envelope of `event`, published by the run `cause` names — or the head of its own flow when
  * nothing caused it (its `correlationId` is its own `id`).
  */
-export function envelopeOf(event: DomainEvent, cause?: Cause): Envelope {
+export function envelopeOf(event: DomainEvent | RemoteEvent, cause?: Cause): Envelope {
   const name = event.name;
-  if (name.trim() === "") {
+  if (typeof name !== "string" || name.trim() === "") {
     throw new Error(
       `${event.constructor.name} has no eventName: an event is published by its wire name`,
     );

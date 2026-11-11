@@ -15,6 +15,9 @@ how a web application adopts it — a plan, not a claim that it is adopted.
 
 ## Startup
 
+A production build keeps class names — a service's name is its class's, taken at registration —:
+Vite's `esbuild: { keepNames: true }` (and `build.minify` left to esbuild).
+
 ```ts
 // entrypoints/main.tsx
 configureProcess({
@@ -69,8 +72,8 @@ The same `Publisher` and `Subscriber` as on a phone; what changes is the queue:
   event (`subscriber.eventTypeOf(name)`) and hands it to `subscriber.handle(event, envelope)`.
 
 Events a backend publishes are generated types when its contract is exported with `--events`;
-a screen narrows `DomainEvent` by `name`. A module's `entrypoints/queue/` holds its
-`EventSubscriber`s and their `Subscriptions`, as on a phone.
+a screen narrows `DomainEvent` by `name`. They are registered as they are generated —
+`@bc.feature(events.IssueClosed)` — and the one `Subscriber` recognizes them by name.
 
 ## Work on a schedule
 
@@ -84,7 +87,7 @@ else:
   event or reads it.
 
 So a web module has no `entrypoints/cron/`. When a web application needs scheduled work of its
-own, a cron registry and a `Scheduler` port come to the client framework, as `Subscriptions` did.
+own, a cron registry and a `Scheduler` port come to the client framework.
 
 ## Adoption order
 

@@ -1,4 +1,12 @@
-import type { DomainEvent, EventClass } from "@sincpro/client-framework/core/domain/dto";
+import type {
+  AnyCommand,
+  CommandClass,
+  CommandDescriptor,
+  DomainEvent,
+  EventClass,
+  EventDescriptor,
+  RemoteEvent,
+} from "@sincpro/client-framework/core/domain/dto";
 import type { Envelope } from "@sincpro/client-framework/event_driven/domain/envelope";
 
 /**
@@ -16,8 +24,14 @@ import type { Envelope } from "@sincpro/client-framework/event_driven/domain/env
  * every bounded context that hears it.
  */
 export interface EventQueue {
-  put(event: DomainEvent, envelope: Envelope): void | Promise<void>;
+  put(event: DomainEvent | RemoteEvent, envelope: Envelope): void | Promise<void>;
 }
+
+/** What an event of a wire name is rebuilt as: its class, or the generated entry it was registered with. */
+export type EventType = EventClass<DomainEvent> | EventDescriptor;
+
+/** What a Command of an identity is rebuilt as: its class, or the generated entry it was registered with. */
+export type CommandType = CommandClass<AnyCommand> | CommandDescriptor;
 
 /** What one bounded context answered, or failed with, for a delivered event. */
 export type Handled =
@@ -29,14 +43,14 @@ export type Handled =
  * rebuilt as, and the event executed by every subscriber.
  */
 export interface Subscribes {
-  /** The class an event of that wire name is rebuilt as, or `undefined` when nobody hears it. */
-  eventTypeOf(name: string): EventClass<DomainEvent> | undefined;
+  /** What an event of that wire name is rebuilt as, or `undefined` when nobody hears it. */
+  eventTypeOf(name: string): EventType | undefined;
   /**
    * The event executed in every bounded context that hears it — but those `skip` names, which
    * already have it — and what each answered.
    */
   handle(
-    event: DomainEvent,
+    event: DomainEvent | RemoteEvent,
     envelope?: Envelope,
     skip?: readonly string[],
   ): Promise<Handled[]>;

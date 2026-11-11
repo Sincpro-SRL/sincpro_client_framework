@@ -35,7 +35,6 @@ test("what is held in the context but does not travel stays in this process: nev
   processContext.set({ tenant_id: "acme", printer: { print: () => undefined } });
   class Ask extends Command<unknown> {}
   class Asks extends Feature<Ask, unknown> {
-    static readonly serviceName = "Asks";
     declare readonly transport: ReturnType<typeof restTransport>;
     execute() {
       return this.transport.send("POST", "/issues", {});

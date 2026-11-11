@@ -33,7 +33,6 @@ test("an error a use case already reported is not reported again by the screen i
   const broken = new TypeError("undefined is not a function");
   class Fail extends Command<never> {}
   class Fails extends Feature<Fail, never> {
-    static readonly serviceName = "Fails";
     async execute(): Promise<never> {
       throw broken;
     }

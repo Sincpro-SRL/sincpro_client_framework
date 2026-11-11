@@ -3,20 +3,22 @@ import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/domain/nam
 
 /**
  * A bounded context's skeleton, written ONCE beside what is generated — the files that are the
- * application's from then on:
+ * application's from then on, laid out as the backend's (`sincpro_mcp_odoo/domains/helpdesk`):
  *
  *     domains/project/
  *       generated/                         `sincpro-client generate` — regenerated, never edited
- *       infrastructure/dependencies.ts     what the services can count on: the generated client
- *       infrastructure/bounded_context.ts  its Feature and ApplicationService, and how it is made
- *       services/index.ts                  registers command classes and their services
- *       index.ts                           `export const projectBoundedContext` — ready to use
+ *       infrastructure/dependencies.ts     what its services count on, and who supplies it
+ *       infrastructure/framework.ts        its Feature and ApplicationService — every dependency
+ *                                          typed on `this` — and `projectBoundedContext`
+ *       services/index.ts                  imports each service, which registers itself
+ *       index.ts                           `projectBoundedContext`, ready to use
  *
- * Context: the layout sincpro_framework gives a service (`dependencies.py`, `framework.py`,
- * `services/`, `__init__.py`), so a bounded context starts the way every other does and nobody
- * copies it by hand from another. It is the application's to change: the CLI writes a file only
- * when it is not there, and never touches one that is — unlike `generated/`, which is written
- * whole every time.
+ * Context: `dependencies.py`, `framework.py`, `services/` and `__init__.py` — a bounded context
+ * starts the way every other does. The instance lives in `framework.ts`, not `index.ts`: a service
+ * imports it to register itself (`@projectBoundedContext.feature(Command)`), and ES modules run
+ * their imports first, so `index.ts` importing the services could not also define it. It is the
+ * application's to change: the CLI writes a file only when it is not there, and never touches one
+ * that is — unlike `generated/`, which is written whole every time.
  */
 export type ScaffoldOptions = {
   /**
@@ -39,6 +41,11 @@ function pascalOf(alias: string): string {
 
 /** A module the skeleton imports, built in parts — see `FRAMEWORK` (`codegen/names.ts`). */
 const at = (...parts: string[]) => parts.join("/");
+
+/** A path given from the bounded context's folder, as `infrastructure/` reaches it. */
+function fromInfrastructure(path: string): string {
+  return path.startsWith(".") ? at("..", path) : path;
+}
 
 const HEADER = (what: string) =>
   `// ${what} — written once by \`sincpro-client scaffold\`; the application's to change.`;
@@ -82,72 +89,51 @@ export function scaffoldFilesOf(
     "",
   ].join("\n");
 
-  const boundedContext = [
+  const framework = [
     HEADER(`How «${alias}» is made`),
     "",
-    "import {",
-    "  ApplicationService as BaseApplicationService,",
-    "  Feature as BaseFeature,",
-    "  BoundedContext,",
-    "  type Command,",
-    "  type DomainEvent,",
-    `} from "${at(FRAMEWORK, "core")}";`,
-    `import type { OperationTransport } from "${FRAMEWORK}";`,
+    `import { type OperationTransport } from "${FRAMEWORK}";`,
+    `import { BoundedContext, servicesWith } from "${at(FRAMEWORK, "core")}";`,
     "",
+    `import { operations } from "${fromInfrastructure(operations)}";`,
     `import { type ${Dependencies}, registerDependencies } from "${at(".", "dependencies")}";`,
     "",
-    `/** A Feature of «${alias}» — of a Command, or a use case of an event: its dependencies typed on \`this\`, and \`this.context\`. */`,
-    "export abstract class Feature<C extends Command<R> | DomainEvent, R> extends BaseFeature<C, R> {",
-    ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
+    `/** The Feature and ApplicationService of «${alias}»: every dependency typed on \`this\`, declared nowhere else. */`,
+    `export const { Feature, ApplicationService } = servicesWith<${Dependencies}>();`,
+    "",
+    `export function config${Name}BoundedContext(name: string, transport: OperationTransport) {`,
+    `  return registerDependencies(new BoundedContext<${Dependencies}>(name), transport);`,
     "}",
     "",
-    `/** An ApplicationService of «${alias}»: the same, and \`this.featureBus.execute(dto)\`. */`,
-    "export abstract class ApplicationService<C extends Command<R> | DomainEvent, R> extends BaseApplicationService<C, R> {",
-    ...(client ? [`  declare readonly client: ${Dependencies}["client"];`] : []),
-    "}",
-    "",
-    `export function config${Name}BoundedContext(name: string, operations: OperationTransport) {`,
-    `  return registerDependencies(new BoundedContext<${Dependencies}>(name), operations);`,
-    "}",
+    `/** «${alias}»: \`${name}.execute(new Command(...))\`; a service registers itself with \`@${name}.feature(Command)\`. */`,
+    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, operations);`,
     "",
   ].join("\n");
 
   const services = [
     HEADER(`What «${alias}» offers`),
     "",
-    `import type { BoundedContext } from "${at(FRAMEWORK, "core")}";`,
-    `import type { ${Dependencies} } from "${at("..", "infrastructure", "dependencies")}";`,
-    "",
-    "/** Register local Command classes with their Features and ApplicationServices.",
-    " * Generated DTO types are remote contracts, not runtime command constructors: import",
-    ` * them under their own name — \`import type * as remote from "${at("..", "generated", "domain")}"\` —`,
-    " * and let a local Command implement one (`implements remote.CommandCancelIssue`).",
-    " * Register with boundedContext.feature(CommandClass)(FeatureClass) or",
-    " * boundedContext.appService(CommandClass)(ApplicationServiceClass); the services live in",
-    " * one folder per aggregate (`services/<aggregate>/`), and an entity of that aggregate with",
-    " * use cases of its own in a folder inside it (`services/<aggregate>/<entity>/`).",
-    " */",
-    `export function registerServices(_boundedContext: BoundedContext<${Dependencies}>): void {}`,
+    "// One file per use case, in its aggregate's folder (`services/<aggregate>/`, a related entity",
+    "// with use cases of its own in a folder inside it). Each registers itself with",
+    `// \`@${name}.feature(CommandX)\` — or a list: \`@${name}.feature([CommandX, EventY])\` — and is`,
+    "// imported here, so it is registered before anyone executes. A generated DTO is a remote",
+    `// contract (a type): \`import type * as remote from "${at("..", "generated", "domain")}"\`.`,
+    "export {};",
     "",
   ].join("\n");
 
   const index = [
     HEADER(`«${alias}», ready to use`),
     "",
-    `import { operations } from "${operations}";`,
+    `import "${at(".", "services")}";`,
     "",
-    `import { config${Name}BoundedContext } from "${at(".", "infrastructure", "bounded_context")}";`,
-    `import { registerServices } from "${at(".", "services")}";`,
-    "",
-    `/** «${alias}»: \`${name}.execute(new Command(...))\`. */`,
-    `export const ${name} = config${Name}BoundedContext(${JSON.stringify(alias)}, operations);`,
-    `registerServices(${name});`,
+    `export { ApplicationService, Feature, ${name} } from "${at(".", "infrastructure", "framework")}";`,
     "",
   ].join("\n");
 
   return {
     "infrastructure/dependencies.ts": dependencies,
-    "infrastructure/bounded_context.ts": boundedContext,
+    "infrastructure/framework.ts": framework,
     "services/index.ts": services,
     "index.ts": index,
   };

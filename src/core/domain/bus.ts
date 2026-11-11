@@ -2,6 +2,8 @@ import type {
   Command,
   DomainEvent,
   Executable,
+  RemoteCommand,
+  RemoteEvent,
   ResponseClass,
 } from "@sincpro/client-framework/core/domain/dto";
 import type { Cause, ExecuteOptions } from "@sincpro/client-framework/core/domain/pipeline";
@@ -26,7 +28,11 @@ export function optionsOf(second: unknown): ExecuteOptions {
 export interface CommandBus {
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
   execute<R>(command: Command<R>, options: ExecuteOptions): Promise<R>;
-  execute(event: DomainEvent, options?: ExecuteOptions | Cause): Promise<unknown>;
+  execute<I, R>(command: RemoteCommand<I, R>, options?: ExecuteOptions): Promise<R>;
+  execute(
+    event: DomainEvent | RemoteEvent,
+    options?: ExecuteOptions | Cause,
+  ): Promise<unknown>;
 }
 
 /** @internal — how a bus hands what it executes to its generation. */
@@ -41,7 +47,11 @@ export class FeatureBus implements CommandBus {
 
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
   execute<R>(command: Command<R>, options: ExecuteOptions): Promise<R>;
-  execute(event: DomainEvent, options?: ExecuteOptions | Cause): Promise<unknown>;
+  execute<I, R>(command: RemoteCommand<I, R>, options?: ExecuteOptions): Promise<R>;
+  execute(
+    event: DomainEvent | RemoteEvent,
+    options?: ExecuteOptions | Cause,
+  ): Promise<unknown>;
   execute(executable: Executable, second?: unknown): Promise<unknown> {
     // As with Python's return_type, the answer is not validated at runtime.
     return this.dispatch(executable, optionsOf(second));

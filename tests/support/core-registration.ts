@@ -6,27 +6,23 @@ import ts from "typescript";
 export type RegistrationStyle = "function" | "decorator" | "legacy-decorator";
 type Constructor = new (...args: never[]) => object;
 
-const DECORATED = `
+/** A class of the same name as `name`, decorated as an application writes it. */
+const decorated = (name: string) => `
   @register
-  class Registered extends Service {
-    static serviceName = Service.serviceName;
-  }
-  exports.Service = Registered;
+  class ${name} extends Service {}
+  exports.Service = ${name};
 `;
 
 /** The same class, lowered once with standard decorators and once with `experimentalDecorators`. */
-const decoratedSubclass = {
-  decorator: ts.transpileModule(DECORATED, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText,
-  "legacy-decorator": ts.transpileModule(DECORATED, {
+function decoratedSubclass(style: "decorator" | "legacy-decorator", name: string): string {
+  return ts.transpileModule(decorated(name), {
     compilerOptions: {
       target: ts.ScriptTarget.ES2022,
       module: ts.ModuleKind.CommonJS,
-      experimentalDecorators: true,
+      ...(style === "legacy-decorator" ? { experimentalDecorators: true } : {}),
     },
-  }).outputText,
-};
+  }).outputText;
+}
 
 function isSubclass<S extends Constructor>(value: unknown, Base: S): value is S {
   return typeof value === "function" && Object.getPrototypeOf(value) === Base;
@@ -51,7 +47,7 @@ export function registerClass<S extends Constructor>(
     return registered;
   }
   const exported: Record<string, unknown> = {};
-  runInNewContext(decoratedSubclass[style], {
+  runInNewContext(decoratedSubclass(style, Service.name), {
     Service,
     exports: exported,
     register: (declared: S, decorator?: ClassDecoratorContext<S>) => {

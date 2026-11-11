@@ -43,7 +43,6 @@ class RefuseCommand extends Command<never> {}
 class BothCommand extends Command<number> {}
 
 class Wait extends Feature<WaitCommand, number> {
-  static readonly serviceName = "Wait.for";
   async execute(command: WaitCommand) {
     await new Promise((done) => setTimeout(done, command.ms));
     return command.ms;
@@ -51,21 +50,18 @@ class Wait extends Feature<WaitCommand, number> {
 }
 
 class Fail extends Feature<FailCommand, never> {
-  static readonly serviceName = "Fail";
   async execute(): Promise<never> {
     throw new TypeError("undefined is not a function");
   }
 }
 
 class Refuse extends Feature<RefuseCommand, never> {
-  static readonly serviceName = "Refuse";
   async execute(): Promise<never> {
     throw new TransportError("/issues/1", 409, null);
   }
 }
 
 class Both extends ApplicationService<BothCommand, number> {
-  static readonly serviceName = "Both";
   async execute() {
     await this.featureBus.execute(new WaitCommand(1));
     return this.featureBus.execute(new WaitCommand(1));
@@ -87,7 +83,7 @@ test("an ApplicationService and its Features are one OpenTelemetry trace, parent
   const children = spans.filter((one) => one.name !== "project/Both");
   assert.deepEqual(
     children.map((one) => one.name),
-    ["project/Wait.for", "project/Wait.for"],
+    ["project/Wait", "project/Wait"],
   );
   for (const child of children) {
     assert.equal(child.spanContext().traceId, parent?.spanContext().traceId);
@@ -120,7 +116,6 @@ type Asking = { transport: ReturnType<typeof restTransport> };
 
 class AskCommand extends Command<unknown> {}
 class Ask extends Feature<AskCommand, unknown> {
-  static readonly serviceName = "Ask";
   declare readonly transport: Asking["transport"];
   execute() {
     return this.transport.send("POST", "/issues", {});

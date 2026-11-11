@@ -16,11 +16,17 @@ import {
 import {
   type Answer,
   type AnyCommand,
-  Command,
+  type Command,
   type CommandClass,
-  DomainEvent,
+  type CommandDescriptor,
+  type DomainEvent,
+  type DtoKey,
   type EventClass,
+  type EventDescriptor,
   type Executable,
+  type ExecutableOf,
+  type RemoteCommand,
+  type RemoteEvent,
   type ResponseClass,
 } from "@sincpro/client-framework/core/domain/dto";
 import type { ErrorClass, ErrorHandler } from "@sincpro/client-framework/core/domain/errors";
@@ -40,12 +46,19 @@ import {
   RESERVED_MEMBERS,
 } from "@sincpro/client-framework/core/domain/services";
 import { processHearing } from "@sincpro/client-framework/core/infrastructure/listeners";
+import {
+  describeDto,
+  identityOf,
+  isCommandClass,
+  isCommandDescriptor,
+  isDtoKey,
+  keyIdentity,
+} from "@sincpro/client-framework/core/services/dto-keys";
 import { handled } from "@sincpro/client-framework/core/services/error-handlers";
 import { executeService, failedAt } from "@sincpro/client-framework/core/services/execution";
 import {
   announceTo,
   concerns,
-  type ExecutableClass,
   type Hearing,
   listenIn,
 } from "@sincpro/client-framework/core/services/listening";
@@ -66,13 +79,10 @@ interface Executor<C extends Executable, R> {
   execute(executable: C): R | Promise<R>;
 }
 
-type ServiceClass<C extends Executable, R> = {
-  new (): Executor<C, R>;
-  readonly serviceName: string;
-};
+type ServiceClass<C extends Executable, R> = new () => Executor<C, R>;
 
-/** What a service is registered for: a Command's class or a domain event's. */
-type DtoClass = ExecutableClass;
+/** What a registration is for when it names none: everything; else the DTOs it names. */
+type Of<K> = [K] extends [never] ? Executable : ExecutableOf<K>;
 
 /** The service a registration takes the place of, as the backend's `replaces=`. */
 export type RegistrationOptions = { replaces?: abstract new (...args: never[]) => object };
@@ -125,13 +135,9 @@ function isExecutor(value: unknown): value is Executor<Executable, unknown> {
   );
 }
 
-function isEventClass(dto: DtoClass): dto is EventClass<DomainEvent> {
-  return dto.prototype instanceof DomainEvent;
-}
-
 function nameOf(Service: unknown): string {
-  const named = Service as { serviceName?: unknown; name?: unknown } | undefined;
-  return String(named?.serviceName ?? named?.name ?? Service);
+  const named = Service as { name?: unknown } | undefined;
+  return String(named?.name ?? Service);
 }
 
 /**
@@ -151,10 +157,9 @@ function nameOf(Service: unknown): string {
  *
  * Context: registrations, dependencies, handlers and expected errors are snapshotted per
  * generation; a call keeps the generation it started with, and what is added later answers from
- * the next call — as the backend's `build_root_bus`. A domain event may be the input of a use
- * case, executed as a Command is: one per bounded context, through the same pipeline. Carrying
- * it to whoever hears it (a queue, an outbox) is the platform's; an entrypoint that hears it and
- * calls use cases is an `EventSubscriber`. Injected into another run — an `EventSubscriber`, a
+ * the next call — as the backend's `build_root_bus`. A service takes one DTO or N — Commands,
+ * domain events, generated ones —; registering it for an event is the subscription, and the
+ * queue's `Subscriber` executes the event here when it arrives. Injected into another run — a
  * Feature of another bounded context — it is bound to that run (`BIND`).
  */
 export class BoundedContext<
@@ -165,7 +170,7 @@ export class BoundedContext<
   readonly context: Context<C>;
   /** Its own logger, named after it: for what it does outside a use case. */
   readonly logger: LayerLogger;
-  private readonly registrations = new Map<DtoClass, Registration>();
+  private readonly registrations = new Map<DtoKey, Registration>();
   private readonly dependencyValues = new Map<string, unknown>();
   private readonly handlers: Record<"global" | Layer, ErrorHandler[]> = {
     global: [],
@@ -239,9 +244,18 @@ export class BoundedContext<
   }
 
   /**
-   * Registers the Feature that executes a Command — or that subscribes to a domain event. With
-   * `replaces`, it takes the place of the service registered now for it.
+   * Registers the Feature that executes a DTO — or each DTO listed, as the backend's
+   * `feature([CommandX, EventY])`: a Command's class, a domain event's (the use case of the event:
+   * registering it is the subscription), or a generated one's entry (`operations.X`, `events.X`).
+   * With `replaces`, it takes the place of the service registered now for each.
+   *
+   *     @billingBoundedContext.feature([CommandIssueInvoice, OrderPaid])
+   *     class IssueInvoice extends Feature<CommandIssueInvoice | OrderPaid, ResponseInvoice> { … }
    */
+  feature<const K extends readonly DtoKey[]>(
+    dtos: K,
+    options?: RegistrationOptions,
+  ): Registrar<ExecutableOf<K[number]>>;
   feature<T extends AnyCommand>(
     command: CommandClass<T>,
     options?: RegistrationOptions,
@@ -250,11 +264,26 @@ export class BoundedContext<
     event: EventClass<E>,
     options?: RegistrationOptions,
   ): Registrar<E>;
-  feature(dto: DtoClass, options?: RegistrationOptions): Registrar<Executable> {
+  feature<I = unknown, R = unknown>(
+    command: CommandDescriptor,
+    options?: RegistrationOptions,
+  ): Registrar<RemoteCommand<I, R>>;
+  feature<E extends RemoteEvent = RemoteEvent>(
+    event: EventDescriptor,
+    options?: RegistrationOptions,
+  ): Registrar<E>;
+  feature(
+    dto: DtoKey | readonly DtoKey[],
+    options?: RegistrationOptions,
+  ): Registrar<Executable> {
     return this.registrar(dto, "feature", options);
   }
 
-  /** Registers the ApplicationService of a Command or a domain event; `replaces` as `feature`. */
+  /** Registers the ApplicationService of a DTO or of each DTO listed; as `feature`. */
+  appService<const K extends readonly DtoKey[]>(
+    dtos: K,
+    options?: RegistrationOptions,
+  ): Registrar<ExecutableOf<K[number]>>;
   appService<T extends AnyCommand>(
     command: CommandClass<T>,
     options?: RegistrationOptions,
@@ -263,22 +292,49 @@ export class BoundedContext<
     event: EventClass<E>,
     options?: RegistrationOptions,
   ): Registrar<E>;
-  appService(dto: DtoClass, options?: RegistrationOptions): Registrar<Executable> {
+  appService<I = unknown, R = unknown>(
+    command: CommandDescriptor,
+    options?: RegistrationOptions,
+  ): Registrar<RemoteCommand<I, R>>;
+  appService<E extends RemoteEvent = RemoteEvent>(
+    event: EventDescriptor,
+    options?: RegistrationOptions,
+  ): Registrar<E>;
+  appService(
+    dto: DtoKey | readonly DtoKey[],
+    options?: RegistrationOptions,
+  ): Registrar<Executable> {
     return this.registrar(dto, "application_service", options);
   }
 
-  /** The service registered now for a Command or an event class — what a `replaces` names. */
-  handlerOf(dto: DtoClass): (abstract new (...args: never[]) => object) | undefined {
+  /** The service registered now for a DTO — what a `replaces` names. */
+  handlerOf(dto: DtoKey): (abstract new (...args: never[]) => object) | undefined {
     return this.registrations.get(dto)?.Service;
   }
 
   /**
-   * The event class registered here under a wire name, or `undefined` when nothing here hears it
-   * — what a platform's queue rebuilds a stored event as, as the backend's `event_type(name)`.
+   * What an event of that wire name is rebuilt as here — its class, or the generated entry it
+   * was registered with —, or `undefined` when nothing here hears it: the backend's
+   * `event_type(name)`.
    */
-  eventTypeOf(name: string): EventClass<DomainEvent> | undefined {
+  eventTypeOf(name: string): EventClass<DomainEvent> | EventDescriptor | undefined {
     for (const dto of this.registrations.keys()) {
-      if (isEventClass(dto) && dto.eventName === name) return dto;
+      const known = keyIdentity(dto);
+      if (known.kind === "event" && known.wire === name)
+        return dto as EventClass<DomainEvent> | EventDescriptor;
+    }
+    return undefined;
+  }
+
+  /**
+   * What a Command of that identity (`<context>.<Command>`) is rebuilt as here — its class, or
+   * the generated entry it was registered with —, or `undefined` when nothing here executes it.
+   */
+  commandTypeOf(identity: string): CommandClass<AnyCommand> | CommandDescriptor | undefined {
+    for (const dto of this.registrations.keys()) {
+      const known = keyIdentity(dto);
+      if (known.kind === "command" && known.wire === identity)
+        return dto as CommandClass<AnyCommand> | CommandDescriptor;
     }
     return undefined;
   }
@@ -289,9 +345,9 @@ export class BoundedContext<
    * passes on (of the same class) or answer by itself. Registered after a call, it wraps from
    * the next one.
    */
-  interceptor<T extends Executable = Executable>(
-    ...dtos: (abstract new (...args: never[]) => T)[]
-  ): <F extends Interceptor<T>>(interceptor: F) => F {
+  interceptor<K extends DtoKey = never>(
+    ...dtos: K[]
+  ): <F extends Interceptor<Of<K>>>(interceptor: F) => F {
     return (interceptor) => {
       if (typeof interceptor !== "function")
         throw new TypeError("An interceptor is a function");
@@ -311,17 +367,17 @@ export class BoundedContext<
   }
 
   /** Hears every run of these classes (every one when none is named) begin. Answers how to stop. */
-  onStart(listener: Listener<ExecutionStarted>, ...dtos: DtoClass[]): () => void {
+  onStart(listener: Listener<ExecutionStarted>, ...dtos: DtoKey[]): () => void {
     return listenIn(this.listeners.started, listener, dtos);
   }
 
   /** Hears every run of these classes whose service answered — not an answer a handler gave. */
-  onCompletion(listener: Listener<ExecutionCompleted>, ...dtos: DtoClass[]): () => void {
+  onCompletion(listener: Listener<ExecutionCompleted>, ...dtos: DtoKey[]): () => void {
     return listenIn(this.listeners.completed, listener, dtos);
   }
 
   /** Hears every failure that escapes a call — after every handler —, once, where it failed. */
-  onFailure(listener: Listener<ExecutionFailed>, ...dtos: DtoClass[]): () => void {
+  onFailure(listener: Listener<ExecutionFailed>, ...dtos: DtoKey[]): () => void {
     return listenIn(this.listeners.failed, listener, dtos);
   }
 
@@ -364,13 +420,18 @@ export class BoundedContext<
   }
 
   /**
-   * Executes a Command — its Response, inferred —, or a domain event — its subscriber's answer.
-   * `{ signal }` cancels the run (it ends `aborted`); a delivered event's envelope continues its
-   * flow (`execute(event, envelope)`).
+   * Executes a Command — its Response, inferred —, a domain event — what its use case answers —,
+   * or a generated one (`commandOf(operations.X, input)`, an event's data). `{ signal }` cancels
+   * the run (it ends `aborted`); a delivered message's cause continues its flow
+   * (`execute(event, envelope)`).
    */
   execute<R>(command: Command<R>, returnType?: ResponseClass<NoInfer<R>>): Promise<R>;
   execute<R>(command: Command<R>, options: ExecuteOptions): Promise<R>;
-  execute(event: DomainEvent, options?: ExecuteOptions | Cause): Promise<unknown>;
+  execute<I, R>(command: RemoteCommand<I, R>, options?: ExecuteOptions): Promise<R>;
+  execute(
+    event: DomainEvent | RemoteEvent,
+    options?: ExecuteOptions | Cause,
+  ): Promise<unknown>;
   execute(executable: Executable, second?: unknown): Promise<unknown> {
     // As with Python's return_type, the answer is not validated at runtime.
     return this.generation().root(executable, {}, optionsOf(second));
@@ -384,9 +445,9 @@ export class BoundedContext<
   }
 
   /**
-   * This bounded context as `execution` calls it — what it is as a dependency of another run (an
-   * `EventSubscriber`, a Feature of another bounded context): what it executes is a child of
-   * that run — its span under the caller's, the same flow (`correlationId`), caused by it,
+   * This bounded context as `execution` calls it — what it is as a dependency of another run (a
+   * Feature of another bounded context, as `common_mcp` is in the backend's helpdesk): what it
+   * executes is a child of that run — its span under the caller's, the same flow (`correlationId`), caused by it,
    * cancelled with it, its errors reported once along it. It still runs with its own
    * dependencies, context, interceptors and handlers.
    */
@@ -447,8 +508,7 @@ export class BoundedContext<
     const heard: ExecutionFailed = {
       executable: at?.executable ?? executable,
       execution: at?.execution,
-      // Listeners hear use cases: a failure an entrypoint's run started says no layer.
-      layer: at?.layer === "entrypoint" ? undefined : at?.layer,
+      layer: at?.layer,
       error,
       outcome,
     };
@@ -464,12 +524,28 @@ export class BoundedContext<
   }
 
   private registrar(
-    dto: DtoClass,
+    dto: DtoKey | readonly DtoKey[],
     layer: Layer,
     options: RegistrationOptions = {},
   ): Registrar<Executable> {
+    const dtos: readonly DtoKey[] = Array.isArray(dto) ? dto : [dto as DtoKey];
+    if (dtos.length === 0)
+      throw new TypeError("A service is registered for one DTO at least");
     return (Service, decorator) => {
-      const register = () => this.registerService(dto, Service, layer, options.replaces);
+      // All the DTOs listed, or none: a refused one leaves the registrations as they were.
+      const register = () => {
+        const before = [...this.registrations];
+        const revision = this.revision;
+        try {
+          for (const one of dtos)
+            this.registerService(one, Service, layer, options.replaces, decorator?.name);
+        } catch (error) {
+          this.registrations.clear();
+          for (const [dto, registration] of before) this.registrations.set(dto, registration);
+          this.revision = revision;
+          throw error;
+        }
+      };
       // Standard decorators run before static fields have initialized.
       if (decorator) decorator.addInitializer(register);
       else register();
@@ -478,17 +554,23 @@ export class BoundedContext<
   }
 
   /**
-   * 1. The service is of the layer it is registered in, for a Command or a domain event class.
-   * 2. The class has no service yet — or, with `replaces`, the one it has is that one.
-   * 3. Its `serviceName` is given and no other service has it; an event's `eventName` is given
-   *    and no other event class here has it — the name means one event.
+   * 1. The service is of the layer it is registered in, for a DTO: a Command's or a domain event's
+   *    class, or a generated one's entry.
+   * 2. The DTO has no service yet — or, with `replaces`, the one it has is that one.
+   * 3. Its name is the framework's to take, at registration: the class's name as the code wrote it
+   *    (a standard decorator's `context.name`, which a minifier does not touch), else the class's
+   *    `name` — a production build keeps class names (`keep_classnames`, `keepNames`). No other
+   *    service here has it; the same service may take N DTOs.
+   * 4. An event's wire name is given, and no other event here has it; a Command's identity, when
+   *    it declares one, likewise: a name or an identity means one DTO.
    * Final: registered, said on its spans when it replaced another; the next call answers with it.
    */
   private registerService(
-    dto: DtoClass,
+    dto: DtoKey,
     Service: ServiceClass<Executable, unknown>,
     layer: Layer,
     replaces: RegistrationOptions["replaces"],
+    written?: string,
   ): void {
     const Base = layer === "feature" ? Feature : ApplicationService;
     if (
@@ -497,9 +579,23 @@ export class BoundedContext<
     ) {
       throw new TypeError(`The service is not an ${layer}`);
     }
-    const event = isEventClass(dto);
-    if (!event && !(dto.prototype instanceof Command)) {
-      throw new TypeError("A service is registered for a Command or a DomainEvent class");
+    if (!isDtoKey(dto)) {
+      throw new TypeError(
+        "A service is registered for a Command or a DomainEvent: its class, or a generated one's entry",
+      );
+    }
+    const known = keyIdentity(dto);
+    if (
+      known.kind === "event" &&
+      (typeof known.wire !== "string" || known.wire.trim() === "")
+    ) {
+      throw new Error("A domain event needs a nonempty eventName");
+    }
+    if (isCommandDescriptor(dto) && dto.identity.trim() === "") {
+      throw new Error("A generated Command needs its identity");
+    }
+    if (isCommandClass(dto) && known.wire !== undefined && known.wire.trim() === "") {
+      throw new Error("A Command's commandName, when declared, is nonempty");
     }
     const current = this.registrations.get(dto);
     if (replaces !== undefined && current?.Service !== replaces) {
@@ -508,25 +604,29 @@ export class BoundedContext<
     if (replaces === undefined && current) {
       throw new Error("Command already registered: one executor across both layers");
     }
-    const name = Service.serviceName;
+    const name = written ?? Service.name;
     if (typeof name !== "string" || name.trim() === "") {
-      throw new Error("A service needs a nonempty registered name");
+      throw new Error(
+        "A service is a named class: its name is its use case in spans and logs",
+      );
     }
     for (const [other, registration] of this.registrations) {
-      if (registration !== current && registration.name === name) {
+      if (
+        registration !== current &&
+        registration.Service !== Service &&
+        registration.name === name
+      ) {
         throw new Error(`Service name already registered: ${name}`);
       }
-      if (
-        event &&
-        other !== dto &&
-        isEventClass(other) &&
-        other.eventName === dto.eventName
-      ) {
-        throw new Error(`Event name already registered: ${dto.eventName}`);
+      if (other === dto || known.wire === undefined) continue;
+      const theirs = keyIdentity(other);
+      if (theirs.kind === known.kind && theirs.wire === known.wire) {
+        throw new Error(
+          known.kind === "event"
+            ? `Event name already registered: ${known.wire}`
+            : `Command identity already registered: ${known.wire}`,
+        );
       }
-    }
-    if (event && (typeof dto.eventName !== "string" || dto.eventName.trim() === "")) {
-      throw new Error("A domain event needs a nonempty eventName");
     }
     this.registrations.set(dto, {
       name,
@@ -568,13 +668,24 @@ export class BoundedContext<
         announceTo(everyContext.completed, heard);
       },
     };
-    const instances = new Map<Registration, Executor<Executable, unknown>>();
-    for (const registration of registrations.values()) {
-      const instance = new registration.Service();
-      if (!isExecutor(instance)) {
-        throw new Error(`Registered service is unavailable: ${registration.name}`);
+    // One instance per service, whatever number of DTOs it takes: a singleton of its generation.
+    const instances = new Map<
+      ServiceClass<Executable, unknown>,
+      Executor<Executable, unknown>
+    >();
+    // A generated DTO has no class: it is found by its kind and wire identity.
+    const generated = new Map<string, Registration>();
+    for (const [dto, registration] of registrations) {
+      if (!instances.has(registration.Service)) {
+        const instance = new registration.Service();
+        if (!isExecutor(instance)) {
+          throw new Error(`Registered service is unavailable: ${registration.name}`);
+        }
+        instances.set(registration.Service, instance);
       }
-      instances.set(registration, instance);
+      const known = keyIdentity(dto);
+      if (known.type === undefined)
+        generated.set(`${known.kind}:${known.wire}`, registration);
     }
     const dispatch: GenerationDispatch = async (
       executable,
@@ -583,18 +694,26 @@ export class BoundedContext<
       scope = {},
       options = {},
     ) => {
-      // Exact constructor identity: a subclass of a registered class is another one.
-      const target = registrations.get(Object.getPrototypeOf(executable)?.constructor);
-      if (!target) throw new Error("No executor registered for this command class");
+      // Exact constructor identity — a subclass of a registered class is another one —; a
+      // generated DTO, by its kind and wire identity.
+      const known = identityOf(executable);
+      const target =
+        known === undefined
+          ? undefined
+          : known.type !== undefined
+            ? registrations.get(known.type as DtoKey)
+            : generated.get(`${known.kind}:${known.wire}`);
+      if (!target) throw new Error(`No executor registered for ${describeDto(executable)}`);
       if (featureOnly && target.layer !== "feature") {
         throw new Error("An ApplicationService may compose only Features");
       }
-      const service = instances.get(target);
+      const service = instances.get(target.Service);
       if (!service) {
         throw new Error(`Registered service is unavailable: ${target.name}`);
       }
       const attributes: Attributes = {
-        ...(executable instanceof DomainEvent ? { "sincpro.event": executable.name } : {}),
+        ...(known?.kind === "event" && known.wire ? { "sincpro.event": known.wire } : {}),
+        ...(known?.kind === "command" && known.wire ? { "sincpro.command": known.wire } : {}),
         ...(target.replaces ? { "sincpro.replaces": target.replaces } : {}),
       };
       return executeService(service, executable, {
@@ -607,10 +726,8 @@ export class BoundedContext<
         ...(parent ? { parent } : {}),
         // A root called from another run continues it; a child continues its parent.
         ...(options.caller && !parent ? { caller: options.caller } : {}),
-        // Only an event comes from outside with a cause.
-        ...(options.cause && executable instanceof DomainEvent && !parent
-          ? { cause: options.cause }
-          : {}),
+        // A delivered message — an event, a Command — continues the flow of what caused it.
+        ...(options.cause && !parent ? { cause: options.cause } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
         featureBus: (execution) =>
           new FeatureBus((child, options) => dispatch(child, execution, true, {}, options)),

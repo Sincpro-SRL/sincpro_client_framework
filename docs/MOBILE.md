@@ -14,7 +14,7 @@ second implementation of application execution.
 | Traces/errors           | Tracer and ErrorReporter ports                                              | Build provider/client, buffers, exporters and native integration    |
 | Logs                    | Logger port, `this.logger`, `projectBoundedContext.logger`, console adapter | Adapt existing delivery to structured records; own buffering/export |
 | Error handling          | Global, feature and app-service handlers; `expectErrors`                    | Register handlers per bounded context; no try/catch in Features     |
-| Domain events           | `DomainEvent`; `EventSubscriber` entrypoints; remote as types               | The queue: persist, deliver to everyone who hears, retry, DLQ       |
+| Domain events           | `DomainEvent`; use cases registered for them; the `Subscriber`              | The queue: persist, deliver to everyone who hears, retry, DLQ       |
 | Replacing pieces        | `feature(dto, { replaces })`, `addDependency(…, { replaces })`              | An app's module declares what it replaces                           |
 | Remote operations       | Generated client and Transport contract                                     | Inject only where remote work is required                           |
 | Offline synchronization | Not supplied by command execution                                           | Explicit repository/sync/conflict policies                          |
@@ -25,7 +25,9 @@ A generated remote client and a local repository are different dependencies.
 ## Startup
 
 The platform must provide compatible random values and URL APIs before using ids/transports.
-It initializes telemetry once and hands the common process simple port implementations:
+A production build keeps class names — a service's name is its class's, taken at registration —:
+the host's `metro.config.js` sets `transformer.minifierConfig = { keep_classnames: true }`. It
+initializes telemetry once and hands the common process simple port implementations:
 
 ```ts
 import { configureProcess, processContext } from "@sincpro/client-framework";
@@ -77,21 +79,24 @@ class CommandReserve extends Command<{ quantity: number }> {
   }
 }
 
-interface SalesDependencies {
+// infrastructure/dependencies.ts
+export interface SalesDependencies {
   stock: { reserve(sku: string, quantity: number): Promise<{ quantity: number }> };
 }
 
-class Reserve extends Feature<CommandReserve, { quantity: number }> {
-  static readonly serviceName = "Reserve";
-  declare readonly stock: SalesDependencies["stock"];
+// infrastructure/framework.ts
+export const { Feature, ApplicationService } = servicesWith<SalesDependencies>();
+export const salesBoundedContext = new BoundedContext<SalesDependencies>("sales");
+salesBoundedContext.addDependency("stock", stockRepository);
+
+// services/stock/reserve.feature.ts — its dependencies inherited, its name the framework's
+@salesBoundedContext.feature(CommandReserve)
+export class Reserve extends Feature<CommandReserve, { quantity: number }> {
   execute(command: CommandReserve) {
     return this.stock.reserve(command.sku, command.quantity);
   }
 }
 
-const salesBoundedContext = new BoundedContext<SalesDependencies>("sales");
-salesBoundedContext.addDependency("stock", stockRepository);
-salesBoundedContext.feature(CommandReserve)(Reserve);
 await salesBoundedContext.execute(new CommandReserve("A1", 2));
 ```
 
@@ -135,39 +140,43 @@ engine, combined with the console through `combineLoggers`.
 
 Mobile's `EventBus` splits along the line this package draws: what is the same on every
 platform comes from here; what a phone does to deliver durably stays in mobile, behind the
-`EventQueue` port. A module keeps its doors where they are — `entrypoints/queue/` and
-`entrypoints/cron/` —, and they become what they always meant: entrypoints that translate an
-event or a tick into a Command, executed on the module's bounded context. What a subscriber
-decides today moves into a Feature; what it orchestrates, into an ApplicationService.
+`EventQueue` port. As in the backend, nobody writes a subscriber per event: a use case is
+registered for the event (with its Command too, when a screen also executes it), and the queue's
+one `Subscriber` hands each event to the bounded contexts that registered it. What a 1.x
+subscriber decided moves into that Feature; what it orchestrated, into an ApplicationService. A
+cron stays an entrypoint whose job executes a Command.
 
-| Today in mobile                                  | With the client framework                                                       |
-| ------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `Subscriber` with `listen` and `process(event)`  | an `EventSubscriber` with `handle(event)`: builds the Command, executes it      |
-| the service calls and checks inside `process`    | a Feature (one step) or an ApplicationService (a workflow) of a Command         |
-| a module's `subscribers()` list                  | its `Subscriptions` (`entrypoints/queue/index.ts`), one subscriber per event    |
-| a use case that exists only because of the event | a use case of the event: `boundedContext.feature(Event)(…)`                     |
-| `EventBus.on(subscriber)`, several per event     | the queue's `new Subscriber(...boundedContexts, ...subscriptions)` fans out     |
-| `EventBus.publish` / `publishSync`               | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue`           |
-| `event_chain`, `applyChain`, `runWithChain`      | the `Envelope` and `execution.correlationId` / `causationId`                    |
-| event interceptors (`interceptEvent`, `"*"`)     | `boundedContext.interceptor(Command)(…)` around the use cases subscribers call  |
-| `static replaces = CoreSubscriber`               | `subscriptions.subscribe(Event, { replaces: CoreSubscriber })(…)`               |
-| a `CronWorker` job calling a service or workflow | a `CronWorker` job executing a Command: `boundedContext.execute(new Command())` |
-| `publishActivity` running / succeeded / failed   | `processListeners`, or the stored queue's `onSettled`                           |
-| `RepeatableFailure`, `DomainNetworkError`        | errors that declare a kind (`unavailable`, `unknown_outcome`): retried          |
-| `UserError`, `ValidationError` of mobile-odoo    | errors that declare `domain` / `invalid`: set aside, never retried              |
-| the drain loop, retries, backoff, DLQ            | `storedQueue` — the same rules on every platform                                |
-| `requiresNetwork`, `requiresAuth`                | `ready` of the stored queue: waits while the rest go on                         |
-| SQLite table, `AppState`, NetInfo                | mobile's `EventStore`, and what calls `queue.drain()`                           |
+| Today in mobile                                   | With the client framework                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `Subscriber` with `listen = [A, B]` and `process` | a use case registered for them: `@bc.feature([A, B])`, or `[CommandX, A]`       |
+| the service calls and checks inside `process`     | that Feature (one step) or an ApplicationService (a workflow)                   |
+| a module's `subscribers()` list                   | its `boundedContexts()`: what they registered is what they hear                 |
+| `EventBus.on(subscriber)`, several per event      | the queue's one `new Subscriber(...boundedContexts)` fans out, one per context  |
+| `EventBus.publish` / `publishSync`                | `this.publisher.publish(event)` — over mobile's queue, or `syncQueue`           |
+| `event_chain`, `applyChain`, `runWithChain`       | the `Envelope` and `execution.correlationId` / `causationId`                    |
+| event interceptors (`interceptEvent`, `"*"`)      | `boundedContext.interceptor(Command)(…)` around the use cases subscribers call  |
+| `static replaces = CoreSubscriber`                | `@bc.feature(Event, { replaces: CoreFeature })`                                 |
+| a `CronWorker` job calling a service or workflow  | a `CronWorker` job executing a Command: `boundedContext.execute(new Command())` |
+| `publishActivity` running / succeeded / failed    | `processListeners`, or the stored queue's `onSettled`                           |
+| `RepeatableFailure`, `DomainNetworkError`         | errors that declare a kind (`unavailable`, `unknown_outcome`): retried          |
+| `UserError`, `ValidationError` of mobile-odoo     | errors that declare `domain` / `invalid`: set aside, never retried              |
+| the drain loop, retries, backoff, DLQ             | `storedQueue` — the same rules on every platform                                |
+| `requiresNetwork`, `requiresAuth`                 | `ready` of the stored queue: waits while the rest go on                         |
+| SQLite table, `AppState`, NetInfo                 | mobile's `EventStore`, and what calls `queue.drain()`                           |
 
 ```ts
-// a module's entrypoints/queue/sale-order-confirmed.subscriber.ts — it translates, nothing else
-export class SaleOrderConfirmedSubscriber extends EventSubscriber<SaleOrderConfirmedEvent> {
-  static readonly subscriberName = "SaleOrderConfirmed";
-  declare readonly distributionBoundedContext: BoundedContext<DistributionDependencies>;
-  async handle(event: SaleOrderConfirmedEvent) {
-    await this.distributionBoundedContext.execute(
-      new CommandConfirmQuotationInBackend(event.saleOrderUUID),
-    );
+// services/sale_order/confirm-quotation.feature.ts — a screen executes it, and the event triggers it
+@distributionBoundedContext.feature([
+  CommandConfirmQuotationInBackend,
+  SaleOrderConfirmedEvent,
+])
+export class ConfirmQuotationInBackend extends Feature<
+  CommandConfirmQuotationInBackend | SaleOrderConfirmedEvent,
+  void
+> {
+  async execute(input: CommandConfirmQuotationInBackend | SaleOrderConfirmedEvent) {
+    const saleOrder = await this.saleOrders.byId(input.saleOrderUUID); // inherited dependency
+    await this.odoo.confirmQuotation(saleOrder);
   }
 }
 
@@ -188,7 +197,7 @@ const sqliteEventStore: EventStore = {
 
 const queue = storedQueue({
   store: sqliteEventStore,
-  subscriber: new Subscriber(...boundedContexts, ...subscriptions), // every module's
+  subscriber: new Subscriber(...activeModules.flatMap((module) => module.boundedContexts())),
   ready: (stored) =>
     (online || !requiresNetwork(stored)) && (signedIn || !requiresAuth(stored)),
   onSettled: (stored) => publishActivity(stored),
