@@ -10,6 +10,10 @@
  *   infrastructure/  `configureProcess`, `configureLogger`
  */
 export { type CommandBus, FeatureBus } from "@sincpro/client-framework/core/domain/bus";
+export type {
+  EventConsumer,
+  EventKey,
+} from "@sincpro/client-framework/core/domain/consumers";
 export {
   type AnyCommand,
   Command,
@@ -46,8 +50,13 @@ export type {
 export {
   ApplicationService,
   type ApplicationServiceWith,
+  type BoundedContextHandlerWith,
+  EventHandler,
+  type EventHandlerWith,
   Feature,
   type FeatureWith,
+  type HandledEvent,
+  handlersWith,
   type ServiceInput,
   servicesWith,
 } from "@sincpro/client-framework/core/domain/services";
@@ -64,3 +73,4 @@ export {
   type LoggerConfiguration,
   type ProcessOptions,
 } from "@sincpro/client-framework/core/infrastructure/process";
+export type { HandlerRegistrar } from "@sincpro/client-framework/core/services/event-handlers";

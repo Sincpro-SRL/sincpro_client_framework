@@ -22,7 +22,8 @@ import type { Outcome } from "@sincpro/client-framework/observability/domain/tra
  * the answer.
  */
 
-export type PipelineLayer = "feature" | "application_service";
+/** Where a run sits: a Feature, an ApplicationService, or an event handler above them. */
+export type PipelineLayer = "feature" | "application_service" | "event_handler";
 
 /** What caused a run from outside: an event delivered with its envelope continues its chain. */
 export type Cause = {

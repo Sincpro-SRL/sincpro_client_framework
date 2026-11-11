@@ -179,9 +179,25 @@ test("the stored queue delivers a generated event through the subscriber, rebuil
   assert.deepEqual(heard, ["accounting shop.order.v1.shipped"]);
 });
 
-test("two bounded contexts of one name are refused: the queue keeps who heard a message by it", () => {
-  assert.throws(
-    () => new Subscriber(new BoundedContext("billing"), new BoundedContext("billing")),
-    /named billing/,
+test("the same bus added twice is one; another bus of the same name is delivered to as well, under its own key", async () => {
+  const { billingBoundedContext } = application();
+  const otherBilling = new BoundedContext("billing");
+  const heardByOther: string[] = [];
+  class AlsoIssue extends Feature<InvoiceVoided, void> {
+    execute(event: InvoiceVoided): void {
+      heardByOther.push(event.invoice_id);
+    }
+  }
+  otherBilling.feature(InvoiceVoided)(AlsoIssue);
+  const subscriber = new Subscriber(
+    billingBoundedContext,
+    billingBoundedContext,
+    otherBilling,
   );
+  const handled = await subscriber.handle(new InvoiceVoided("i-9"));
+  assert.deepEqual(
+    handled.map((one) => one.boundedContext),
+    ["billing", "billing#2"],
+  );
+  assert.deepEqual(heardByOther, ["i-9"]);
 });

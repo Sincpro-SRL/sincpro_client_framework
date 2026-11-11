@@ -46,6 +46,7 @@ export { Publisher } from "@sincpro/client-framework/event_driven/entrypoint/pub
 export {
   CommandNotConsumed,
   type HearingContext,
+  type NamedSubscriberOptions,
   Subscriber,
   type SubscriberOptions,
 } from "@sincpro/client-framework/event_driven/entrypoint/subscriber";

@@ -75,7 +75,8 @@ server-side render, in a script and in a test, unchanged.**
     subscribes to them the same way: the envelope that travels beside an event (its flow and
     its cause), how a Command and an event are written and read (each its own way), the
     `EventQueue` and `Subscribes` ports, a `Publisher` a Feature holds, the `Subscriber` — the
-    queue's only entrypoint: events heard, Commands consumed only when declared —, the queue that
+    queue's composite entrypoint: its event handlers and the buses added to it, Commands
+    consumed only when declared —, the queue that
     delivers in the call, and the stored queue's rules over an `EventStore` the platform plugs.
     The guidelines, the rules and the contracts are here; where events are kept is the
     platform's.

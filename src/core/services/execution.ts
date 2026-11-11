@@ -72,6 +72,11 @@ export interface ExecutionOptions {
   /** What cancels a root run; a child inherits its parent's. */
   readonly signal?: AbortSignal;
   readonly featureBus: (execution: Execution) => object;
+  /**
+   * The bounded context an event handler of it reaches as `this.boundedContext`, bound to the
+   * handler's run; none for a Feature, nor for a `Subscriber`'s handler.
+   */
+  readonly boundedContextOf?: (execution: Execution) => object;
   /** What runs around the service, outermost first. */
   readonly interceptors: readonly Interceptor[];
   /** Who hears it start and answer. */
@@ -128,6 +133,7 @@ function serviceView(target: object, options: ExecutionOptions, execution: Execu
   const dependencies = new Map<string, unknown>();
   const logger = executionLogger(options.layer, execution);
   let features: object | undefined;
+  let own: object | undefined;
   return new Proxy(target, {
     get(held, property, receiver) {
       if (property === "context") return execution.context;
@@ -137,6 +143,9 @@ function serviceView(target: object, options: ExecutionOptions, execution: Execu
       if (property === "execution") return execution;
       if (property === "featureBus" && options.layer === "application_service") {
         return (features ??= options.featureBus(execution));
+      }
+      if (property === "boundedContext" && options.boundedContextOf) {
+        return (own ??= options.boundedContextOf(execution));
       }
       if (typeof property === "string" && options.dependencies.has(property)) {
         if (!dependencies.has(property)) {
@@ -163,6 +172,7 @@ function serviceView(target: object, options: ExecutionOptions, execution: Execu
         property === "signal" ||
         property === "execution" ||
         property === "featureBus" ||
+        property === "boundedContext" ||
         (typeof property === "string" && options.dependencies.has(property))
       ) {
         throw new Error(
@@ -174,8 +184,13 @@ function serviceView(target: object, options: ExecutionOptions, execution: Execu
   });
 }
 
+/** What a run calls on its service: `handle` for an event handler, `execute` for a use case. */
+function entryOf(layer: Layer): "handle" | "execute" {
+  return layer === "event_handler" ? "handle" : "execute";
+}
+
 /**
- * One pipeline for every registered Feature and ApplicationService.
+ * One pipeline for every registered Feature, ApplicationService and event handler.
  *
  * 1. A span `<bounded context>/<Service>`, a child of the run above it when there is one (its
  *    parent, or the caller from outside), and the execution every dependency, `this.logger` and
@@ -296,7 +311,9 @@ export async function executeService(
   };
 
   const view = serviceView(target, options, execution);
-  const execute = Reflect.get(target, "execute") as (executable: Executable) => unknown;
+  const execute = Reflect.get(target, entryOf(options.layer)) as (
+    executable: Executable,
+  ) => unknown;
   const service = (current: Executable) =>
     Promise.resolve(Reflect.apply(execute, view, [current]));
   let answer: unknown;
