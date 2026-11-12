@@ -10,7 +10,7 @@ how a web application adopts it — a plan, not a claim that it is adopted.
 | Pipeline              | interceptors, `onStart` / `onCompletion` / `onFailure`                                       | What a screen shows of a run: busy, done, failed                                     |
 | Observability         | Tracer, ErrorReporter, Logger ports; console by default                                      | `browserTracer`, `sentryReporter` (web-framework), plugged in `main`                 |
 | Context               | levels, `ContextStore`, `memoryContexts()`                                                   | `useContextValues`; a store over `sessionStorage` if it must survive a reload        |
-| Events                | `Publisher`, `Subscriber`, `syncQueue`, the `EventQueue` port                                | `syncQueue` by default; IndexedDB to work offline; `BroadcastChannel` for other tabs |
+| Events                | `Publisher`, `Subscriber`, `syncQueue`, the `MessageQueue` port                              | `syncQueue` by default; IndexedDB to work offline; `BroadcastChannel` for other tabs |
 | Server                | `OperationTransport` and its REST / JSON-RPC adapters, generated clients, `screensTransport` | Choosing the wire, wiring the session's headers                                      |
 
 ## Startup
@@ -63,9 +63,9 @@ transport (`guardedTransport`) stops a screen from hammering a backend that is d
 The same `Publisher` and `Subscriber` as on a phone; what changes is the queue:
 
 - **`syncQueue(subscriber)`** — in the call, in memory: what a single tab needs.
-- **`storedQueue({ store, subscriber })`** — stored first, delivered in order, retried and set
-  aside by the same rules as on a phone. `memoryEventStore()` in a tab; an IndexedDB
-  `EventStore` for a point of sale that works offline.
+- **`storedQueue({ store, subscriber })`** — stored first, delivered in order and decided by
+  the same verdict as on a phone. `memoryMessageStore()` in a tab; an IndexedDB
+  `MessageStore` for a point of sale that works offline.
 - **`BroadcastChannel`** — an adapter that also tells the other tabs; each tab's `Subscriber`
   executes the event in its own bounded contexts.
 - **From the server** — with the backend's server-sent events, an entrypoint that rebuilds each

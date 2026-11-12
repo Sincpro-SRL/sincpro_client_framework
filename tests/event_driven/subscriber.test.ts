@@ -13,7 +13,7 @@ import {
   eventMessageOf,
   failureOf,
   Feature,
-  memoryEventStore,
+  memoryMessageStore,
   Money,
   storedQueue,
   Subscriber,
@@ -170,12 +170,12 @@ test("a Command travels by its identity: one without it does not travel", () => 
 
 test("the stored queue delivers a generated event through the subscriber, rebuilt as its data", async () => {
   const { heard, accountingBoundedContext } = application();
-  const store = memoryEventStore();
+  const store = memoryMessageStore();
   const queue = storedQueue({ store, subscriber: new Subscriber(accountingBoundedContext) });
   const shipped = { name: "shop.order.v1.shipped", order_id: "o-2" } satisfies OrderShipped;
   await queue.put(shipped, envelopeOf(shipped));
   await queue.drain();
-  assert.equal(store.events[0]?.state, "delivered");
+  assert.equal(store.messages[0]?.state, "delivered");
   assert.deepEqual(heard, ["accounting shop.order.v1.shipped"]);
 });
 

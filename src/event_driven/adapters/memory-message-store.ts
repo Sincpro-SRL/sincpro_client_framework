@@ -1,19 +1,21 @@
 import type {
-  EventStore,
-  StoredEvent,
+  MessageStore,
+  StoredMessage,
 } from "@sincpro/client-framework/event_driven/domain/store";
 
 /** A memory store, and what it holds — in the order added — for whoever inspects it. */
-export type MemoryEventStore = EventStore & { readonly events: readonly StoredEvent[] };
+export type MemoryMessageStore = MessageStore & {
+  readonly messages: readonly StoredMessage[];
+};
 
 /**
- * The events of a stored queue in this process's memory: what a browser tab or a test keeps.
+ * The messages of a stored queue in this process's memory: what a browser tab or a test keeps.
  * Gone with the process — a phone's store is a table.
  */
-export function memoryEventStore(): MemoryEventStore {
-  const held: StoredEvent[] = [];
+export function memoryMessageStore(): MemoryMessageStore {
+  const held: StoredMessage[] = [];
   return {
-    get events() {
+    get messages() {
       return [...held];
     },
     add(stored) {

@@ -13,6 +13,7 @@ import type {
   EventDescriptor,
   Executable,
   ExecutableOf,
+  RemoteCommand,
   RemoteEvent,
 } from "@sincpro/client-framework/core/domain/dto";
 import type { Cause, ExecuteOptions } from "@sincpro/client-framework/core/domain/pipeline";
@@ -44,7 +45,6 @@ import type {
   Subscribes,
 } from "@sincpro/client-framework/event_driven/domain/queue";
 import {
-  causeOf,
   commandFrom,
   envelopeFrom,
   eventFrom,
@@ -350,14 +350,27 @@ export class Subscriber<D extends object = Record<never, never>> implements Subs
         throw new CommandNotConsumed(message.type);
       return [];
     }
-    const bus = this.buses.find(
-      (one) => one.context.commandTypeOf(message.type) !== undefined,
-    );
+    return this.execute(commandFrom(commandType, message.data), envelopeFrom(message), skip);
+  }
+
+  /**
+   * A Command this subscriber consumes, executed by the one bus that registered it — continuing
+   * the envelope's flow and trace when there is one —; nothing when that bus is in `skip`.
+   * One it does not consume is `CommandNotConsumed`: a bus never runs a Command it did not ask
+   * for.
+   * Final: what the bus answered, or failed with.
+   */
+  async execute(
+    command: AnyCommand | RemoteCommand,
+    envelope?: Envelope,
+    skip: readonly string[] = [],
+  ): Promise<Handled[]> {
+    const identity = identityOf(command)?.wire ?? "";
+    if (this.commandTypeOf(identity) === undefined) throw new CommandNotConsumed(identity);
+    const bus = this.buses.find((one) => one.context.commandTypeOf(identity) !== undefined);
     if (bus === undefined || skip.includes(bus.key)) return [];
     try {
-      const answer = await bus.context.execute(commandFrom(commandType, message.data), {
-        cause: causeOf(message),
-      });
+      const answer = await bus.context.execute(command, envelope ? { cause: envelope } : {});
       return [{ boundedContext: bus.key, answer }];
     } catch (error) {
       return [{ boundedContext: bus.key, error }];
