@@ -1,17 +1,14 @@
-import type {
-  Logger,
-  LogLayer,
-  LogLevel,
+import {
+  isLogLevel,
+  type LogFilter,
+  type Logger,
+  speaks,
 } from "@sincpro/client-framework/observability/domain/logging";
 
-export type ConsoleLoggerOptions = {
-  mode: "development" | "production";
-  /** Development INFO/DEBUG threshold. WARN/ERROR are never hidden by layer/level masks. */
-  level?: LogLevel;
-  layers?: Partial<Record<LogLayer, boolean>>;
+/** The console's mode, and which INFO and DEBUG lines it prints (`LogFilter`). */
+export type ConsoleLoggerOptions = LogFilter & {
+  readonly mode: "development" | "production";
 };
-
-const RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
 /**
  * Built-in console engine: silent in production, configurable
@@ -30,17 +27,17 @@ export function consoleLogger(options: ConsoleLoggerOptions): Logger {
   if (mode !== "development" && mode !== "production") {
     throw new TypeError("Console logger mode must be development or production");
   }
-  const level = options.level ?? "debug";
-  if (!Object.hasOwn(RANK, level)) {
+  if (options.level !== undefined && !isLogLevel(options.level)) {
     throw new TypeError("Console logger level must be debug, info, warn or error");
   }
-  const layers = { ...options.layers };
+  const filter: LogFilter = {
+    level: options.level ?? "debug",
+    layers: { ...options.layers },
+    boundedContexts: { ...options.boundedContexts },
+  };
   return {
     log(record) {
-      if (mode === "production") return;
-      if (record.level !== "warn" && record.level !== "error") {
-        if (layers[record.layer] === false || RANK[record.level] < RANK[level]) return;
-      }
+      if (mode === "production" || !speaks(record, filter)) return;
       const prefix = `${record.timestamp} [${record.layer}] ${record.level.toUpperCase()}`;
       const method =
         record.level === "debug"
