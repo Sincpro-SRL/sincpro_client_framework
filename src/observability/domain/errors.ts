@@ -21,6 +21,18 @@ export type ErrorAbout = {
   release?: string;
   /** The run's tenant — its context's, else the deployment's —, when there is one. */
   tenant?: string;
+  /** The run's user — its context's `user_id` —: the event's user. */
+  userId?: string;
+  /** The name and version out of the release (`identityOf`). */
+  serviceName?: string;
+  serviceVersion?: string;
+  /** Where it ran: its bounded context, its layer and its span. */
+  boundedContext?: string;
+  layer?: string;
+  spanId?: string;
+  /** The class's name (`error.type`) and the backend's failure kind. */
+  errorType?: string;
+  kind?: string;
 };
 
 /** Reports what nobody expected. One per platform; none when nothing reports. */

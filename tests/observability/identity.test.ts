@@ -30,7 +30,17 @@ test("the release is read with sincpro_framework's rules — the same name and v
     ["app@1.2.3", "app", "1.2.3"],
   ];
   for (const [release, serviceName, serviceVersion] of cases) {
-    assert.deepEqual(identityOf(release), { release, serviceName, serviceVersion }, release);
+    assert.deepEqual(
+      identityOf(release),
+      {
+        release,
+        serviceName,
+        serviceVersion,
+        tenantKeys: ["tenant", "tenant_id"],
+        userKeys: ["user_id"],
+      },
+      release,
+    );
   }
   assert.equal(identityOf("app:1.0", " acme ").tenant, "acme");
   assert.equal(identityOf("app:1.0", "").tenant, undefined);

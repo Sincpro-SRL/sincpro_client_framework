@@ -1,6 +1,7 @@
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
-import { tenantOf } from "@sincpro/client-framework/observability/domain/identity";
+import { tenantOf, userOf } from "@sincpro/client-framework/observability/domain/identity";
 import type {
+  FailureDescription,
   LayerLogger,
   Logger,
   LogLayer,
@@ -57,17 +58,19 @@ function deliver(logger: Logger | undefined, record: LogRecord): void {
  * and the tenant (the run's context's, else the deployment's), when there is one.
  */
 function recordOf(
-  fields: Omit<LogRecord, "release" | "tenant">,
+  fields: Omit<LogRecord, "release" | "tenant" | "userId">,
   correlation: Correlation,
 ): LogRecord {
   const { runContext, ...where } = correlation;
   const identity = observabilityNow().identity;
   const tenant = tenantOf(runContext ?? {}, identity);
+  const userId = userOf(runContext ?? {}, identity);
   return {
     ...fields,
     ...where,
     ...(identity ? { release: identity.release } : {}),
     ...(tenant ? { tenant } : {}),
+    ...(userId ? { userId } : {}),
   };
 }
 
@@ -148,17 +151,13 @@ export function combineLoggers(...loggers: readonly Logger[]): Logger {
 export function logExecution(
   layer: RunLogLayer,
   execution: Execution,
-  completed?: { outcome: Outcome; durationMs: number },
+  completed?: { outcome: Outcome; durationMs: number; failure?: FailureDescription },
 ): void {
   const outcome = completed?.outcome;
-  const level: LogLevel =
-    outcome === "failed"
-      ? "error"
-      : outcome === "refused"
-        ? "warn"
-        : completed
-          ? "info"
-          : "debug";
+  // As sincpro_framework: an unexpected failure is an error; an expected one — a refusal, the
+  // caller leaving — is information, without a stack.
+  const level: LogLevel = outcome === "failed" ? "error" : completed ? "info" : "debug";
+  const failure = completed?.failure;
   deliver(
     processSink(),
     recordOf(
@@ -167,12 +166,21 @@ export function logExecution(
         level,
         layer,
         event: completed ? "execution.finished" : "execution.started",
-        message: completed ? `Execution ${completed.outcome}` : "Execution started",
+        message: completed
+          ? `Execution ${completed.outcome}${failure ? `: ${summaryOf(failure)}` : ""}`
+          : "Execution started",
         ...(completed ? completed : {}),
       },
       correlationOf(execution),
     ),
   );
+}
+
+/** `TypeError: x is undefined at SaveServer.execute (…)`, or where it failed when it was another run. */
+function summaryOf(failure: FailureDescription): string {
+  const what = failure.message ? `${failure.type}: ${failure.message}` : failure.type;
+  if (failure.failedIn) return `${what} (in ${failure.failedIn})`;
+  return failure.at ? `${what} at ${failure.at}` : what;
 }
 
 /**
@@ -188,7 +196,8 @@ export function logHandled(
     recordOf(
       {
         timestamp: new Date().toISOString(),
-        level: "info",
+        // As sincpro_framework: an error a handler answered is a warning.
+        level: "warn",
         layer,
         event: "error.handled",
         message: "Error handled",

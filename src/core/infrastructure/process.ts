@@ -7,6 +7,7 @@ import {
 } from "@sincpro/client-framework/observability/adapters/console";
 import type { ErrorReporter } from "@sincpro/client-framework/observability/domain/errors";
 import {
+  type IdentityKeys,
   identityOf,
   type ProcessIdentity,
 } from "@sincpro/client-framework/observability/domain/identity";
@@ -64,9 +65,12 @@ export type ProcessOptions = {
   /**
    * Who is running — the backend's `APP_RELEASE` (`<name>:<version>`) and `TENANT`. Every span,
    * log line and report says its `release` and, when there is one, its `tenant` (the run's
-   * context's, else this one); `service.name` and `service.version` are read out of the release.
+   * context's, else this one) and its `user_id`; `service.name` and `service.version` are read
+   * out of the release. Tenant and user are optional, and so are their keys: `keys` names the
+   * context keys they are read from (`tenant`/`tenant_id` and `user_id` by default) — an
+   * application whose tenant is its company says `keys: { tenant: "company_id" }`.
    */
-  identity?: { release: string; tenant?: string };
+  identity?: { release: string; tenant?: string; keys?: IdentityKeys };
   /** The platform's (OpenTelemetry in a browser, a queue on a phone, memory in a test). */
   tracer?: Tracer;
   /** The platform's (GlitchTip, Sentry, memory in a test). Only what nobody expected reaches it. */
@@ -98,7 +102,7 @@ export function configureProcess(options: ProcessOptions = {}): void {
   const logger = loggingEngine(options.logger ?? {});
   replaceObservability({
     identity: options.identity
-      ? identityOf(options.identity.release, options.identity.tenant)
+      ? identityOf(options.identity.release, options.identity.tenant, options.identity.keys)
       : undefined,
     tracer: options.tracer ?? NO_TRACER,
     reporter: options.reporter,

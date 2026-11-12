@@ -69,12 +69,13 @@ export function openTelemetryTracer(tracer: OtelTracer): Tracer {
 }
 
 /**
- * How the use case ended, said the way OpenTelemetry reads it: `failed` is an error with its
- * exception; `refused` and `aborted` are expected answers — said in `sincpro.outcome`, never as
- * an error, the way the backend leaves a refusal out of its error rate.
+ * How the use case ended, said the way OpenTelemetry reads it: `failed` is an error — with its
+ * exception on the span where it was raised, the only one handed it —; `refused` and `aborted`
+ * are expected answers, never an error, the way the backend leaves a refusal out of its error
+ * rate. `sincpro.outcome` (`ok` or the failure's kind), `sincpro.fault` and `error.type` are set
+ * by the run before it ends.
  */
 function close(span: OtelSpan, outcome: Outcome, error: unknown): void {
-  span.setAttribute("sincpro.outcome", outcome);
   if (outcome === "failed") {
     if (error instanceof Error) span.recordException(error);
     span.setStatus({
