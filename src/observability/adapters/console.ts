@@ -17,6 +17,14 @@ const RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
  * Built-in console engine: silent in production, configurable
  * development layers, and WARN/ERROR preserved. Other sinks are filtered independently.
  */
+/** The failure as an Error to print: its type as its name, its message, its stack. */
+function errorOf(stack: string, failure: { type?: string; message?: string }): Error {
+  const shown = new Error(failure.message ?? failure.type ?? "");
+  shown.name = failure.type ?? "Error";
+  shown.stack = stack;
+  return shown;
+}
+
 export function consoleLogger(options: ConsoleLoggerOptions): Logger {
   const mode = options.mode;
   if (mode !== "development" && mode !== "production") {
@@ -42,15 +50,21 @@ export function consoleLogger(options: ConsoleLoggerOptions): Logger {
             : record.level === "error"
               ? console.error
               : console.log;
-      // An unexpected failure's stack prints as a stack, readable, after its line — not escaped
-      // inside the record.
       const stack = record.failure?.stack;
       if (!stack) {
         method.call(console, prefix, record.message, record);
         return;
       }
-      const { stack: _printedBelow, ...failure } = record.failure ?? {};
-      method.call(console, prefix, record.message, { ...record, failure }, `\n${stack}`);
+      // An unexpected failure goes as an Error — its name, its message, its stack —: what React
+      // Native's LogBox, Expo's terminal and a browser print as a failure, with its code frame.
+      // A bare stack string read as one printed `ERROR null null`.
+      const { stack: _shownBelow, ...failure } = record.failure ?? {};
+      method.call(
+        console,
+        `${prefix} ${record.message}`,
+        { ...record, failure },
+        errorOf(stack, failure),
+      );
     },
   };
 }
