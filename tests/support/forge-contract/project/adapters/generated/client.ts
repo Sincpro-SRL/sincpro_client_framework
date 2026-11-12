@@ -4,7 +4,7 @@
 
 import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
-import type * as dto from "./domain";
+import type * as dto from "../../domain/generated/index";
 
 /** Every operation of «project», as data: what it is, and how each wire reaches it. */
 export const operations = {

@@ -10,7 +10,7 @@ import {
 import { labelOf } from "@sincpro/criteria";
 import { test } from "vitest";
 
-import { entities } from "../support/forge-contract/project/entities";
+import { entities } from "../support/forge-contract/project/adapters/generated/entities";
 
 const project = JSON.parse(
   readFileSync(

@@ -18,7 +18,22 @@ const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
  * whole, the generated files came out importing `"../index.js"` and `"./domain.js"`.
  */
 export const FRAMEWORK = ["@sincpro", "client-framework"].join("/");
-export const DOMAIN_MODULE = [".", "domain"].join("/");
+
+/**
+ * Where `generate` writes each layer of a bounded context, from its folder: the domain's types
+ * (`models.ts`, `commands.ts`, `events.ts`, `index.ts`) and the adapters over the service's wire
+ * (`client.ts`, `entities.ts`) — each beside the code of its layer, as the backend lays it out.
+ */
+export const GENERATED_DOMAIN = ["domain", "generated"].join("/");
+export const GENERATED_ADAPTERS = ["adapters", "generated"].join("/");
+
+/** What a generated adapter imports the domain's types from: `../../domain/generated/index`. */
+export const DOMAIN_MODULE = ["..", "..", GENERATED_DOMAIN, "index"].join("/");
+
+/** A file of `domain/generated/` as its sibling imports it: `models` → `./models`. */
+export function siblingOf(file: string): string {
+  return [".", file].join("/");
+}
 
 /** A name of the server's as a TypeScript identifier: `shop__orders__Line` stays, `-` is `_`. */
 export function identifierOf(name: string): string {

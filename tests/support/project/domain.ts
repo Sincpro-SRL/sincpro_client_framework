@@ -5,7 +5,7 @@ import type {
   CommandSendIssue as SendInput,
   ResponseCancelIssue,
   ResponseSendIssue,
-} from "../forge-contract/project/domain";
+} from "../forge-contract/project/domain/generated";
 import type { ProjectContext } from "./infrastructure/dependencies";
 
 export class CancelIssue extends Command<ResponseCancelIssue> implements CancelInput {

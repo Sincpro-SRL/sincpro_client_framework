@@ -1,7 +1,7 @@
 import { restOperations, restTransport } from "@sincpro/client-framework";
 import type { BoundedContext } from "@sincpro/client-framework/core";
 
-import { clientOf } from "../../forge-contract/project/client";
+import { clientOf } from "../../forge-contract/project/adapters/generated/client";
 
 /** Who is signed in, as the services of «project» ask it. */
 export type Session = { readonly user: string | null; require(): void };

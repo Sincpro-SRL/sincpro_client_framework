@@ -19,7 +19,10 @@ import {
 import { memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
 
-import { clientOf, operations } from "../support/forge-contract/project/client";
+import {
+  clientOf,
+  operations,
+} from "../support/forge-contract/project/adapters/generated/client";
 
 type Sent = { url: string; method: string; headers: Headers; body: unknown };
 

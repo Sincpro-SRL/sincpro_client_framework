@@ -1,7 +1,7 @@
 import type {
   ResponseCancelIssue,
   ResponseSendIssue,
-} from "../../forge-contract/project/domain";
+} from "../../forge-contract/project/domain/generated";
 import type { CancelIssue, RunningWith, SendIssue } from "../domain";
 import { Feature } from "../infrastructure/bounded_context";
 import type { ProjectContext } from "../infrastructure/dependencies";

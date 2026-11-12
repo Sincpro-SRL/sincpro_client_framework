@@ -10,7 +10,7 @@ import { memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
 
 import { CommandRequestCancellation, projectOf, ResponseCancelIssue } from "../support/core";
-import { clientOf } from "../support/forge-contract/project/client";
+import { clientOf } from "../support/forge-contract/project/adapters/generated/client";
 
 beforeEach(() => configureProcess());
 

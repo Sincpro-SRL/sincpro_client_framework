@@ -171,8 +171,8 @@ their entries — `operations.X` (an identity), `events.X` (a wire name) — as 
 registered for, and executes them as data:
 
 ```ts
-import { events, operations } from "../generated/client";
-import type * as remote from "../generated/domain";
+import { events, operations } from "../adapters/generated/client";
+import type * as remote from "../domain/generated";
 
 @projectBoundedContext.feature([events.IssueClosed, operations.CommandArchiveIssue])
 class Archive extends Feature<remote.IssueClosed | RemoteCommand<remote.CommandArchiveIssue>, void> {
@@ -358,7 +358,7 @@ Three things a platform keeps in mind:
   `static fromJSON` to read them back as such.
 
 The events a remote service publishes arrive as generated types (`DomainEvent` in
-`generated/domain.ts`, a union narrowed by `name`); a local event is a class, like a local
+`domain/generated/events.ts`, a union narrowed by `name`); a local event is a class, like a local
 Command.
 
 ## Extending the pipeline
@@ -632,7 +632,7 @@ which operation, with what input, and the adapter the application injects decide
 travels.
 
 ```ts
-import { clientOf } from "./generated/client";
+import { clientOf } from "./adapters/generated/client";
 
 // pick the wire; the client, the Features and the tests stay the same
 const forge = clientOf(restOperations(restTransport({ base: "/v1", headers: session })));
@@ -693,20 +693,29 @@ Every operation in `operations` carries its identity and each wire's binding (`r
 
 ```bash
 python -m sincpro_framework.entrypoints export-client-contract app.http:gateways contracts [--events]
-sincpro-client generate contracts/project.contract.json --out src/domains/project/generated --domain project
+sincpro-client generate contracts/project.contract.json --out src/domains/project --domain project
 sincpro-client scaffold contracts/project.contract.json --out src/domains/project
 sincpro-client check --root src
 ```
 
-`generate` writes, from the contract the backend exports — never edited, written again whole:
+`generate` writes, from the contract the backend exports — never edited, written again whole —,
+each file in the layer it belongs to, under the bounded context's folder (`--out`):
 
-| File          | What                                                                                          |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `domain.ts`   | a type per model, per `<Name>Input`, per operation's input and answer, per domain event       |
-| `client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
-| `entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                   |
+| File                             | What                                                                                          |
+| -------------------------------- | --------------------------------------------------------------------------------------------- |
+| `domain/generated/models.ts`     | the entities and value objects: a type per model, and the definitions they hold               |
+| `domain/generated/commands.ts`   | every operation's Command and Response, and the `<Name>Input` a caller sends                  |
+| `domain/generated/events.ts`     | the domain events and `DomainEvent`, their union — when the contract carries them             |
+| `domain/generated/index.ts`      | the three, re-exported: `import type * as remote from "../domain/generated"`                  |
+| `adapters/generated/client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
+| `adapters/generated/entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                   |
 
-Each method takes the operation's input and answers its answer, as `domain.ts` types them — a
+The backend keeps them apart — the domain's words, the application layer's DTOs, the facts, the
+adapters to another system —, and so does the application: each beside its own code of that layer.
+A shared definition goes with the first kind that names it (the models, then the operations, then
+the events), and a file that names one written elsewhere imports it from there.
+
+Each method takes the operation's input and answers its answer, as `commands.ts` types them — a
 search answers its `Response…` with its records and cursor, as the backend's callers get it, on
 every wire. `scaffold` writes, once, the application's own files: its dependencies (the client
 over the `operations` the application exports — `--operations <module>` —), its `framework.ts`
@@ -719,7 +728,7 @@ exported with `--events`. Then each event is a type as it is received — every 
 `name` its wire name as a literal — and `DomainEvent`, their union, narrows by `name`:
 
 ```ts
-import type * as remote from "./generated/domain";
+import type * as remote from "./domain/generated";
 
 function subjectOf(event: remote.DomainEvent): string {
   switch (event.name) {
@@ -730,7 +739,7 @@ function subjectOf(event: remote.DomainEvent): string {
 }
 ```
 
-`events` in `client.ts` says, per event, its wire name and whether the bounded context records it
+`events` in `adapters/generated/client.ts` says, per event, its wire name and whether the bounded context records it
 (its aggregates' own) or handles it (a Feature subscribes).
 
 ### Types, not classes
@@ -747,13 +756,13 @@ types; the application's own Commands are classes, written by hand.
   a local Feature, through the injected client.
 - **Events read best as a union.** A stream of facts — a queue, a history page — is narrowed by
   `name`, with no registry of constructors to rebuild each one.
-- **Nothing runs.** `domain.ts` adds no byte to a bundle and no side effect; a contract of three
+- **Nothing runs.** `domain/generated/` adds no byte to a bundle and no side effect; a contract of three
   hundred models costs nothing at runtime.
 
 A local class takes the contract's shape and stays checked against it:
 
 ```ts
-import type * as remote from "../generated/domain";
+import type * as remote from "../domain/generated";
 
 class CommandCancelIssue
   extends Command<ResponseCancelIssue>
@@ -800,9 +809,10 @@ src/
   domains/
     common/infrastructure/operations.ts  export const operations — the wire every client uses
     <bounded context>/
-      generated/                       sincpro-client generate — never edited
       domain/                          local Commands, Responses, DomainEvents, value rules
+        generated/                       sincpro-client generate: models, commands, events — never edited
       adapters/                        repositories, printers, other systems
+        generated/                       sincpro-client generate: the client and the entities
       services/                        the use cases, one folder per aggregate or entity
         <aggregate>/                     sale_order/: its Features and ApplicationServices
           confirm-quotation.feature.ts

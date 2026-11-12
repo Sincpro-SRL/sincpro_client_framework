@@ -4,7 +4,7 @@
 
 import { entity } from "@sincpro/client-framework";
 
-import type * as dto from "./domain";
+import type * as dto from "../../domain/generated/index";
 
 /**
  * `Issue`: its list, its record and the Commands that run on it or create it.

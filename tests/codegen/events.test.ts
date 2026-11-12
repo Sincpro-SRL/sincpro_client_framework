@@ -5,11 +5,15 @@ import { join, resolve } from "node:path";
 
 import {
   clientFileOf,
-  domainFileOf,
+  domainFilesOf,
+  generatedFilesOf,
   type Metamodel,
 } from "@sincpro/client-framework/codegen";
 import ts from "typescript";
 import { test } from "vitest";
+
+/** Every file of `domain/generated/` as one text: what a test reads a type in, wherever it went. */
+const domainOf = (metamodel: Metamodel) => Object.values(domainFilesOf(metamodel)).join("\n");
 
 /** A contract exported with its events (`export-client-contract --events`). */
 const shop: Metamodel = {
@@ -94,7 +98,7 @@ const shop: Metamodel = {
 };
 
 test("each event is a type as it is received: every field there, its wire name a literal", () => {
-  const source = domainFileOf(shop);
+  const source = domainOf(shop);
   assert.ok(
     source.includes(
       [
@@ -127,7 +131,7 @@ test("each event is a type as it is received: every field there, its wire name a
 
 test("DomainEvent is the union of every event, in the order of their wire names", () => {
   assert.ok(
-    domainFileOf(shop).endsWith(
+    domainFilesOf(shop)["events.ts"]!.endsWith(
       "/** Every domain event of «shop» in the contract: a `switch` on `name` tells which. */\nexport type DomainEvent =\n  | InvoiceVoided\n  | OrderPaid;\n",
     ),
   );
@@ -148,7 +152,9 @@ test("the client holds every event as data: its wire name, and who records or ha
 
 test("a contract without events writes neither the union nor the data", () => {
   const { events: _, ...plain } = shop;
-  assert.equal(domainFileOf(plain).includes("DomainEvent"), false);
+  const files = domainFilesOf(plain);
+  assert.equal(files["events.ts"], undefined);
+  assert.equal(Object.values(files).join("\n").includes("DomainEvent"), false);
   assert.equal(clientFileOf(plain).includes("export const events"), false);
 });
 
@@ -174,7 +180,7 @@ test("an event whose class is a model is that model, narrowed to its name", () =
       },
     },
   };
-  const source = domainFileOf(based);
+  const source = domainOf(based);
   assert.equal(source.match(/export type ShopEvent =/g)?.length, 1);
   assert.ok(source.includes('  | (ShopEvent & { name: "ShopEvent" })\n'));
 });
@@ -188,7 +194,7 @@ test("two events of one class name are refused, naming both", () => {
     },
   };
   assert.throws(
-    () => domainFileOf(twice),
+    () => domainOf(twice),
     /OrderPaid.*shop\.order\.v1\.paid|shop\.order\.v2\.paid/s,
   );
 });
@@ -196,15 +202,15 @@ test("two events of one class name are refused, naming both", () => {
 test("what is generated compiles, and a switch on name narrows the union", () => {
   const root = mkdtempSync(join(tmpdir(), "events-"));
   symlinkSync(resolve("node_modules"), join(root, "node_modules"));
-  const generated = join(root, "generated");
-  mkdirSync(generated);
-  writeFileSync(join(generated, "domain.ts"), domainFileOf(shop));
-  writeFileSync(join(generated, "client.ts"), clientFileOf(shop));
+  for (const [path, source] of Object.entries(generatedFilesOf(shop))) {
+    mkdirSync(join(root, path, ".."), { recursive: true });
+    writeFileSync(join(root, path), source);
+  }
   writeFileSync(
     join(root, "subscriber.ts"),
     [
-      'import { events } from "./generated/client";',
-      'import type * as remote from "./generated/domain";',
+      'import { events } from "./adapters/generated/client";',
+      'import type * as remote from "./domain/generated";',
       "",
       "export function subjectOf(event: remote.DomainEvent): string {",
       "  switch (event.name) {",

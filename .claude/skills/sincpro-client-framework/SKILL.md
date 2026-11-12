@@ -72,9 +72,10 @@ src/
   domains/
     common/infrastructure/operations.ts  export const operations — the wire every client uses
     <bounded context>/
-      generated/                         sincpro-client generate — never edited
       domain/                            local Commands, Responses, DomainEvents, value rules
+        generated/                         sincpro-client generate: models, commands, events — never edited
       adapters/                          repositories, printers, other systems — ports' adapters
+        generated/                         sincpro-client generate: the client and the entities
       services/                          the use cases, one folder per aggregate or entity
         <aggregate>/                       sale_order/: Features and ApplicationServices of it
           <entity of the aggregate>/       payments/: a related entity with use cases of its own
@@ -137,8 +138,8 @@ export const operations = guardedTransport(
 
 The generated `clientOf(operations)` is injected as a dependency (`addDependency("client", …)`); a
 run binds it, so each call carries `traceparent`, `sincpro-context` and the run's signal. Each
-method takes the operation's input DTO and answers its answer DTO, as `generated/domain.ts` types
-them. A local Command may `implements remote.CommandX` (`import type * as remote`).
+method takes the operation's input DTO and answers its answer DTO, as `domain/generated/commands.ts`
+types them. A local Command may `implements remote.CommandX` (`import type * as remote`).
 
 ### Start a bounded context (as the backend's `dependencies.py` + `framework.py`)
 
