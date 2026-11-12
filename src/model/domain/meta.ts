@@ -30,8 +30,8 @@ export type FieldOptions = {
   help?: Words;
   required?: boolean;
   readonly?: boolean;
-  /** Holds no value sometimes. A nullable field is never sortable: keyset paging over it
-   *  loses the rows that hold NULL, which is why the framework refuses to order by one. */
+  /** Holds no value sometimes. It still orders, as sincpro_framework orders it: NULL first
+   *  ascending and last descending, and the keyset walks past it. */
   nullable?: boolean;
   default?: unknown;
   /** Form hints over the record, as sincpro_framework's `Presentation` publishes them. */
@@ -73,7 +73,7 @@ function scalar(type: FieldType, options: FieldOptions = {}): FieldMeta {
     type,
     kind: "scalar",
     nullable,
-    sortable: !nullable && !listed,
+    sortable: !listed,
     groupable: !listed,
     ops,
     ...(options.label === undefined ? {} : { label: words(options.label) }),

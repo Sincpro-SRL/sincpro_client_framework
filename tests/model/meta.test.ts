@@ -15,10 +15,11 @@ test("a hand-written definition takes the same operators the framework publishes
   assert.deepEqual(field.boolean().ops, tenantMeta.fields["active"]?.ops);
 });
 
-test("a nullable field is never sortable: keyset paging over it loses rows", () => {
-  assert.equal(field.date({ nullable: true }).sortable, false);
+test("a nullable field orders, as the framework orders it: NULL first, then last", () => {
+  assert.equal(field.date({ nullable: true }).sortable, true);
   assert.ok(field.date({ nullable: true }).ops.includes("is null"));
-  assert.ok(!fieldsThatSort(facturaMeta).includes("due_date"));
+  assert.ok(fieldsThatSort(facturaMeta).includes("due_date"));
+  assert.ok(!fieldsThatSort(facturaMeta).includes("tags"), "a list has no order to page by");
 });
 
 test("relations and value objects are not filtered directly", () => {
