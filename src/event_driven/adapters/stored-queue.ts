@@ -41,6 +41,12 @@ export type StoredQueueOptions = {
    * forever. `Infinity` keeps trying.
    */
   readonly maxAttempts?: number;
+  /**
+   * How many attempts this event gets, when its kind of event says so — `undefined` keeps
+   * `maxAttempts`. One attempt is no retry on its own: a print the person watched fail is set
+   * aside at once, for them to retry, and never comes out minutes later nor holds the line.
+   */
+  readonly attemptsOf?: (stored: StoredEvent) => number | undefined;
   /** Told each time an event settles — delivered, set aside, or waiting to retry —: a screen's activity. */
   readonly onSettled?: (stored: StoredEvent) => void;
 };
@@ -78,7 +84,7 @@ function described(boundedContext: string, error: unknown): DeliveryFailure {
  * 5. A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
  *    that context aside; any other is tried again after the backoff — or what the failure asks
  *    for (`retryAfter`, an open circuit's time left) —, and what comes after waits, so the
- *    order holds; after `maxAttempts`, it is set aside too.
+ *    order holds; after its attempts (`attemptsOf`, else `maxAttempts`), it is set aside too.
  * Final: delivered when every context has it, set aside — the dead-letter queue — when one
  *    refused it for good or ran out of attempts; `onSettled` hears either.
  *
@@ -94,6 +100,10 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
   const longestWait = options.longestWait ?? 60_000;
   const maxAttempts = options.maxAttempts ?? 10;
   if (!(maxAttempts >= 1)) throw new TypeError("A stored queue needs one attempt at least");
+  const attemptsOf = (stored: StoredEvent): number => {
+    const own = options.attemptsOf?.(stored);
+    return own !== undefined && own >= 1 ? own : maxAttempts;
+  };
   const rebuild = options.rebuild ?? eventFrom;
   let draining: Promise<void> | undefined;
   let again = false;
@@ -173,7 +183,7 @@ export function storedQueue(options: StoredQueueOptions): StoredQueue {
           retryAfter = Math.max(retryAfter, (failure.retryAfter ?? 0) * 1000);
         }
       }
-      if (repeat && attempts < maxAttempts) {
+      if (repeat && attempts < attemptsOf(head)) {
         const backoff = Math.min(longestWait, firstWait * 2 ** (attempts - 1));
         const at = Date.now() + Math.max(backoff, retryAfter);
         await settle({

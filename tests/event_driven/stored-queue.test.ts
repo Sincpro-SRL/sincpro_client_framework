@@ -210,6 +210,49 @@ test("an event that keeps failing in a way a retry might fix is set aside after 
   assert.deepEqual(seen, ["mail o-9 true"]);
 });
 
+test("an event with one attempt of its own is set aside at its first failure, and the next goes on", async () => {
+  class Unavailable extends Error {
+    static readonly failureKind = "unavailable";
+  }
+  const seen: string[] = [];
+  const store = memoryEventStore();
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(flaky("printer", [new Unavailable("printer off")], seen)),
+    attemptsOf: (stored) => (stored.envelope.id === "e-11" ? 1 : undefined),
+    wait: 60_000,
+  });
+  await queue.put(new OrderPaid("o-11"), envelope("e-11"));
+  await queue.put(new OrderPaid("o-12"), envelope("e-12"));
+  await queue.drain();
+  assert.deepEqual(
+    store.events.map((one) => [one.state, one.attempts, one.retryAt]),
+    [
+      ["set_aside", 1, null],
+      ["delivered", 1, null],
+    ],
+  );
+  assert.equal(store.events[0]?.failures[0]?.kind, "unavailable");
+  assert.deepEqual(seen, ["printer o-12 true"]);
+});
+
+test("an event that says nothing of its attempts keeps the queue's", async () => {
+  class Unavailable extends Error {
+    static readonly failureKind = "unavailable";
+  }
+  const store = memoryEventStore();
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(flaky("printer", [new Unavailable("printer off")], [])),
+    attemptsOf: () => undefined,
+    wait: 60_000,
+  });
+  await queue.put(new OrderPaid("o-13"), envelope("e-13"));
+  await queue.drain();
+  assert.equal(store.events[0]?.state, "pending");
+  assert.ok(store.events[0]?.retryAt);
+});
+
 test("an open circuit makes the queue wait what the circuit asks", async () => {
   const breaker = new CircuitBreaker("odoo", { failures: 1, openFor: 30_000 });
   await assert.rejects(

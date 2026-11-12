@@ -134,7 +134,8 @@ module has only the layers it needs, and says what it offers in its own `index.t
   nothing else needs to know a circuit exists.
 - **Delivery is at least once.** A stored message may run twice after a crash. The use case keys
   its effect by `this.execution.causationId` (the message's id) or by the entity the event names.
-  `maxAttempts` sets aside what keeps failing. One process drains a store. `execution` is
+  `maxAttempts` sets aside what keeps failing; `attemptsOf` gives one kind of event its own
+  (`1`: never retried on its own). One process drains a store. `execution` is
   reserved.
 - **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the
   `Problem` (the same over REST, JSON-RPC and gRPC), then a REST status. A transport of another
