@@ -134,6 +134,7 @@ const PUBLIC = [
   "syncQueue",
   "tenantOf",
   "timeZoneNow",
+  "timeZoneOf",
   "totalOf",
   "travelling",
   "travels",

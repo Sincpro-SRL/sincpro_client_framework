@@ -1,3 +1,4 @@
+import { installTimeZoneKeys } from "@sincpro/client-framework/common/time";
 import { memoryContexts } from "@sincpro/client-framework/context/adapters/memory";
 import type { ContextStore } from "@sincpro/client-framework/context/domain/store";
 import { replaceProcessStore } from "@sincpro/client-framework/context/infrastructure/process";
@@ -71,6 +72,12 @@ export type ProcessOptions = {
    * application whose tenant is its company says `keys: { tenant: "company_id" }`.
    */
   identity?: { release: string; tenant?: string; keys?: IdentityKeys };
+  /**
+   * The context key a run's time zone is read from (`time_zone` by default, see `timeZoneOf`).
+   * An application that keeps its company's zone under another name says `keys: "company_zone"`
+   * — or a list, the first found wins.
+   */
+  timeZone?: { keys?: string | readonly string[] };
   /** The platform's (OpenTelemetry in a browser, a queue on a phone, memory in a test). */
   tracer?: Tracer;
   /** The platform's (GlitchTip, Sentry, memory in a test). Only what nobody expected reaches it. */
@@ -109,6 +116,7 @@ export function configureProcess(options: ProcessOptions = {}): void {
     logger,
     outcomeOf: options.outcomeOf ?? outcomeOf,
   });
+  installTimeZoneKeys(options.timeZone?.keys);
   replaceProcessStore(options.context ?? memoryContexts());
 }
 
