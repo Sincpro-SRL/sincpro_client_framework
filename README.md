@@ -660,6 +660,26 @@ its trace (`traceparent`), its context (`sincpro-context`) and its signal — as
 as metadata where a platform's adapter puts them. `screensTransport` and `entity()` stay on the
 REST `Transport`: they are how a screen reads pages of an entity, with its model and its drafts.
 
+### What a write changed
+
+A client keeps what it read — a cache, a list on screen, a record — and every one of them goes
+stale when a write lands, whoever wrote it. So every write says so: `restTransport` and
+`memoryTransport` announce each `send` on the process's change feed (`processChanges`), whether it
+came from a screen or from a use case's generated client, answered or refused. A preview and a dry
+run announce nothing. A reader follows the feed, never the writer's transport:
+
+```ts
+import { processChanges } from "@sincpro/client-framework";
+
+const stop = processChanges.follow((change) => forgetUnder(change.route)); // { method, route }
+stop();
+```
+
+A change says only what was written; what it touches — the collections a route names, a record's
+history — is each reader's to decide. A transport given `changes` announces there instead (a test,
+a transport that must not be heard), and a platform's own adapter wraps its `send` in
+`announced(feed, method, route, body, send)`.
+
 ### Writing an adapter for another wire
 
 An adapter is one function: read the operation's binding for its wire, send the input, answer the

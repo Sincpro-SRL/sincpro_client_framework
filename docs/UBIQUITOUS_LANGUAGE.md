@@ -98,6 +98,8 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 | Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                                       |
 | Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                                              |
 | Failure kind        | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it                                                                      |
+| Change              | A write that may have changed what was read: its method and route; a preview or a dry run is none                                                                   |
+| Change feed         | Where writes are announced and readers follow them, so neither knows the other — `processChanges`, `follow`, `announce`                                             |
 | Cancellation        | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                                                                                      |
 | Logger              | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter                                                                         |
 | Log layer           | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`                                                                                  |
