@@ -217,8 +217,10 @@ options)`: no route, no verb, no RPC method. The contract's bindings (`rest`, `r
 - **The application layer imports no logger.** A bounded context has `projectBoundedContext.logger`; a run
   hands `this.logger`, bound to its execution. Only `logger` (infrastructure, the global one) and
   `loggerAdapter` are predefined; injected as a dependency they bind to the run (`BIND`), imported
-  at module level they do not. No logger is predefined for an application layer. Console is the
-  default engine; `configureProcess({ logger })` and `configureLogger(...)` take the same
+  at module level they do not. No logger is predefined for an application layer. Which INFO and
+  DEBUG lines speak is a `LogFilter` (level, layer, bounded context — `speaks`), the same rule
+  for the console and any sink (`filteredLogger`); WARN and ERROR always speak, and spans are
+  never filtered. Console is the default engine; `configureProcess({ logger })` and `configureLogger(...)` take the same
   `LoggerConfiguration`. The host chooses production explicitly. Never log DTOs, results or the
   full session context automatically.
 - **A failure is described once, as sincpro_framework's failure line** (`PRD_03 §6`,

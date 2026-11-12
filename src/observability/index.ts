@@ -22,13 +22,16 @@ export {
   USER_ID,
   userOf,
 } from "@sincpro/client-framework/observability/domain/identity";
-export type {
-  FailureDescription,
-  LayerLogger,
-  Logger,
-  LogLayer,
-  LogLevel,
-  LogRecord,
+export {
+  type FailureDescription,
+  isLogLevel,
+  type LayerLogger,
+  type LogFilter,
+  type Logger,
+  type LogLayer,
+  type LogLevel,
+  type LogRecord,
+  speaks,
 } from "@sincpro/client-framework/observability/domain/logging";
 export {
   type Attributes,
@@ -40,6 +43,7 @@ export {
 export { describeFailure } from "@sincpro/client-framework/observability/services/failure";
 export {
   combineLoggers,
+  filteredLogger,
   logger,
   loggerAdapter,
 } from "@sincpro/client-framework/observability/services/logging";

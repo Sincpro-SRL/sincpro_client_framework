@@ -82,25 +82,26 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 
 ## Process, context and telemetry
 
-| Word                | Meaning                                                                                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Process             | Ports configured once at application startup through `configureProcess`                                                                           |
-| Identity            | Who is running: its release, and the deployment's tenant — `configureProcess({ identity })`                                                       |
-| Release             | `<name>:<version>` as deployed (the backend's `APP_RELEASE`); `service.name`/`.version` in it                                                     |
-| Tenant              | Whom a run serves: its context's, under the keys the app names (`tenant`, `tenant_id` by default; `company_id`…), else the deployment's; optional |
-| User                | Who a run acts for: its context's `user_id` (or the key the app names); optional; GlitchTip's user                                                |
-| Failure description | What a failed run says once, where it was raised: type, kind, fault, message, `at`, stack                                                         |
-| Context             | Values an execution runs with: process, bounded context, then explicit scope                                                                      |
-| ContextStore        | Synchronous values/version/subscription port; persistence belongs to the platform                                                                 |
-| Execution           | One run: id, service identity, context snapshot, span and parent                                                                                  |
-| Tracer              | Opens a span; the application supplies/export configures its implementation                                                                       |
-| ErrorReporter       | Reports unexpected failures with trace/execution correlation                                                                                      |
-| Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                     |
-| Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                            |
-| Failure kind        | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it                                                    |
-| Cancellation        | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                                                                    |
-| Logger              | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter                                                       |
-| Log layer           | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`                                                                |
+| Word                | Meaning                                                                                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Process             | Ports configured once at application startup through `configureProcess`                                                                                             |
+| Identity            | Who is running: its release, and the deployment's tenant — `configureProcess({ identity })`                                                                         |
+| Release             | `<name>:<version>` as deployed (the backend's `APP_RELEASE`); `service.name`/`.version` in it                                                                       |
+| Tenant              | Whom a run serves: its context's, under the keys the app names (`tenant`, `tenant_id` by default; `company_id`…), else the deployment's; optional                   |
+| User                | Who a run acts for: its context's `user_id` (or the key the app names); optional; GlitchTip's user                                                                  |
+| Failure description | What a failed run says once, where it was raised: type, kind, fault, message, `at`, stack                                                                           |
+| Context             | Values an execution runs with: process, bounded context, then explicit scope                                                                                        |
+| ContextStore        | Synchronous values/version/subscription port; persistence belongs to the platform                                                                                   |
+| Execution           | One run: id, service identity, context snapshot, span and parent                                                                                                    |
+| Tracer              | Opens a span; the application supplies/export configures its implementation                                                                                         |
+| ErrorReporter       | Reports unexpected failures with trace/execution correlation                                                                                                        |
+| Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                                       |
+| Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                                              |
+| Failure kind        | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it                                                                      |
+| Cancellation        | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                                                                                      |
+| Logger              | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter                                                                         |
+| Log layer           | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`                                                                                  |
+| Log filter          | Which INFO and DEBUG lines speak, by level, layer and bounded context; WARN and ERROR always do; spans are never filtered — `LogFilter`, `speaks`, `filteredLogger` |
 
 Span names use `<bounded context>/<Service>` and use-case identity `<bounded context>.<Service>`:
 the service's class name, taken by the framework when it registers it (a standard decorator's

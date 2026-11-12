@@ -238,13 +238,14 @@ test("its work over the network: the other side not there waits, as long as it t
     store,
     subscriber: new Subscriber(flaky("sync", failures, [])),
     policy: { requiresNetwork: true, maxAttempts: 2 },
-    wait: 1,
+    // Long enough that the retry is never due before the test looks: a 1 ms wait lost the race on CI.
+    wait: 200,
   });
   await queue.put(new OrderPaid("o-14"), envelope("e-14"));
   await queue.drain();
   assert.equal(store.messages[0]?.state, "pending", "no answer is no failure: it waits");
   assert.equal(store.messages[0]?.failures[0]?.kind, "unknown_outcome");
-  await pause(20);
+  await pause(300);
   await queue.drain();
   assert.deepEqual(
     [store.messages[0]?.state, store.messages[0]?.attempts],

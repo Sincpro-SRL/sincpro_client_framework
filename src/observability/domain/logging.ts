@@ -87,3 +87,45 @@ export interface LayerLogger {
   warn(message: string, attributes?: Attributes): void;
   error(message: string, attributes?: Attributes): void;
 }
+
+/**
+ * Which INFO and DEBUG lines speak — by level, by layer and by bounded context. WARN and ERROR
+ * always do: a failure is never silenced. What a filter does not name speaks.
+ *
+ *     { level: "info", layers: { adapter: false }, boundedContexts: { common: false } }
+ *
+ * Context: only lines are filtered, never spans — a quiet line still has its span, so a trace
+ * shows every run. A line outside a run (the infrastructure's `logger`) has no bounded context
+ * and is filtered by its layer alone.
+ */
+export type LogFilter = {
+  /** The lowest level of INFO and DEBUG that speaks (`debug`: every one). */
+  readonly level?: LogLevel;
+  /** By layer: `false` keeps a layer's INFO and DEBUG quiet. */
+  readonly layers?: Readonly<Partial<Record<LogLayer, boolean>>>;
+  /** By bounded context's name: `false` keeps its INFO and DEBUG quiet. */
+  readonly boundedContexts?: Readonly<Record<string, boolean>>;
+};
+
+const RANK: Readonly<Record<LogLevel, number>> = { debug: 0, info: 1, warn: 2, error: 3 };
+
+/** Whether `level` is one a line can have. */
+export function isLogLevel(level: unknown): level is LogLevel {
+  return typeof level === "string" && Object.hasOwn(RANK, level);
+}
+
+/**
+ * Whether `record` speaks under `filter`:
+ * 1. WARN and ERROR, always.
+ * 2. INFO and DEBUG at the filter's level or above, from a layer and a bounded context it does
+ *    not keep quiet.
+ */
+export function speaks(record: LogRecord, filter: LogFilter): boolean {
+  if (record.level === "warn" || record.level === "error") return true;
+  if (RANK[record.level] < RANK[filter.level ?? "debug"]) return false;
+  if (filter.layers?.[record.layer] === false) return false;
+  const boundedContext = record.boundedContext;
+  return !(
+    boundedContext !== undefined && filter.boundedContexts?.[boundedContext] === false
+  );
+}

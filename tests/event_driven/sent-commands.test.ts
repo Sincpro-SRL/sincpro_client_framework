@@ -111,12 +111,13 @@ test("sent with no answer, it waits and goes again with the same key — WhatsAp
       commands: [CommandSendMessage],
     }),
     policyOf: (stored) => (stored.kind === "command" ? { requiresNetwork: true } : undefined),
-    wait: 1,
+    // Long enough that the resend is never due before the test looks: 1 ms lost the race on CI.
+    wait: 200,
   });
   await new Publisher(queue).send(new CommandSendMessage("c-1", "hola"));
   await queue.drain();
   assert.equal(store.messages[0]?.state, "pending");
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await new Promise((resolve) => setTimeout(resolve, 300));
   await queue.drain();
   assert.equal(store.messages[0]?.state, "delivered");
   assert.deepEqual(store.messages[0]?.answer, { id: "m-hola" });

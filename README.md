@@ -568,6 +568,19 @@ configureLogger({ mode: "development", level: "info", layers: { adapter: false }
 configureLogger({ mode: "production" }); // the console, silent
 configureLogger({ engine: combineLoggers(consoleLogger({ mode }), lokiLogger) }); // other sinks
 configureLogger({ engine: false }); // no logs
+
+// Which INFO and DEBUG lines speak — by level, layer and bounded context; WARN and ERROR always.
+// Spans are never filtered: a quiet line still has its span.
+const production = {
+  level: "info",
+  layers: { adapter: false },
+  boundedContexts: { common: false },
+};
+configureLogger({
+  engine: filteredLogger(combineLoggers(consoleSink, lokiSink), () =>
+    debugging ? {} : production,
+  ),
+});
 ```
 
 The console is the default engine. In production it is silent; in development it prints

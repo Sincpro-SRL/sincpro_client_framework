@@ -1,12 +1,14 @@
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
 import { tenantOf, userOf } from "@sincpro/client-framework/observability/domain/identity";
-import type {
-  FailureDescription,
-  LayerLogger,
-  Logger,
-  LogLayer,
-  LogLevel,
-  LogRecord,
+import {
+  type FailureDescription,
+  type LayerLogger,
+  type LogFilter,
+  type Logger,
+  type LogLayer,
+  type LogLevel,
+  type LogRecord,
+  speaks,
 } from "@sincpro/client-framework/observability/domain/logging";
 import type {
   Attributes,
@@ -136,6 +138,24 @@ type RunLogLayer = Extract<LogLayer, "feature" | "application_service" | "event_
 /** @internal — what a Feature or ApplicationService finds as `this.logger` while it runs. */
 export function executionLogger(layer: RunLogLayer, execution: Execution): LayerLogger {
   return layerLogger(layer, processSink, correlationOf(execution));
+}
+
+/**
+ * `engine`, hearing only the lines `filter` lets speak — WARN and ERROR always (`speaks`). A
+ * function is read on every line, so a debug switch changes what speaks without rebuilding:
+ *
+ *     filteredLogger(combineLoggers(console, loki), () => (debugging ? everything : production))
+ */
+export function filteredLogger(
+  engine: Logger,
+  filter: LogFilter | (() => LogFilter),
+): Logger {
+  const current = typeof filter === "function" ? filter : () => filter;
+  return {
+    log: (record) => {
+      if (speaks(record, current())) deliver(engine, record);
+    },
+  };
 }
 
 /** Each destination keeps its own policy; one failing sink does not hold back the others. */
