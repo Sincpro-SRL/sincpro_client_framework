@@ -237,9 +237,11 @@ test("the stored queue retries only the consumer that failed; the others are nev
   assert.equal(waiting?.failures[0]?.kind, "unavailable");
 
   said.length = 0;
-  // Until its retry is due — a fixed sleep lost the race under a loaded machine.
-  for (let tries = 0; tries < 100 && store.messages[0]?.state !== "delivered"; tries++) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
+  // Until its retry is due — an unavailable server asks for a second at least; a fixed sleep
+  // or a fixed count of short ones lost the race on a loaded machine.
+  const deadline = Date.now() + 3000;
+  while (store.messages[0]?.state !== "delivered" && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await queue.drain();
   }
   assert.equal(store.messages[0]?.state, "delivered");
