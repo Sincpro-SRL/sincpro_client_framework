@@ -509,7 +509,7 @@ import { sentryReporter } from "@sincpro/client-framework/sentry";
 
 configureProcess({
   identity: { release: "forge-web:1.4.0" }, // + tenant, when the deployment serves one
-  timeZone: { keys: "company_zone" }, // where a run's zone is read from (default: time_zone)
+  timeZone: { keys: ["timezone"] }, // where a run's zone is read from — the backend's key, the default
   tracer: openTelemetryTracer(provider.getTracer("forge-web")), // the app's provider
   reporter: sentryReporter(client), // the app's Sentry or GlitchTip client
   logger: { mode: production ? "production" : "development" },
@@ -629,18 +629,22 @@ its own. `values` is the same object until it changes, so a screen can hand it t
 ### The time zone of a run
 
 A run reads days and times in the zone its context says, not in the device's: a user in La Paz
-looking at a company in Madrid sees «today» as Madrid's. The zone is the `time_zone` key of the
-context, unless the application names another key; with none, the process's zone
+looking at a company in Madrid sees «today» as Madrid's. The zone is the context's `timezone` —
+the key sincpro_framework reads to cut `today` and `period` —; with none, the process's zone
 (`installTimeZone`, else the platform's).
 
 ```ts
-configureProcess({ timeZone: { keys: ["company_zone", "time_zone"] } }); // the first found wins
+await salesBoundedContext.scoped({ timezone: "Europe/Madrid" }).execute(new CommandQuote(1));
 
 const zone = timeZoneOf(this.execution); // or timeZoneOf(context)
 dayOf(instant, zone); // «today» for that company
 ```
 
-The zone travels to the server with the rest of the context, so the backend cuts days the same way.
+The context travels to the server in `sincpro-context`, so under `timezone` the backend cuts days
+the same way. An application that keeps the zone under another key names it —
+`configureProcess({ timeZone: { keys: ["company_zone", "timezone"] } })`, the first found wins —,
+but the backend reads only `timezone`: a zone under another key is the client's alone, and the
+server cuts in UTC.
 
 ## Talking to a server
 

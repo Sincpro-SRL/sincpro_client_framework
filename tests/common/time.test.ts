@@ -76,20 +76,24 @@ test("an id says when it was minted, as sincpro_framework's moment_of; another k
   assert.equal(momentOf("f47ac10b58cc4372a5670e02b2c3d479"), null); // a UUID v4
 });
 
-test("a run reads its time zone from its context, under time_zone by default", () => {
+test("a run reads its time zone from its context, under timezone by default", () => {
   installTimeZone("Europe/Madrid");
-  assert.equal(timeZoneOf({ time_zone: "America/La_Paz" }), "America/La_Paz");
+  assert.equal(timeZoneOf({ timezone: "America/La_Paz" }), "America/La_Paz");
   // An execution is read through its context.
   assert.equal(
-    timeZoneOf({ useCase: "sales.Close", context: { time_zone: "America/La_Paz" } }),
+    timeZoneOf({ useCase: "sales.Close", context: { timezone: "America/La_Paz" } }),
     "America/La_Paz",
   );
+});
+
+test("a context with a key named useCase is still read as a context", () => {
+  assert.equal(timeZoneOf({ useCase: "x", timezone: "America/La_Paz" }), "America/La_Paz");
 });
 
 test("without a zone in its context, a run reads the process's", () => {
   installTimeZone("Europe/Madrid");
   assert.equal(timeZoneOf({}), "Europe/Madrid");
-  assert.equal(timeZoneOf({ time_zone: "  " }), "Europe/Madrid");
+  assert.equal(timeZoneOf({ timezone: "  " }), "Europe/Madrid");
   installTimeZone(undefined);
   assert.equal(timeZoneOf({}), Intl.DateTimeFormat().resolvedOptions().timeZone);
 });
@@ -97,12 +101,12 @@ test("without a zone in its context, a run reads the process's", () => {
 test("the application names the key its zone is kept under; the first found wins", () => {
   configureProcess({ timeZone: { keys: "company_zone" } });
   assert.equal(
-    timeZoneOf({ company_zone: "America/La_Paz", time_zone: "Europe/Madrid" }),
+    timeZoneOf({ company_zone: "America/La_Paz", timezone: "Europe/Madrid" }),
     "America/La_Paz",
   );
   // The default key no longer counts once another is named.
   installTimeZone("Europe/Madrid");
-  assert.equal(timeZoneOf({ time_zone: "America/La_Paz" }), "Europe/Madrid");
+  assert.equal(timeZoneOf({ timezone: "America/La_Paz" }), "Europe/Madrid");
 
   configureProcess({ timeZone: { keys: ["zone", "company_zone"] } });
   assert.equal(timeZoneOf({ company_zone: "America/La_Paz" }), "America/La_Paz");
@@ -113,14 +117,14 @@ test("the application names the key its zone is kept under; the first found wins
 
   // configureProcess replaces everything: without keys, the default comes back.
   configureProcess();
-  assert.equal(timeZoneOf({ time_zone: "America/La_Paz" }), "America/La_Paz");
+  assert.equal(timeZoneOf({ timezone: "America/La_Paz" }), "America/La_Paz");
 });
 
 test("two runs with different zones cut «today» differently", () => {
   // 02:00 UTC on 12 March: still the 11th in La Paz, already the 12th in Madrid.
   const instant = "2026-03-12T02:00:00Z";
-  const laPaz = { useCase: "sales.Close", context: { time_zone: "America/La_Paz" } };
-  const madrid = { useCase: "sales.Close", context: { time_zone: "Europe/Madrid" } };
+  const laPaz = { useCase: "sales.Close", context: { timezone: "America/La_Paz" } };
+  const madrid = { useCase: "sales.Close", context: { timezone: "Europe/Madrid" } };
   assert.equal(dayOf(instant, timeZoneOf(laPaz)), "2026-03-11");
   assert.equal(dayOf(instant, timeZoneOf(madrid)), "2026-03-12");
 });

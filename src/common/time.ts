@@ -31,14 +31,18 @@ export function timeZoneNow(): string {
   return installed ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** The context key a run's time zone is read from, unless the application names another. */
-const DEFAULT_TIME_ZONE_KEYS: readonly string[] = ["time_zone"];
+/**
+ * The context key a run's time zone is read from, unless the application names another: the
+ * backend's own (`ambient_resolution`, `context.get("timezone")`), so the zone a client reads in
+ * is the one the server cuts `today` and `period` with.
+ */
+const DEFAULT_TIME_ZONE_KEYS: readonly string[] = ["timezone"];
 
 let zoneKeys: readonly string[] = DEFAULT_TIME_ZONE_KEYS;
 
 /**
  * The context keys a run's time zone is read from, first found wins. `undefined` goes back to
- * `time_zone`. Set by `configureProcess({ timeZone: { keys } })`, as the identity's keys are.
+ * `timezone`. Set by `configureProcess({ timeZone: { keys } })`, as the identity's keys are.
  */
 export function installTimeZoneKeys(keys: string | readonly string[] | undefined): void {
   zoneKeys =
@@ -54,20 +58,29 @@ type ZoneContext = Readonly<Record<string, unknown>>;
 type ZoneRun = { readonly useCase: string; readonly context: ZoneContext };
 type ZoneSource = ZoneContext | ZoneRun;
 
+/** An execution, not a context that happens to have a `useCase` key. */
 function isRun(source: ZoneSource): source is ZoneRun {
-  return "useCase" in source;
+  const context: unknown = (source as Partial<ZoneRun>).context;
+  return (
+    typeof (source as Partial<ZoneRun>).useCase === "string" &&
+    typeof context === "object" &&
+    context !== null
+  );
 }
 
 /**
  * The time zone a run reads dates in: its context's, under the key the application named
- * (`time_zone` by default), else the process's (`timeZoneNow`). Takes an execution or a context.
+ * (`timezone` by default, the backend's), else the process's (`timeZoneNow`). Takes an execution
+ * or a context.
  *
  *     timeZoneOf(execution)                 →  the company's zone, when the run carries one
  *     dayOf(instant, timeZoneOf(execution)) →  «today» for that company
  *
  * Context: the process's zone is the device's, or the one a platform installed for the company in
  * use; a run whose context says another belongs to another company (a user in La Paz looking at
- * Madrid). Read on every call, never kept, so a run's zone is its own.
+ * Madrid). Read on every call, never kept, so a run's zone is its own. The context travels in
+ * `sincpro-context`, and the backend reads only `timezone`: a zone kept under another key is this
+ * client's alone, and the server cuts its days in UTC.
  */
 export function timeZoneOf(source: ZoneSource): string {
   const context = isRun(source) ? source.context : source;
