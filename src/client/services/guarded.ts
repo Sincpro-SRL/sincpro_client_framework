@@ -5,10 +5,11 @@ import {
   type OperationTransport,
   type RemoteOperation,
 } from "@sincpro/client-framework/client/domain/operation";
-import type {
-  CallOptions,
-  SendOptions,
-  Transport,
+import {
+  type CallOptions,
+  markedAs,
+  type SendOptions,
+  type Transport,
 } from "@sincpro/client-framework/client/domain/transport";
 import {
   bindableOperations,
@@ -67,5 +68,5 @@ export function guardedTransport(
   if (download !== undefined)
     guarded.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
       breaker.call(() => download.call(transport, route, signal, options));
-  return bindableTransport(guarded);
+  return bindableTransport(markedAs(guarded, transport));
 }

@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 
 import {
   configureProcess,
+  guardedTransport,
   memoryTransport,
   processContext,
   restTransport,
   screensTransport,
   TransportError,
 } from "@sincpro/client-framework";
+import { CircuitBreaker } from "@sincpro/client-framework/circuit_breaker/entrypoint/circuit-breaker";
+import { markedAs, type Transport } from "@sincpro/client-framework/client/domain/transport";
 import {
   memoryLogger,
   memoryReporter,
@@ -101,4 +104,35 @@ test("a screens transport given again is answered as it is: never two use cases 
   assert.equal(twice, once);
   await twice.send("POST", "/issues", {});
   assert.equal(tracer.spans.length, 1);
+});
+
+test("a screens transport under a wrapper that keeps its mark is answered as it is: one span per read", async () => {
+  const tracer = memoryTracer();
+  configureProcess({ tracer });
+  const screens = screensTransport(memoryTransport({}, { handle: () => ({ ok: true }) }));
+  // A guard over the screens is still a screens transport: no second `screens` context.
+  const guarded = guardedTransport(screens, new CircuitBreaker("screens"));
+  assert.equal(screensTransport(guarded), guarded);
+  await screensTransport(guarded).send("POST", "/issues", {});
+  assert.equal(tracer.spans.length, 1);
+  assert.equal(tracer.spans[0]?.name, "screens/EntitySend");
+});
+
+test("a platform's wrapper that copies the mark keeps the screens context; one that does not is made again", async () => {
+  const tracer = memoryTracer();
+  configureProcess({ tracer });
+  const screens = screensTransport(memoryTransport({}, { handle: () => ({ ok: true }) }));
+  const wrap = (inner: Transport): Transport => ({
+    list: inner.list.bind(inner),
+    one: inner.one.bind(inner),
+    send: inner.send.bind(inner),
+  });
+  // Copies the mark: answered as it is.
+  const marked = markedAs(wrap(screens), screens);
+  assert.equal(screensTransport(marked), marked);
+  // Does not copy it: the screens are made again, a second context over the first.
+  const unmarked = wrap(screens);
+  assert.notEqual(screensTransport(unmarked), unmarked);
+  await screensTransport(unmarked).send("POST", "/issues", {});
+  assert.equal(tracer.spans.length, 2);
 });

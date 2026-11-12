@@ -20,7 +20,19 @@ import type {
  * Every adapter throws `TransportError` for a refusal, so a screen explains a failure once
  * whichever wire it came over.
  */
+/**
+ * The mark of a screens transport: `screensTransport` answers one it already made, and a wrapper
+ * over one (`cachedTransport`, `guardedTransport`) copies the mark, so the screens are not made
+ * twice — one span per screen read, however many wrappers stand between.
+ *
+ * Context: a mark, not a remembered object — a wrapper is a new object, and the screens context
+ * it sits on is the one that answers. A platform's wrapper copies it with `markedAs`.
+ */
+export const SCREENS: unique symbol = Symbol.for("sincpro.client-framework.screens");
+
 export interface Transport {
+  /** Set on a screens transport and on what wraps one (`SCREENS`). */
+  [SCREENS]?: true;
   /** A page of records under the criteria. */
   list<T>(
     route: string,
@@ -181,4 +193,10 @@ export class TransportError extends Error {
     );
     this.name = "TransportError";
   }
+}
+
+/** Carries the screens mark from `from` onto `to`, a wrapper of it; `to` is answered. */
+export function markedAs<T extends Transport>(to: T, from: Transport): T {
+  if (from[SCREENS] === true) to[SCREENS] = true;
+  return to;
 }

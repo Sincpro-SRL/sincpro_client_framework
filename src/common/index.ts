@@ -40,5 +40,6 @@ export {
   instantOf,
   isDay,
   timeZoneNow,
+  timeZoneOf,
   wallTimeOf,
 } from "@sincpro/client-framework/common/time";

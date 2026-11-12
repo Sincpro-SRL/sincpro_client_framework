@@ -1,10 +1,11 @@
-import type {
-  CallOptions,
-  Download,
-  Method,
-  One,
-  SendOptions,
-  Transport,
+import {
+  type CallOptions,
+  type Download,
+  type Method,
+  type One,
+  SCREENS,
+  type SendOptions,
+  type Transport,
 } from "@sincpro/client-framework/client/domain/transport";
 import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { Command } from "@sincpro/client-framework/core/domain/dto";
@@ -117,14 +118,12 @@ class EntitySend extends Feature<Send<unknown>, unknown> {
   }
 }
 
-const MADE = new WeakSet<Transport>();
-
 /**
  * Screen requests enter the same command pipeline as application services. A generated
  * client injected into a Feature uses its raw transport instead, continuing that execution.
  */
 export function screensTransport(transport: Transport, name = "screens"): Transport {
-  if (MADE.has(transport)) return transport;
+  if (transport[SCREENS] === true) return transport;
   const screens = new BoundedContext<{ transport: Transport }>(name);
   screens.addDependency("transport", transport);
   screens.feature(List)(EntityList);
@@ -157,6 +156,6 @@ export function screensTransport(transport: Transport, name = "screens"): Transp
     through.download = (route, signal, options) =>
       screens.execute(new Export(route, signal, options));
   }
-  MADE.add(through);
+  through[SCREENS] = true;
   return bindableTransport(through);
 }
