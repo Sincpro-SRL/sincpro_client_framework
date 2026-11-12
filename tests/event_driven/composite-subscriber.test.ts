@@ -12,7 +12,7 @@ import {
   failureOf,
   Feature,
   handlersWith,
-  memoryEventStore,
+  memoryMessageStore,
   processListeners,
   servicesWith,
   storedQueue,
@@ -218,14 +218,19 @@ test("addBus delivers, addDependency injects: two levels, never mixed", async ()
 
 test("the stored queue retries only the consumer that failed; the others are never run again", async () => {
   const { appSubscriber } = application();
-  const store = memoryEventStore();
-  const queue = storedQueue({ store, subscriber: appSubscriber, wait: 1 });
+  const store = memoryMessageStore();
+  const queue = storedQueue({
+    store,
+    subscriber: appSubscriber,
+    policy: { retries: 1 },
+    wait: 1,
+  });
   failures.push(new StillOffline("no network"));
   const paid = new SalePaid("s-5");
   await queue.put(paid, envelopeOf(paid));
   await queue.drain();
 
-  const [waiting] = store.events;
+  const [waiting] = store.messages;
   assert.equal(waiting?.state, "pending");
   assert.deepEqual(waiting?.reached, ["app/NotifySalePaid", "sales"]);
   assert.equal(waiting?.failures[0]?.boundedContext, "sales/OnSaleChanged");
@@ -233,11 +238,11 @@ test("the stored queue retries only the consumer that failed; the others are nev
 
   said.length = 0;
   // Until its retry is due — a fixed sleep lost the race under a loaded machine.
-  for (let tries = 0; tries < 100 && store.events[0]?.state !== "delivered"; tries++) {
+  for (let tries = 0; tries < 100 && store.messages[0]?.state !== "delivered"; tries++) {
     await new Promise((resolve) => setTimeout(resolve, 5));
     await queue.drain();
   }
-  assert.equal(store.events[0]?.state, "delivered");
+  assert.equal(store.messages[0]?.state, "delivered");
   assert.deepEqual(said, ["sales.sale.v1.paid s-5", "closed s-5 by sales.OnSaleChanged"]);
 });
 

@@ -6,13 +6,14 @@ import {
   configureProcess,
   DomainEvent,
   Feature,
-  memoryEventStore,
+  memoryMessageStore,
   Money,
   Publisher,
-  type StoredEvent,
+  type StoredMessage,
   storedQueue,
   Subscriber,
   TransportError,
+  verdictOf,
 } from "@sincpro/client-framework";
 import { memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
@@ -68,40 +69,41 @@ test("publish returns once stored; the event is delivered, rebuilt as its class,
   const tracer = memoryTracer();
   configureProcess({ tracer, logger: { engine: false } });
   const seen: string[] = [];
-  const store = memoryEventStore();
+  const store = memoryMessageStore();
   const queue = storedQueue({ store, subscriber: new Subscriber(flaky("mail", [], seen)) });
   const envelope = await new Publisher(queue).publish(new OrderPaid("o-1"));
-  assert.equal(store.events[0]?.envelope.id, envelope.id);
+  assert.equal(store.messages[0]?.envelope.id, envelope.id);
   await queue.drain();
   assert.deepEqual(seen, ["mail o-1 true"]);
-  assert.equal(store.events[0]?.state, "delivered");
+  assert.equal(store.messages[0]?.state, "delivered");
   assert.equal(tracer.spans[0]?.attributes["sincpro.causation_id"], envelope.id);
 });
 
-test("a failure a retry may fix waits and tries again; a context that has it is not run twice", async () => {
+test("a message with retries is sent again after a failure; a context that has it is not run twice", async () => {
   const seen: string[] = [];
-  const store = memoryEventStore();
-  const settled: StoredEvent[] = [];
+  const store = memoryMessageStore();
+  const settled: StoredMessage[] = [];
   const queue = storedQueue({
     store,
     subscriber: new Subscriber(
       flaky("mail", [], seen),
       flaky("stock", [new TransportError("/stock", 503, null)], seen),
     ),
+    policy: { retries: 1 },
     wait: 5,
     onSettled: (one) => settled.push(one),
   });
   await queue.put(new OrderPaid("o-2"), envelope("e-2"));
   await queue.drain();
-  assert.equal(store.events[0]?.state, "pending");
-  assert.deepEqual(store.events[0]?.reached, ["mail"]);
+  assert.equal(store.messages[0]?.state, "pending");
+  assert.deepEqual(store.messages[0]?.reached, ["mail"]);
   assert.deepEqual(
-    store.events[0]?.failures.map((one) => [one.boundedContext, one.kind]),
+    store.messages[0]?.failures.map((one) => [one.boundedContext, one.kind]),
     [["stock", "unavailable"]],
   );
   await pause(1100);
   await queue.drain();
-  assert.equal(store.events[0]?.state, "delivered");
+  assert.equal(store.messages[0]?.state, "delivered");
   assert.deepEqual(seen, ["mail o-2 true", "stock o-2 true"]);
   assert.deepEqual(
     settled.map((one) => one.state),
@@ -111,7 +113,7 @@ test("a failure a retry may fix waits and tries again; a context that has it is 
 
 test("a failure every attempt would repeat is set aside, and does not hold back what follows", async () => {
   const seen: string[] = [];
-  const store = memoryEventStore();
+  const store = memoryMessageStore();
   const queue = storedQueue({
     store,
     subscriber: new Subscriber(flaky("mail", [new Refused("no customer email")], seen)),
@@ -120,10 +122,10 @@ test("a failure every attempt would repeat is set aside, and does not hold back 
   await queue.put(new OrderPaid("o-4"), envelope("e-4"));
   await queue.drain();
   assert.deepEqual(
-    store.events.map((one) => one.state),
+    store.messages.map((one) => one.state),
     ["set_aside", "delivered"],
   );
-  assert.deepEqual(store.events[0]?.failures[0], {
+  assert.deepEqual(store.messages[0]?.failures[0], {
     boundedContext: "mail",
     kind: "domain",
     reason: "DOMAIN",
@@ -134,7 +136,7 @@ test("a failure every attempt would repeat is set aside, and does not hold back 
 
 test("an event not ready waits while the rest go on; nobody hearing it is no failure", async () => {
   const seen: string[] = [];
-  const store = memoryEventStore();
+  const store = memoryMessageStore();
   let online = false;
   const queue = storedQueue({
     store,
@@ -145,12 +147,12 @@ test("an event not ready waits while the rest go on; nobody hearing it is no fai
   await queue.put(new InvoiceVoided("i-1"), envelope("e-6", "billing.invoice.v1.voided"));
   await queue.drain();
   assert.deepEqual(
-    store.events.map((one) => one.state),
+    store.messages.map((one) => one.state),
     ["pending", "delivered"],
   );
   online = true;
   await queue.drain();
-  assert.equal(store.events[0]?.state, "delivered");
+  assert.equal(store.messages[0]?.state, "delivered");
   assert.deepEqual(seen, ["mail o-5 true"]);
 });
 
@@ -164,7 +166,7 @@ test("a class that says how to read itself is rebuilt that way", async () => {
   const routes = new BoundedContext("routes");
   routes.feature(RouteClosed)(Close);
   const queue = storedQueue({
-    store: memoryEventStore(),
+    store: memoryMessageStore(),
     subscriber: new Subscriber(routes),
   });
   await queue.put(new RouteClosed("R-7"), envelope("e-7", "distribution.route.v1.closed"));
@@ -182,78 +184,111 @@ function envelope(id: string, name = "shop.order.v1.paid") {
   };
 }
 
-test("an event that keeps failing in a way a retry might fix is set aside after maxAttempts", async () => {
-  const seen: string[] = [];
-  const store = memoryEventStore();
-  const queue = storedQueue({
-    store,
-    subscriber: new Subscriber(
-      flaky("mail", [new TypeError("a bug"), new TypeError("a bug")], seen),
-    ),
-    maxAttempts: 2,
-    wait: 1,
-  });
-  await queue.put(new OrderPaid("o-8"), envelope("e-8"));
-  await queue.put(new OrderPaid("o-9"), envelope("e-9"));
-  await queue.drain();
-  assert.equal(store.events[0]?.state, "pending");
-  await pause(1100);
-  await queue.drain();
-  assert.deepEqual(
-    store.events.map((one) => [one.state, one.attempts]),
-    [
-      ["set_aside", 2],
-      ["delivered", 1],
-    ],
-  );
-  assert.equal(store.events[0]?.failures[0]?.kind, "internal");
-  assert.deepEqual(seen, ["mail o-9 true"]);
-});
-
-test("an event with one attempt of its own is set aside at its first failure, and the next goes on", async () => {
-  class Unavailable extends Error {
+test("sent once by default: a failure is set aside at once, and the next goes on", async () => {
+  class PrinterOff extends Error {
     static readonly failureKind = "unavailable";
   }
   const seen: string[] = [];
-  const store = memoryEventStore();
+  const store = memoryMessageStore();
   const queue = storedQueue({
     store,
-    subscriber: new Subscriber(flaky("printer", [new Unavailable("printer off")], seen)),
-    attemptsOf: (stored) => (stored.envelope.id === "e-11" ? 1 : undefined),
-    wait: 60_000,
+    subscriber: new Subscriber(flaky("printer", [new PrinterOff("printer off")], seen)),
   });
   await queue.put(new OrderPaid("o-11"), envelope("e-11"));
   await queue.put(new OrderPaid("o-12"), envelope("e-12"));
   await queue.drain();
   assert.deepEqual(
-    store.events.map((one) => [one.state, one.attempts, one.retryAt]),
+    store.messages.map((one) => [one.state, one.attempts, one.retryAt]),
     [
       ["set_aside", 1, null],
       ["delivered", 1, null],
     ],
   );
-  assert.equal(store.events[0]?.failures[0]?.kind, "unavailable");
+  assert.equal(store.messages[0]?.failures[0]?.kind, "unavailable");
   assert.deepEqual(seen, ["printer o-12 true"]);
 });
 
-test("an event that says nothing of its attempts keeps the queue's", async () => {
-  class Unavailable extends Error {
-    static readonly failureKind = "unavailable";
-  }
-  const store = memoryEventStore();
+test("out of retries a failure is set aside; one waiting its time never holds the line", async () => {
+  const seen: string[] = [];
+  const store = memoryMessageStore();
   const queue = storedQueue({
     store,
-    subscriber: new Subscriber(flaky("printer", [new Unavailable("printer off")], [])),
-    attemptsOf: () => undefined,
+    subscriber: new Subscriber(flaky("mail", [new TypeError("a bug")], seen)),
+    policyOf: (stored) => (stored.envelope.id === "e-8" ? { retries: 1 } : undefined),
     wait: 60_000,
   });
-  await queue.put(new OrderPaid("o-13"), envelope("e-13"));
+  await queue.put(new OrderPaid("o-8"), envelope("e-8"));
+  await queue.put(new OrderPaid("o-9"), envelope("e-9"));
   await queue.drain();
-  assert.equal(store.events[0]?.state, "pending");
-  assert.ok(store.events[0]?.retryAt);
+  assert.deepEqual(
+    store.messages.map((one) => one.state),
+    ["pending", "delivered"],
+    "the one waiting to be sent again lets the next go",
+  );
+  assert.deepEqual(seen, ["mail o-9 true"]);
 });
 
-test("an open circuit makes the queue wait what the circuit asks", async () => {
+test("its work over the network: the other side not there waits, as long as it takes, until maxAttempts", async () => {
+  class NoAnswer extends Error {
+    static readonly failureKind = "unknown_outcome";
+  }
+  const store = memoryMessageStore();
+  const failures = [new NoAnswer("sent, no answer"), new NoAnswer("sent, no answer")];
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(flaky("sync", failures, [])),
+    policy: { requiresNetwork: true, maxAttempts: 2 },
+    wait: 1,
+  });
+  await queue.put(new OrderPaid("o-14"), envelope("e-14"));
+  await queue.drain();
+  assert.equal(store.messages[0]?.state, "pending", "no answer is no failure: it waits");
+  assert.equal(store.messages[0]?.failures[0]?.kind, "unknown_outcome");
+  await pause(20);
+  await queue.drain();
+  assert.deepEqual(
+    [store.messages[0]?.state, store.messages[0]?.attempts],
+    ["set_aside", 2],
+    "maxAttempts bounds the wait",
+  );
+});
+
+test("the verdict is extended by wrapping it: a dropped connection waits for ready, with no time", async () => {
+  class NetworkDown extends Error {
+    static readonly failureKind = "unavailable";
+    readonly reason = "NETWORK_DOWN";
+  }
+  const seen: string[] = [];
+  let online = true;
+  const store = memoryMessageStore();
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(flaky("sync", [new NetworkDown("offline")], seen)),
+    ready: () => online,
+    verdict: (delivery) =>
+      delivery.errors.some(
+        (error) => (error as { reason?: string }).reason === "NETWORK_DOWN",
+      )
+        ? { settlement: "wait" }
+        : verdictOf(delivery),
+  });
+  await queue.put(new OrderPaid("o-15"), envelope("e-15"));
+  online = false;
+  await queue.drain();
+  assert.deepEqual(
+    [store.messages[0]?.state, store.messages[0]?.retryAt],
+    ["pending", null],
+    "it waits for the connection, not a time",
+  );
+  await queue.drain();
+  assert.deepEqual(seen, [], "not ready: not sent");
+  online = true;
+  await queue.drain();
+  assert.equal(store.messages[0]?.state, "delivered");
+  assert.deepEqual(seen, ["sync o-15 true"]);
+});
+
+test("an open circuit makes a message whose work goes over the network wait what it asks", async () => {
   const breaker = new CircuitBreaker("odoo", { failures: 1, openFor: 30_000 });
   await assert.rejects(
     breaker.call(() => Promise.reject(new TransportError("/x", 503, null))),
@@ -265,12 +300,17 @@ test("an open circuit makes the queue wait what the circuit asks", async () => {
   }
   const sync = new BoundedContext("sync");
   sync.feature(OrderPaid)(Push);
-  const store = memoryEventStore();
-  const queue = storedQueue({ store, subscriber: new Subscriber(sync), wait: 1 });
+  const store = memoryMessageStore();
+  const queue = storedQueue({
+    store,
+    subscriber: new Subscriber(sync),
+    policy: { requiresNetwork: true },
+    wait: 1,
+  });
   const before = Date.now();
   await queue.put(new OrderPaid("o-10"), envelope("e-10"));
   await queue.drain();
-  const waiting = store.events[0];
+  const waiting = store.messages[0];
   assert.equal(waiting?.state, "pending");
   assert.equal(waiting?.failures[0]?.reason, "CIRCUIT_OPEN");
   assert.ok(Date.parse(waiting?.retryAt ?? "") - before >= 29_000);
@@ -306,7 +346,7 @@ test("a subscriber keys what it does by the envelope's id; fromJSON reads a Mone
   const ledger = new BoundedContext("ledger");
   ledger.feature(InvoicePaid)(Record);
   const queue = storedQueue({
-    store: memoryEventStore(),
+    store: memoryMessageStore(),
     subscriber: new Subscriber(ledger),
   });
   await queue.put(

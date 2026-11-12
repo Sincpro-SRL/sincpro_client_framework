@@ -3,11 +3,11 @@ import type { Envelope } from "@sincpro/client-framework/event_driven/domain/env
 import type { FailureKind } from "@sincpro/criteria";
 
 /**
- * Where a stored queue keeps what it was handed until every bounded context that hears it has
- * executed it — the port each platform implements with its own technology:
+ * Where a stored queue keeps what it was handed — events and Commands — until it is done with
+ * them: the port each platform implements with its own technology:
  *
- * - `memoryEventStore()` — this package's: the process's memory (a browser tab, a test).
- * - a phone: a SQLite table, so an event outlives a restart; the set-aside ones are its
+ * - `memoryMessageStore()` — this package's: the process's memory (a browser tab, a test).
+ * - a phone: a SQLite table, so a message outlives a restart; the set-aside ones are its
  *   dead-letter queue.
  * - a browser: IndexedDB, to work offline.
  *
@@ -15,26 +15,30 @@ import type { FailureKind } from "@sincpro/criteria";
  * try again, what to set aside, which contexts already have it (`storedQueue`). So the port only
  * keeps records, in the order they came, and finds the next one waiting.
  */
-export interface EventStore {
-  /** Keeps a published event, waiting. */
-  add(stored: StoredEvent): void | Promise<void>;
+export interface MessageStore {
+  /** Keeps a message, waiting. */
+  add(stored: StoredMessage): void | Promise<void>;
   /**
-   * The oldest event still waiting (`pending`), in the order added — but those `skip` names by
-   * envelope id: not ready yet (no connection, no session), they wait while the rest go on.
+   * The oldest message still waiting (`pending`), in the order added — but those `skip` ids:
+   * not ready, or waiting their time, they wait while the rest go on.
    */
-  next(skip: ReadonlySet<string>): StoredEvent | undefined | Promise<StoredEvent | undefined>;
-  /** What changed of a stored event — found by its envelope's id. */
-  save(stored: StoredEvent): void | Promise<void>;
+  next(
+    skip: ReadonlySet<string>,
+  ): StoredMessage | undefined | Promise<StoredMessage | undefined>;
+  /** What changed of a stored message — found by its envelope's id. */
+  save(stored: StoredMessage): void | Promise<void>;
 }
 
 /**
- * - `pending`: waiting to be delivered — again, after `retryAt`, when it failed in a way a retry
- *   may fix.
- * - `delivered`: every bounded context that hears it executed it.
- * - `set_aside`: a context failed in a way every attempt would repeat (`PERMANENT_KINDS`) — the
- *   dead-letter queue; it never holds back what comes after.
+ * - `pending`: waiting to be delivered — its first time, or again after `retryAt`.
+ * - `delivered`: every bounded context that hears the event executed it; the Command answered.
+ * - `set_aside`: it failed and is not tried again on its own — the dead-letter queue, for a
+ *   person to retry, or to drop.
  */
 export type StoredState = "pending" | "delivered" | "set_aside";
+
+/** What a message is: a fact for whoever hears it, or an intention for the bus that consumes it. */
+export type MessageKind = "event" | "command";
 
 /** Why a bounded context did not execute it. */
 export type DeliveryFailure = {
@@ -44,17 +48,21 @@ export type DeliveryFailure = {
   readonly message: string;
 };
 
-/** A published event as a store keeps it: its envelope, its values and how its delivery goes. */
-export type StoredEvent = {
+/** A message as a store keeps it: its envelope, its values and how its delivery goes. */
+export type StoredMessage = {
+  readonly kind: MessageKind;
   readonly envelope: Envelope;
-  /** The event's values (`valuesOf`): rebuilt as its class on delivery. */
+  /** Its values (`valuesOf`): rebuilt as its class on delivery. */
   readonly payload: JsonValue;
   readonly state: StoredState;
+  /** Every time it was handed to its consumers. */
   readonly attempts: number;
-  /** When it may be tried again, ISO; `null` when it need not wait. */
+  /** When it may be tried again, ISO; `null` when it need not wait a time. */
   readonly retryAt: string | null;
   /** The bounded contexts done with it — executed, or set aside —: a retry never runs them again. */
   readonly reached: readonly string[];
   /** Why the last attempt did not reach every context. */
   readonly failures: readonly DeliveryFailure[];
+  /** What a Command answered (`valuesOf`), once delivered; `null` for an event. */
+  readonly answer: JsonValue | null;
 };

@@ -33,7 +33,7 @@ module has only the layers it needs, and says what it offers in its own `index.t
 | `src/client/`        | `Transport`, `entity()`, the contract (domain); REST, memory, Parquet; discovery, propagation   |
 | `src/model/`         | Model definitions: `defineMeta`, from a JSON Schema, the store of known ones                    |
 | `src/core/`          | DTOs and events, bus, services, handlers, extension points; pipeline; `BoundedContext`; process |
-| `src/event_driven/`  | `Envelope`, messages, `EventQueue`/`Subscribes` ports; queues; `Publisher`, `Subscriber`        |
+| `src/event_driven/`  | `Envelope`, messages, `MessageQueue`/`Subscribes` ports; queues; `Publisher`, `Subscriber`      |
 | `src/codegen/`       | The generator and its CLI (`sincpro-client generate`) — the only place Node is allowed          |
 | `src/testing/`       | The public entry of the in-memory observability adapters                                        |
 | `tests/`             | vitest in Node, one folder per module; `tests/support/` holds fakes and forge's contracts       |
@@ -92,8 +92,8 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **How events are carried is here; where they are kept is the platform's.** An event's
   consumers are acknowledged apart: a bounded context's use case for it (one per bounded context,
   keyed by its name), its event handlers and a subscriber's (`<owner>/<Handler>`). `storedQueue`
-  holds the rules — store first, deliver in order, retry what may succeed, set aside what never
-  will, never run one consumer twice — over an `EventStore` the platform plugs (SQLite,
+  holds the rules — store first, deliver in order, decide by the verdict (`verdictOf`), never
+  run one consumer twice — over a `MessageStore` the platform plugs (SQLite,
   IndexedDB, memory). A store only keeps records; it never decides.
 - **The Subscriber is the queue's entrypoint, and it is composite.** One per queue — never one
   per handler —, created once like a bounded context (`new Subscriber<D>("app")`,
@@ -134,8 +134,12 @@ module has only the layers it needs, and says what it offers in its own `index.t
   nothing else needs to know a circuit exists.
 - **Delivery is at least once.** A stored message may run twice after a crash. The use case keys
   its effect by `this.execution.causationId` (the message's id) or by the entity the event names.
-  `maxAttempts` sets aside what keeps failing; `attemptsOf` gives one kind of event its own
-  (`1`: never retried on its own). One process drains a store. `execution` is
+  A message is sent once (`retries: 0`) and a failure is set aside; what goes over the network
+  (`requiresNetwork`) waits while the other side is not there (`WAITING_KINDS`), until
+  `maxAttempts`. A platform extends the rules by wrapping `verdictOf`, never in the queue.
+- **A Command can travel too.** `publisher.send(command)` stores an intention; the bus that
+  consumes it (the subscriber's `commands`) runs it when it can, and its answer is kept. Its
+  envelope id is its key: the use case sends it as the `Idempotency-Key`. One process drains a store. `execution` is
   reserved.
 - **A failure says its kind, whatever the wire.** `failureOf` reads a declared `failureKind`, the
   `Problem` (the same over REST, JSON-RPC and gRPC), then a REST status. A transport of another

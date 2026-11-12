@@ -290,46 +290,59 @@ that hears it continues that flow.
 
 What is defined here, and what each platform plugs behind the ports:
 
-| Piece             | Here                                                           | The platform's                         |
-| ----------------- | -------------------------------------------------------------- | -------------------------------------- |
-| `DomainEvent`     | the class, its `eventName`, its messages                       | —                                      |
-| `Command`         | its identity (given at registration), its messages             | —                                      |
-| `Envelope`        | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
-| `EventQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
-| `EventStore` port | `memoryEventStore()`                                           | mobile: a SQLite table; web: IndexedDB |
-| `Subscriber`      | pull, rebuild, deliver to every consumer; Commands declared    | where messages come from (a socket)    |
+| Piece               | Here                                                           | The platform's                         |
+| ------------------- | -------------------------------------------------------------- | -------------------------------------- |
+| `DomainEvent`       | the class, its `eventName`, its messages                       | —                                      |
+| `Command`           | its identity (given at registration), its messages             | —                                      |
+| `Envelope`          | `name`, `id`, `correlationId`, `causationId`, `publishedAt`    | storing it beside the event            |
+| `MessageQueue` port | `syncQueue` (in the call); `storedQueue` (store, then deliver) | a broker's queue, `BroadcastChannel`   |
+| `MessageStore` port | `memoryMessageStore()`                                         | mobile: a SQLite table; web: IndexedDB |
+| `Subscriber`        | pull, rebuild, deliver to every consumer; Commands declared    | where messages come from (a socket)    |
 
-### Stored events: one way to carry them, any store
+### Stored messages: events and Commands, one way to carry them, any store
 
 ```ts
 const queue = storedQueue({
-  store: sqliteEventStore(db), // the platform's EventStore; memoryEventStore() in a tab or a test
+  store: sqliteMessageStore(db), // the platform's MessageStore; memoryMessageStore() in a tab or a test
   subscriber: new Subscriber(
     salesBoundedContext,
     stockBoundedContext,
     printingBoundedContext,
   ),
   ready: (stored) => connectivity.online || !needsNetwork(stored.envelope.name),
+  policyOf: (stored) => policies[stored.envelope.name], // what its class or the app says
   onSettled: (stored) => activity.show(stored.envelope.name, stored.state),
 });
 shopBoundedContext.addDependency("publisher", new Publisher(queue));
 connectivity.onBack(() => queue.drain()); // and on coming back to the foreground
+
+await publisher.publish(new OrderPaid(order.id)); // a fact: every bounded context that hears it
+await publisher.send(new CommandSendMessage(chat, text)); // an intention: the bus that consumes it
 ```
 
-`publish` returns once the event is stored. Then the queue delivers what waits, one at a time,
-in the order stored — the backend's store-and-forward, over whatever store the platform plugs:
+`publish` and `send` return once the message is stored. Then the queue delivers what waits, in
+the order stored — the backend's store-and-forward, over whatever store the platform plugs. An
+event goes to everyone who hears it and does not have it yet; a Command, to the bus that
+consumes it (named in the subscriber's `commands`), and its answer is kept. What follows each
+delivery is its verdict (`verdictOf`, the backend's queue verdicts), with its policy:
 
-- It is rebuilt as its class — `static fromJSON` when it has one — and executed by everyone who
-  hears it and does not have it yet: a retry never runs one twice.
-- A failure a retry may fix (`failureOf`: unavailable, no answer, a conflict…) is tried again
-  after the backoff or the wait it asks for, and what follows waits, so the order holds.
-- A failure every attempt would repeat (`PERMANENT_KINDS`: a refusal, invalid, not found) sets
-  it aside — the dead-letter queue — and never holds back what follows.
-- One that is not `ready` (no connection, no session) waits while the rest go on.
-- After `maxAttempts` (10) a failure a retry might still fix is set aside too: a bug of the
-  process (`internal`) never holds the line forever.
-- An event can get attempts of its own (`attemptsOf`): `1` sets it aside at its first failure —
-  a print the person watched fail waits for them to retry it, and never holds the line.
+| What happened                                                                                                                                   | Verdict                                           |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| every consumer has it                                                                                                                           | `delivered`                                       |
+| it is not `ready` (no connection, no session)                                                                                                   | waits                                             |
+| it goes over the network and the other side is not there now (`WAITING_KINDS`: unavailable, out of quota, an open circuit, sent with no answer) | `wait` — as long as it takes, until `maxAttempts` |
+| a failure every attempt would repeat (`PERMANENT_KINDS`)                                                                                        | `set_aside`                                       |
+| any other failure (a bug, a device that did not answer)                                                                                         | `retry` while it has `retries`, else `set_aside`  |
+
+- **Sent once by default** (`DEFAULT_DELIVERY_POLICY`: `retries: 0`, `maxAttempts: Infinity`,
+  `requiresNetwork: false`): a failure is set aside — the dead-letter queue — for a person.
+- **A message waiting never holds the line**: what is due goes on.
+- **Sent again with the same key.** A Command's envelope id is its key: its use case sends it as
+  the `Idempotency-Key` (`this.execution.causationId`), so one that went out with no answer is
+  sent again and the backend runs it once. A server without keys is verified by the use case.
+- **Open for extension.** `policy` and `policyOf` set the rules per queue and per message; a
+  platform adds its own by wrapping the verdict —
+  `verdict: (delivery) => mine(delivery) ?? verdictOf(delivery)` —, never by changing the queue.
 
 The port only keeps records — `add`, `next(skip)`, `save` — so a SQLite table, IndexedDB or
 memory carry events the same way, with the same rules.
@@ -825,10 +838,10 @@ src/
     entrypoint/      BoundedContext, screensTransport
     infrastructure/  configureProcess, configureLogger, processListeners
   event_driven/
-    domain/          Envelope, the messages (an event's, a Command's), the EventQueue,
-                     Subscribes and EventStore ports
+    domain/          Envelope, the messages (an event's, a Command's), the MessageQueue,
+                     Subscribes and MessageStore ports
     services/        writing and reading messages
-    adapters/        syncQueue, storedQueue, memoryEventStore
+    adapters/        syncQueue, storedQueue, memoryMessageStore
     entrypoint/      Publisher, Subscriber (the queue's composite entrypoint)
   codegen/         the generator and its CLI — the only place Node is allowed
   testing/         memoryTracer, memoryReporter, memoryLogger
