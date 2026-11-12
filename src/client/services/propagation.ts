@@ -132,6 +132,26 @@ export function bindOperations(
   });
 }
 
+/**
+ * An `OperationTransport` a run binds to itself when it is a dependency: its `call` carries the
+ * run's trace, context and signal. `restOperations`, `jsonRpcOperations` and `guardedTransport`
+ * answer one; a platform's own (gRPC) marks itself with it.
+ *
+ *     boundedContext.addDependency("operations", bindableOperations(grpcOperations(channel)));
+ *
+ * Context: an object is not taken for a transport because it has a `call` — an Odoo client's is
+ * `call(service, method, args)`, and binding it rewrote its arguments and hid its other methods.
+ * A run binds what says it can be bound (`BIND`) and a REST `Transport`; nothing else.
+ */
+export function bindableOperations<T extends OperationTransport>(transport: T): T {
+  Object.defineProperty(transport, BIND, {
+    value: (execution: Execution) => bindOperations(transport, execution),
+    enumerable: false,
+    configurable: true,
+  });
+  return transport;
+}
+
 /** A transport of either kind, bound to `execution`. */
 export function bound<W extends Transport | OperationTransport>(
   wire: W,

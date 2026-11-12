@@ -158,11 +158,13 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **Decorators are optional.** Function registration must work without any decorator
   transform. Standard and legacy (`experimentalDecorators`) fixtures are compiled explicitly in
   tests; do not claim Metro (Babel) or web bundler support without testing those configurations.
-- **Binding a dependency never takes away what it is.** A `Transport` or an `OperationTransport`
-  (anything with `call`) is bound to the run by wrapping only its wire's methods; its state, its
-  own methods and its getters stay the original's (`keeping` in `propagation.ts`). Answering a new
-  object with only the wire's methods made an Odoo client lose `setServer` — only with a trace to
-  carry, so never in a test without a tracer.
+- **A run binds what says it can be bound, never what looks like a transport.** A dependency is
+  bound when it carries `BIND` (a generated client, `restOperations`, `jsonRpcOperations`,
+  `guardedTransport`, `bindableOperations(…)` for a platform's own) or is a REST `Transport`.
+  An object is never taken for an `OperationTransport` because it has a `call`: an Odoo client's
+  is `call(service, method, args)`, and binding it hid `setServer` and rewrote its `args` — only
+  with a trace to carry, so never in a test without a tracer. Binding wraps only the wire's
+  methods; the dependency's state, methods and getters stay its own (`keeping`).
 - **The trace reaches the wire through the dependencies.** A dependency is bound to the run when it
   is a `Transport` or carries `BIND` (every generated client does, through `bindable`); anything
   else is handed as it is. A client built elsewhere and closed over sends no trace.

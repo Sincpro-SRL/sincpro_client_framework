@@ -10,6 +10,7 @@ import {
   readRoute,
   type Transport,
 } from "@sincpro/client-framework/client/domain/transport";
+import { bindableOperations } from "@sincpro/client-framework/client/services/propagation";
 
 const PATH_KEY = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
@@ -62,7 +63,7 @@ function withQuery(route: string, fields: Readonly<Record<string, unknown>>): st
  * Final: the operation's answer, as the contract describes it.
  */
 export function restOperations(transport: Transport): OperationTransport {
-  return {
+  return bindableOperations({
     call<T>(operation: RemoteOperation, input: unknown, options: OperationOptions = {}) {
       const rest = operation.rest;
       if (rest === undefined)
@@ -82,5 +83,5 @@ export function restOperations(transport: Transport): OperationTransport {
         return Promise.reject(error);
       }
     },
-  };
+  });
 }

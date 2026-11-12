@@ -10,6 +10,7 @@ import type {
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/domain/transport";
+import { bindableOperations } from "@sincpro/client-framework/client/services/propagation";
 import type { Criteria } from "@sincpro/criteria";
 
 /**
@@ -34,10 +35,10 @@ export function guardedTransport(
   breaker: CircuitBreaker,
 ): Transport | OperationTransport {
   if (isOperationTransport(transport))
-    return {
+    return bindableOperations({
       call: <T>(operation: RemoteOperation, input: unknown, options?: OperationOptions) =>
         breaker.call(() => transport.call<T>(operation, input, options)),
-    };
+    });
   const guarded: Transport = {
     list: <T>(
       route: string,

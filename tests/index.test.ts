@@ -47,6 +47,7 @@ const PUBLIC = [
   "bindOperations",
   "bindTransport",
   "bindable",
+  "bindableOperations",
   "bodyFor",
   "causeOf",
   "collectionOf",
