@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 
 import {
+  CircuitBreaker,
   configureProcess,
   guardedTransport,
+  markedAs,
   memoryTransport,
   processContext,
   restTransport,
   screensTransport,
+  type Transport,
   TransportError,
 } from "@sincpro/client-framework";
-import { CircuitBreaker } from "@sincpro/client-framework/circuit_breaker/entrypoint/circuit-breaker";
-import { markedAs, type Transport } from "@sincpro/client-framework/client/domain/transport";
 import {
   memoryLogger,
   memoryReporter,

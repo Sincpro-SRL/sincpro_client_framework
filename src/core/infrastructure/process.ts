@@ -73,7 +73,8 @@ export type ProcessOptions = {
    */
   identity?: { release: string; tenant?: string; keys?: IdentityKeys };
   /**
-   * The context key a run's time zone is read from (`time_zone` by default, see `timeZoneOf`).
+   * The context key a run's time zone is read from (`timezone` by default — the backend's, see
+   * `timeZoneOf`). Another key is read only here: the backend reads `timezone` alone.
    * An application that keeps its company's zone under another name says `keys: "company_zone"`
    * — or a list, the first found wins.
    */
