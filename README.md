@@ -328,6 +328,8 @@ in the order stored — the backend's store-and-forward, over whatever store the
 - One that is not `ready` (no connection, no session) waits while the rest go on.
 - After `maxAttempts` (10) a failure a retry might still fix is set aside too: a bug of the
   process (`internal`) never holds the line forever.
+- An event can get attempts of its own (`attemptsOf`): `1` sets it aside at its first failure —
+  a print the person watched fail waits for them to retry it, and never holds the line.
 
 The port only keeps records — `add`, `next(skip)`, `save` — so a SQLite table, IndexedDB or
 memory carry events the same way, with the same rules.
