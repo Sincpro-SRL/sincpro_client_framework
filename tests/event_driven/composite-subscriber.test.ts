@@ -223,7 +223,9 @@ test("the stored queue retries only the consumer that failed; the others are nev
     store,
     subscriber: appSubscriber,
     policy: { retries: 1 },
-    wait: 1,
+    // Long enough that «waiting» is still true when it is checked right after the first drain,
+    // even on a loaded runner; the retry is then due and the polling below waits for it.
+    wait: 200,
   });
   failures.push(new StillOffline("no network"));
   const paid = new SalePaid("s-5");
