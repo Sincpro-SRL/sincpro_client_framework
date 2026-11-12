@@ -340,7 +340,7 @@ test("console is the default engine without per-logger construction or configura
   configureProcess();
   loggerAdapter.info("Default console");
   assert.equal(output.mock.calls.length, 1);
-  assert.match(String(output.mock.calls[0]?.[0]), /\[adapter\] INFO/);
+  assert.match(String(output.mock.calls[0]?.[0]), /INFO {2}\[adapter\] Default console$/);
   configureLogger({ engine: false });
   loggerAdapter.info("Disabled");
   assert.equal(output.mock.calls.length, 1);
@@ -358,7 +358,7 @@ test("configureProcess and configureLogger take the same logging configuration",
   loggerAdapter.info("Hidden by the same mask");
   infrastructure.info("Shown again");
   assert.deepEqual(
-    output.mock.calls.map((call) => call[1]),
+    output.mock.calls.map((call) => String(call[0]).split("] ")[1]),
     ["Shown", "Shown again"],
   );
 });

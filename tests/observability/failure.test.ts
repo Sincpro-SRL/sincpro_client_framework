@@ -189,12 +189,12 @@ test("in development the console prints an unexpected failure as an Error, with 
   try {
     configureProcess({ logger: { engine: consoleLogger({ mode: "development" }) } });
     await assert.rejects(saving().execute(new CommandSave()));
-    const [line, record, shown] = error.mock.calls.at(-1) ?? [];
+    const [line, shown, ...rest] = error.mock.calls.at(-1) ?? [];
     assert.match(
       String(line),
-      /\[feature\] ERROR Execution failed: TypeError: server is undefined/,
+      /ERROR \[feature\] ✖ \S+ TypeError: server is undefined \d+ms #/,
     );
-    assert.equal((record as { failure: { stack?: string } }).failure.stack, undefined);
+    assert.equal(rest.length, 0, "the record is not dumped after the line");
     // An Error — what LogBox and Expo's terminal print with its code frame, never `null null`.
     assert.ok(shown instanceof Error);
     assert.equal(shown.name, "TypeError");

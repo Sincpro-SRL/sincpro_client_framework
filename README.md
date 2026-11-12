@@ -587,9 +587,26 @@ The console is the default engine. In production it is silent; in development it
 everything, and `level` and `layers` hide only INFO/DEBUG. A supplied `engine` owns its own
 policy, and each sink of `combineLoggers` keeps its own — the console's silence never silences
 another. Every execution writes `execution.started` (DEBUG) and `execution.finished` with its
-outcome and duration (INFO, WARN when refused, ERROR when failed). No line carries a DTO, a
-result, an error body or the session's context unless the author writes it. Delivery, buffering
-and credentials (Loki, a phone's queue) are the platform's.
+outcome and duration (INFO, also when refused or aborted; ERROR when failed). No line carries a
+DTO, a result, an error body or the session's context unless the author writes it. Delivery,
+buffering and credentials (Loki, a phone's queue) are the platform's.
+
+In development each record is one line for a person — time, level, layer, use case, message, its
+attributes as `key=value`, and the run's short id — never the record object after it:
+
+```text
+10:20:30.045 DEBUG [feature] ▶ shop.Pay #0193a1
+10:20:30.051 INFO  [feature] shop.Pay Paying order=A-1 note="two words" #0193a1
+10:20:30.057 INFO  [feature] ✔ shop.Pay 12ms #0193a1
+10:20:31.002 INFO  [feature] ✖ shop.Pay refused: domain 3ms #0193b7
+10:20:32.118 ERROR [feature] ✖ shop.Pay TypeError: card is undefined 4ms #0193c2   + the Error, with its stack
+```
+
+An unexpected failure also prints its `Error`, so LogBox, Expo's terminal and a browser show its
+code frame. `consoleLogger({ mode, colors })` colors the lines of the levels named (`true`: every
+one) with ANSI codes: the platform knows where its console renders them — a terminal does, React
+Native's LogBox (WARN and ERROR in the app) does not. `prettyLine(record)` is the same line, for a
+sink of one's own.
 
 ## Context
 
