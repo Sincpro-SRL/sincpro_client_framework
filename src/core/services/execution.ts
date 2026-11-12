@@ -13,6 +13,7 @@ import type {
 import { bindDependency } from "@sincpro/client-framework/core/services/binding";
 import { handled } from "@sincpro/client-framework/core/services/error-handlers";
 import { runAround } from "@sincpro/client-framework/core/services/interceptors";
+import { tenantOf } from "@sincpro/client-framework/observability/domain/identity";
 import {
   type Attributes,
   NO_TRACER,
@@ -222,7 +223,12 @@ export async function executeService(
   const correlationId = above?.correlationId ?? options.cause?.correlationId ?? id;
   const causationId = above?.id ?? options.cause?.id;
   const layer = options.layer;
+  // Who is running, on the span as on its lines and its report.
+  const release = ports.identity?.release;
+  const tenant = tenantOf(context, ports.identity);
   const attributes: Attributes = {
+    ...(release ? { release } : {}),
+    ...(tenant ? { tenant } : {}),
     "sincpro.use_case": useCase,
     "sincpro.layer": options.layer,
     "sincpro.context": options.boundedContext,
@@ -292,6 +298,8 @@ export async function executeService(
             traceId: span.traceId,
             executionId: id,
             context,
+            ...(release ? { release } : {}),
+            ...(tenant ? { tenant } : {}),
           }),
         undefined,
       );

@@ -6,13 +6,20 @@ import {
   type ConsoleLoggerOptions,
 } from "@sincpro/client-framework/observability/adapters/console";
 import type { ErrorReporter } from "@sincpro/client-framework/observability/domain/errors";
+import {
+  identityOf,
+  type ProcessIdentity,
+} from "@sincpro/client-framework/observability/domain/identity";
 import type { Logger } from "@sincpro/client-framework/observability/domain/logging";
 import {
   NO_TRACER,
   type Outcome,
   type Tracer,
 } from "@sincpro/client-framework/observability/domain/tracing";
-import { replaceObservability } from "@sincpro/client-framework/observability/infrastructure/registry";
+import {
+  observabilityNow,
+  replaceObservability,
+} from "@sincpro/client-framework/observability/infrastructure/registry";
 import { outcomeOf } from "@sincpro/client-framework/observability/services/outcome";
 
 /**
@@ -37,6 +44,7 @@ export type LoggerConfiguration = Partial<ConsoleLoggerOptions> & {
  *
  *     // entrypoints/main.tsx — the platform's pieces, built from the application's settings
  *     configureProcess({
+ *       identity: { release: "forge-web:1.4.0" },           // + tenant, when the deployment serves one
  *       tracer: browserTracer({ endpoint: settings.otlp, service: "forge-web" }),
  *       reporter: glitchtipReporter({ dsn: settings.glitchtip }),
  *       logger: { mode: settings.production ? "production" : "development" },
@@ -53,6 +61,12 @@ export type LoggerConfiguration = Partial<ConsoleLoggerOptions> & {
  * with its own tracer and starts from a clean context.
  */
 export type ProcessOptions = {
+  /**
+   * Who is running — the backend's `APP_RELEASE` (`<name>:<version>`) and `TENANT`. Every span,
+   * log line and report says its `release` and, when there is one, its `tenant` (the run's
+   * context's, else this one); `service.name` and `service.version` are read out of the release.
+   */
+  identity?: { release: string; tenant?: string };
   /** The platform's (OpenTelemetry in a browser, a queue on a phone, memory in a test). */
   tracer?: Tracer;
   /** The platform's (GlitchTip, Sentry, memory in a test). Only what nobody expected reaches it. */
@@ -83,12 +97,23 @@ function loggingEngine(options: LoggerConfiguration): Logger | undefined {
 export function configureProcess(options: ProcessOptions = {}): void {
   const logger = loggingEngine(options.logger ?? {});
   replaceObservability({
+    identity: options.identity
+      ? identityOf(options.identity.release, options.identity.tenant)
+      : undefined,
     tracer: options.tracer ?? NO_TRACER,
     reporter: options.reporter,
     logger,
     outcomeOf: options.outcomeOf ?? outcomeOf,
   });
   replaceProcessStore(options.context ?? memoryContexts());
+}
+
+/**
+ * Who the process is running as (`configureProcess({ identity })`): what a platform's tracer puts
+ * on its resource and its log shipping on its labels, so no adapter invents a key of its own.
+ */
+export function processIdentity(): ProcessIdentity | undefined {
+  return observabilityNow().identity;
 }
 
 /** Replace logging only; tracing, reporting and the context stay as they are. */

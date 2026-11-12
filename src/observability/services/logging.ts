@@ -1,4 +1,5 @@
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
+import { tenantOf } from "@sincpro/client-framework/observability/domain/identity";
 import type {
   LayerLogger,
   Logger,
@@ -33,7 +34,10 @@ import { observabilityNow } from "@sincpro/client-framework/observability/infras
 type Correlation = Pick<
   LogRecord,
   "boundedContext" | "useCase" | "executionId" | "correlationId" | "traceId" | "spanId"
->;
+> & {
+  /** The run's context, which may name its tenant. */
+  readonly runContext?: Readonly<Record<string, unknown>>;
+};
 
 const processSink = (): Logger | undefined => observabilityNow().logger;
 
@@ -48,8 +52,28 @@ function deliver(logger: Logger | undefined, record: LogRecord): void {
   }
 }
 
+/**
+ * A line as it is delivered: where it was written, and who was running — the process's release
+ * and the tenant (the run's context's, else the deployment's), when there is one.
+ */
+function recordOf(
+  fields: Omit<LogRecord, "release" | "tenant">,
+  correlation: Correlation,
+): LogRecord {
+  const { runContext, ...where } = correlation;
+  const identity = observabilityNow().identity;
+  const tenant = tenantOf(runContext ?? {}, identity);
+  return {
+    ...fields,
+    ...where,
+    ...(identity ? { release: identity.release } : {}),
+    ...(tenant ? { tenant } : {}),
+  };
+}
+
 function correlationOf(execution: Execution): Correlation {
   return {
+    runContext: execution.context,
     boundedContext: execution.boundedContext,
     useCase: execution.useCase,
     executionId: execution.id,
@@ -65,14 +89,19 @@ function layerLogger(
   correlation: Correlation = {},
 ): LayerLogger {
   const write = (level: LogLevel, message: string, attributes?: Attributes) => {
-    deliver(sink(), {
-      timestamp: new Date().toISOString(),
-      level,
-      layer,
-      message,
-      ...(attributes ? { attributes: { ...attributes } } : {}),
-      ...correlation,
-    });
+    deliver(
+      sink(),
+      recordOf(
+        {
+          timestamp: new Date().toISOString(),
+          level,
+          layer,
+          message,
+          ...(attributes ? { attributes: { ...attributes } } : {}),
+        },
+        correlation,
+      ),
+    );
   };
   const logger: LayerLogger = {
     debug: (message, attributes) => write("debug", message, attributes),
@@ -130,15 +159,20 @@ export function logExecution(
         : completed
           ? "info"
           : "debug";
-  deliver(processSink(), {
-    timestamp: new Date().toISOString(),
-    level,
-    layer,
-    event: completed ? "execution.finished" : "execution.started",
-    message: completed ? `Execution ${completed.outcome}` : "Execution started",
-    ...correlationOf(execution),
-    ...(completed ? completed : {}),
-  });
+  deliver(
+    processSink(),
+    recordOf(
+      {
+        timestamp: new Date().toISOString(),
+        level,
+        layer,
+        event: completed ? "execution.finished" : "execution.started",
+        message: completed ? `Execution ${completed.outcome}` : "Execution started",
+        ...(completed ? completed : {}),
+      },
+      correlationOf(execution),
+    ),
+  );
 }
 
 /**
@@ -149,14 +183,19 @@ export function logHandled(
   layer: LogLayer,
   correlation: { execution: Execution } | { boundedContext: string },
 ): void {
-  deliver(processSink(), {
-    timestamp: new Date().toISOString(),
-    level: "info",
-    layer,
-    event: "error.handled",
-    message: "Error handled",
-    ...("execution" in correlation
-      ? correlationOf(correlation.execution)
-      : { boundedContext: correlation.boundedContext }),
-  });
+  deliver(
+    processSink(),
+    recordOf(
+      {
+        timestamp: new Date().toISOString(),
+        level: "info",
+        layer,
+        event: "error.handled",
+        message: "Error handled",
+      },
+      "execution" in correlation
+        ? correlationOf(correlation.execution)
+        : { boundedContext: correlation.boundedContext },
+    ),
+  );
 }

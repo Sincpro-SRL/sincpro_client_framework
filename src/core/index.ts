@@ -71,6 +71,7 @@ export {
   configureLogger,
   configureProcess,
   type LoggerConfiguration,
+  processIdentity,
   type ProcessOptions,
 } from "@sincpro/client-framework/core/infrastructure/process";
 export type { HandlerRegistrar } from "@sincpro/client-framework/core/services/event-handlers";

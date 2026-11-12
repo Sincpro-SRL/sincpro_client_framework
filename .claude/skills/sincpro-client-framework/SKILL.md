@@ -113,6 +113,7 @@ entrypoint).
 
 ```ts
 configureProcess({
+  identity: { release: "forge-web:1.4.0" }, // who is running (+ tenant): on every span, line, report
   tracer, // web: browserTracer(…); mobile: its OTel or queue tracer
   reporter, // sentryReporter(client) — GlitchTip speaks Sentry
   logger: { mode: production ? "production" : "development" }, // or { engine: lokiLogger }

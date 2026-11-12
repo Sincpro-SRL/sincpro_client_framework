@@ -40,6 +40,8 @@ export function sentryReporter(client: ExceptionClient): ErrorReporter {
         captureContext: {
           tags: {
             "sincpro.use_case": about.useCase,
+            ...(about.release ? { release: about.release } : {}),
+            ...(about.tenant ? { tenant: about.tenant } : {}),
             ...(about.traceId === "" ? {} : { trace_id: about.traceId }),
           },
           contexts: {
