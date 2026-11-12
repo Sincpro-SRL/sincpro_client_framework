@@ -6,8 +6,8 @@ import {
   configureProcess,
   DomainEvent,
   type Envelope,
-  type EventQueue,
   Feature,
+  type MessageQueue,
   Publisher,
   Subscriber,
   syncQueue,
@@ -93,7 +93,10 @@ test("what a Feature publishes, every bounded context that hears it executes, in
 
 test("the envelope names the event, its flow and the run that published it", async () => {
   const put: Envelope[] = [];
-  const recording: EventQueue = { put: (_event, envelope) => void put.push(envelope) };
+  const recording: MessageQueue = {
+    put: (_event, envelope) => void put.push(envelope),
+    send: (_command, envelope) => void put.push(envelope),
+  };
   const shop = new BoundedContext<{ publisher: Publisher }>("shop");
   shop.addDependency("publisher", new Publisher(recording)).feature(CommandPay)(Pay);
   const tracer = memoryTracer();

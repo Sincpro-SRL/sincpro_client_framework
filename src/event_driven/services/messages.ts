@@ -69,6 +69,34 @@ export function eventMessageOf(
 }
 
 /**
+ * The envelope of a Command sent through a queue — its identity is its name —, sent by the run
+ * `cause` names, or the head of its own flow. Its id is the Command's key: what its use case
+ * sends as the `Idempotency-Key` (`this.execution.causationId`), so sending it again never runs
+ * it twice on a server that keeps keys.
+ */
+export function commandEnvelopeOf(
+  command: AnyCommand | RemoteCommand,
+  cause?: Cause,
+): Envelope {
+  const known = identityOf(command);
+  if (known?.kind !== "command" || known.wire === undefined || known.wire.trim() === "") {
+    throw new TypeError(
+      `${known?.type?.name ?? "This Command"} has no identity: a bounded context gives it one when it registers it`,
+    );
+  }
+  const id = newEntityId();
+  return {
+    name: known.wire,
+    id,
+    correlationId: cause?.correlationId ?? id,
+    causationId: cause?.id ?? null,
+    publishedAt: new Date().toISOString(),
+    ...(cause?.traceparent ? { traceparent: cause.traceparent } : {}),
+    ...(cause?.tracestate ? { tracestate: cause.tracestate } : {}),
+  };
+}
+
+/**
  * `command` as it travels — sent by the run `cause` names, or the head of its own flow; its
  * `type` is its identity, which a bounded context gave it when it registered it.
  *

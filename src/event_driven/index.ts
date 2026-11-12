@@ -1,20 +1,20 @@
 /**
- * Event-driven: the ports and the in-memory pieces that let every platform publish domain events
- * and hand what a queue carries to the bus the same way — as sincpro_framework's `event_driven`.
- * Delivering them durably (SQLite on a phone, IndexedDB in a browser, a broker) is each
- * platform's, behind `EventQueue`.
+ * Event-driven: the ports and the in-memory pieces that let every platform publish events, send
+ * Commands, and hand what a queue carries to the bus the same way — as sincpro_framework's
+ * `event_driven`. Delivering them durably (SQLite on a phone, IndexedDB in a browser, a broker)
+ * is each platform's, behind `MessageQueue`.
  *
- *   domain/      the envelope, the messages (an event, a Command) and the ports: EventQueue,
- *                Subscribes, EventStore
+ *   domain/      the envelope, the messages (an event, a Command), the ports (MessageQueue,
+ *                Subscribes, MessageStore) and the delivery's rules (DeliveryPolicy, verdictOf)
  *   services/    writing and reading messages: a Command by its identity, an event by its name
- *   adapters/    syncQueue (in the call), storedQueue (store, then deliver, retry, set aside),
- *                memoryEventStore
+ *   adapters/    syncQueue (in the call), storedQueue (store, then deliver by the verdict),
+ *                memoryMessageStore
  *   entrypoint/  Publisher (what a Feature holds), Subscriber (the queue's only entrypoint)
  */
 export {
-  type MemoryEventStore,
-  memoryEventStore,
-} from "@sincpro/client-framework/event_driven/adapters/memory-event-store";
+  type MemoryMessageStore,
+  memoryMessageStore,
+} from "@sincpro/client-framework/event_driven/adapters/memory-message-store";
 export {
   type StoredQueue,
   storedQueue,
@@ -31,17 +31,28 @@ export type {
 } from "@sincpro/client-framework/event_driven/domain/messages";
 export type {
   CommandType,
-  EventQueue,
   EventType,
   Handled,
+  MessageQueue,
   Subscribes,
 } from "@sincpro/client-framework/event_driven/domain/queue";
 export type {
   DeliveryFailure,
-  EventStore,
-  StoredEvent,
+  MessageKind,
+  MessageStore,
+  StoredMessage,
   StoredState,
 } from "@sincpro/client-framework/event_driven/domain/store";
+export {
+  combined,
+  DEFAULT_DELIVERY_POLICY,
+  type Delivery,
+  type DeliveryPolicy,
+  type FullDeliveryPolicy,
+  type Verdict,
+  verdictOf,
+  WAITING_KINDS,
+} from "@sincpro/client-framework/event_driven/domain/verdict";
 export { Publisher } from "@sincpro/client-framework/event_driven/entrypoint/publisher";
 export {
   CommandNotConsumed,
@@ -52,6 +63,7 @@ export {
 } from "@sincpro/client-framework/event_driven/entrypoint/subscriber";
 export {
   causeOf,
+  commandEnvelopeOf,
   commandFrom,
   commandMessageOf,
   envelopeFrom,

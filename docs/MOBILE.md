@@ -140,7 +140,7 @@ engine, combined with the console through `combineLoggers`.
 
 Mobile's `EventBus` splits along the line this package draws: what is the same on every
 platform comes from here; what a phone does to deliver durably stays in mobile, behind the
-`EventQueue` port. The queue has one `Subscriber`, composite, as in the backend: it delivers
+`MessageQueue` port. The queue has one `Subscriber`, composite, as in the backend: it delivers
 each event to every consumer subscribed to it — a bus's use case for it (with its Command too,
 when a screen also executes it), a bus's event handler, or a handler of the subscriber itself. A
 1.x subscriber becomes an event handler: of its bus when it executes that bus's Commands
@@ -165,7 +165,7 @@ Command.
 | `UserError`, `ValidationError` of mobile-odoo     | errors that declare `domain` / `invalid`: set aside, never retried                 |
 | the drain loop, retries, backoff, DLQ             | `storedQueue` — the same rules on every platform                                   |
 | `requiresNetwork`, `requiresAuth`                 | `ready` of the stored queue: waits while the rest go on                            |
-| SQLite table, `AppState`, NetInfo                 | mobile's `EventStore`, and what calls `queue.drain()`                              |
+| SQLite table, `AppState`, NetInfo                 | mobile's `MessageStore`, and what calls `queue.drain()`                            |
 
 ```ts
 // services/sale_order/confirm-quotation.feature.ts — a screen executes it, and the event triggers it
@@ -192,7 +192,7 @@ export default new CronWorker(
 );
 
 // mobile writes only the store: a SQLite table, rows in the order added
-const sqliteEventStore: EventStore = {
+const sqliteMessageStore: MessageStore = {
   add: (stored) => events.insert(stored),
   next: (skip) => events.firstPendingNotIn(skip),
   save: (stored) => events.update(stored),
@@ -203,7 +203,7 @@ for (const module of activeModules)
   for (const bus of module.boundedContexts()) subscriber.addBus(bus);
 
 const queue = storedQueue({
-  store: sqliteEventStore,
+  store: sqliteMessageStore,
   subscriber,
   ready: (stored) =>
     (online || !requiresNetwork(stored)) && (signedIn || !requiresSession(stored)),
@@ -213,9 +213,11 @@ AppState.addEventListener("change", (state) => state === "active" && queue.drain
 NetInfo.addEventListener((net) => net.isConnected && queue.drain());
 ```
 
-The rules — store first, deliver in order, retry what may succeed after its wait, set aside what
-never will, never run one consumer twice — are the same as on the web; mobile keeps only the table,
-when to drain, and the screen that lists the set-aside events (`state: "set_aside"`). A stored
+The rules — store first, deliver in order, decide by the verdict (sent once; what goes over the
+network waits for the other side), never run one consumer twice — are the same as on the web;
+mobile keeps only the table, when to drain, each message's policy (`policyOf`), the verdict it
+wraps (a dropped connection waits for it), and the screen that lists the set-aside messages
+(`state: "set_aside"`). A stored
 event is rebuilt as its class — `static fromJSON` when it has one, as `from` is today. The
 events a backend publishes reach mobile as generated types when its contract is exported with
 `--events`. This package exports no entity interface to implement; entity identity stays in

@@ -1,20 +1,26 @@
 import { BIND, type Execution } from "@sincpro/client-framework/context/domain/execution";
-import type { DomainEvent, RemoteEvent } from "@sincpro/client-framework/core/domain/dto";
+import type {
+  AnyCommand,
+  DomainEvent,
+  RemoteCommand,
+  RemoteEvent,
+} from "@sincpro/client-framework/core/domain/dto";
 import type { Cause } from "@sincpro/client-framework/core/domain/pipeline";
 import {
   type Envelope,
   envelopeOf,
 } from "@sincpro/client-framework/event_driven/domain/envelope";
-import type { EventQueue } from "@sincpro/client-framework/event_driven/domain/queue";
+import type { MessageQueue } from "@sincpro/client-framework/event_driven/domain/queue";
+import { commandEnvelopeOf } from "@sincpro/client-framework/event_driven/services/messages";
 import { traceparentOf } from "@sincpro/client-framework/observability/services/trace-context";
 
 /**
- * Puts events into a queue — what a Feature holds to tell whoever listens, as the backend's
- * `Publisher`:
+ * Puts messages into a queue — what a Feature or a screen holds to tell whoever listens, or to
+ * ask for something that runs when it can, as the backend's `Publisher`:
  *
  *     shopBoundedContext.addDependency("publisher", new Publisher(queue));
- *     // in a Feature:
- *     await this.publisher.publish(new OrderPaid(order.id));   // its Envelope
+ *     await this.publisher.publish(new OrderPaid(order.id));       // a fact: every hearer
+ *     await this.publisher.send(new CommandSendMessage(chat, text)); // an intention: its bus
  *
  * Context: a dependency of a bounded context is bound to each run (`BIND`), so what a Feature
  * publishes joins that run's flow — the same `correlationId`, caused by the run — with nothing
@@ -22,7 +28,7 @@ import { traceparentOf } from "@sincpro/client-framework/observability/services/
  */
 export class Publisher {
   constructor(
-    private readonly queue: EventQueue,
+    private readonly queue: MessageQueue,
     private readonly cause?: Cause,
   ) {}
 
@@ -33,7 +39,18 @@ export class Publisher {
     return envelope;
   }
 
-  /** The same publisher, publishing as `execution`: its events join that run's flow. */
+  /**
+   * `command` into the queue, with its envelope: an intention, stored and run by the bus that
+   * consumes it when it can — its answer arrives later, kept with it. Answers the envelope once
+   * the queue took it: its id is the Command's key.
+   */
+  async send(command: AnyCommand | RemoteCommand): Promise<Envelope> {
+    const envelope = commandEnvelopeOf(command, this.cause);
+    await this.queue.send(command, envelope);
+    return envelope;
+  }
+
+  /** The same publisher, publishing as `execution`: what it publishes and sends joins that run's flow. */
   [BIND](execution: Execution): Publisher {
     const traceparent = traceparentOf(execution.span);
     return new Publisher(this.queue, {
