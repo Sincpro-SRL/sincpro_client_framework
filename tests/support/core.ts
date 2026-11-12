@@ -11,7 +11,7 @@ import type {
   CommandSendIssue as GeneratedCommandSendIssue,
   ResponseCancelIssue as GeneratedResponseCancelIssue,
   ResponseSendIssue as GeneratedResponseSendIssue,
-} from "./forge-contract/project/domain";
+} from "./forge-contract/project/domain/generated";
 
 export class ResponseCancelIssue extends Response implements GeneratedResponseCancelIssue {
   constructor(

@@ -9,17 +9,23 @@ import {
 } from "@sincpro/client-framework";
 import {
   clientFileOf,
-  domainFileOf,
+  domainFilesOf,
   entitiesFileOf,
+  generatedFilesOf,
   type Metamodel,
   type Operation,
 } from "@sincpro/client-framework/codegen";
 import { test } from "vitest";
 
-import { clientOf } from "../support/forge-contract/project/client";
-import type { CommandSendIssue, Issue } from "../support/forge-contract/project/domain";
+import { clientOf } from "../support/forge-contract/project/adapters/generated/client";
+import type {
+  CommandSendIssue,
+  Issue,
+} from "../support/forge-contract/project/domain/generated";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+/** Every file of `domain/generated/` as one text: what a test reads a type in, wherever it went. */
+const domainOf = (metamodel: Metamodel) => Object.values(domainFilesOf(metamodel)).join("\n");
 const forge = (context: string) =>
   JSON.parse(read(`../support/forge-contract/${context}.contract.json`)) as Metamodel;
 
@@ -216,15 +222,12 @@ function useForgeAsGenerated(issue: Issue) {
 
 test("forge's contexts are written as the committed files, byte for byte", () => {
   for (const context of ["project", "auth", "sandbox"]) {
-    const contract = forge(context);
-    const written = { domain: domainFileOf(contract) } as Record<string, string>;
-    written["client"] = clientFileOf(contract, { domain: context, base: "/v1" });
-    written["entities"] = entitiesFileOf(contract, { domain: context, base: "/v1" });
-    for (const [file, source] of Object.entries(written))
+    const written = generatedFilesOf(forge(context), { domain: context, base: "/v1" });
+    for (const [path, source] of Object.entries(written))
       assert.equal(
         source,
-        read(`../support/forge-contract/${context}/${file}.ts`),
-        `${context}/${file}.ts: the generator changed; if on purpose, make codegen-fixtures`,
+        read(`../support/forge-contract/${context}/${path}`),
+        `${context}/${path}: the generator changed; if on purpose, make codegen-fixtures`,
       );
   }
 });
@@ -233,13 +236,11 @@ test("the same contract with its keys in another order is the same files", () =>
   const contract = forge("project");
   const shuffled = reversed(contract) as Metamodel;
   const at = { domain: "project", base: "/v1" };
-  assert.equal(domainFileOf(shuffled), domainFileOf(contract));
-  assert.equal(clientFileOf(shuffled, at), clientFileOf(contract, at));
-  assert.equal(entitiesFileOf(shuffled, at), entitiesFileOf(contract, at));
+  assert.deepEqual(generatedFilesOf(shuffled, at), generatedFilesOf(contract, at));
 });
 
 test("a record brings every field but a related one, which comes when the read expands it", () => {
-  const source = domainFileOf(shop);
+  const source = domainOf(shop);
   assert.match(source, /export type Order = \{\n {2}\/\*\*\n {3}\* Who pays it\./);
   assert.ok(source.includes("  id: string;\n"));
   assert.ok(source.includes('  state: "draft" | "paid";\n'));
@@ -255,7 +256,7 @@ test("a record brings every field but a related one, which comes when the read e
 });
 
 test("an operation's input requires what its DTO requires, and its answer is its own type", () => {
-  const source = domainFileOf(shop);
+  const source = domainOf(shop);
   assert.ok(
     source.includes(
       "export type CommandPayOrder = {\n  amount?: Money;\n  order_id: string;\n};",
@@ -276,7 +277,7 @@ test("an operation's input requires what its DTO requires, and its answer is its
 });
 
 test("a model a caller sends is its Input: what the contract requires, the server fills the rest", () => {
-  const source = domainFileOf(forge("project"));
+  const source = domainOf(forge("project"));
   // A read answers the specification whole; registering a project sends what it chooses.
   assert.ok(source.includes("  specification: ProjectSpecification;\n"));
   assert.ok(source.includes("  specification?: ProjectSpecificationInput;\n"));
@@ -297,7 +298,7 @@ test("a record's events (DomainEvents) are its entity's history, read by its key
 });
 
 test("criteria is imported from its package, and only the definitions something reaches are written", () => {
-  const source = domainFileOf(shop);
+  const source = domainOf(shop);
   assert.ok(source.includes('import type { Criteria } from "@sincpro/criteria";'));
   assert.ok(source.includes("  criteria?: Criteria;\n"));
   assert.ok(!source.includes("export type Criteria"));
@@ -454,7 +455,7 @@ test("an entity edited through `Edit` reads its record with the caller's draft; 
 });
 
 test("a value a record holds is a named type, never an entity nor a preloaded definition", () => {
-  const domain = domainFileOf(shop);
+  const domain = domainOf(shop);
   assert.ok(domain.includes("  delivery: Address;\n"));
   assert.ok(
     domain.includes("export type Address = {\n  city: string;\n  street: string;\n};"),
@@ -500,12 +501,20 @@ test("a list of keys as a Command's target is the screen's to send: no `target`"
 
 test("the context is named by its alias, else by its bounded context; a contract that names neither is refused", () => {
   const aliased: Metamodel = { ...shop, alias: "ventas" };
-  assert.ok(domainFileOf(aliased).startsWith("// The DTOs of «ventas» (shop), generated"));
+  assert.ok(
+    domainFilesOf(aliased)["models.ts"]!.startsWith(
+      "// The entities and value objects of «ventas» (shop), generated",
+    ),
+  );
   assert.ok(entitiesFileOf(aliased, options).includes('>("ventas:order", {'));
   const { alias: _, ...own } = shop;
-  assert.ok(domainFileOf(own).startsWith("// The DTOs of «shop», generated"));
+  assert.ok(
+    domainFilesOf(own)["commands.ts"]!.startsWith(
+      "// The Commands and Responses of «shop», generated",
+    ),
+  );
   const { bounded_context: __, ...nameless } = own;
-  assert.throws(() => domainFileOf(nameless), /names no bounded context/);
+  assert.throws(() => domainOf(nameless), /names no bounded context/);
 });
 
 test("two searches for one model and none `own`: no entity, and the file says which", () => {
@@ -534,7 +543,7 @@ test("two things with one TypeScript name are refused, naming both", () => {
     models: { ...shop.models, QueryListOrders: { type: "object", properties: {} } },
   };
   assert.throws(
-    () => domainFileOf(types),
+    () => domainOf(types),
     /operation shop\.QueryListOrders and model QueryListOrders are both "QueryListOrders"/,
   );
   const methods: Metamodel = {
@@ -560,10 +569,7 @@ test("a reference outside the metamodel is refused, never guessed", () => {
       "shop.CommandPayOrder": operation({ input: { $ref: "#/$defs/Nowhere" } }),
     },
   };
-  assert.throws(
-    () => domainFileOf(broken),
-    /"#\/\$defs\/Nowhere" names no definition of shop/,
-  );
+  assert.throws(() => domainOf(broken), /"#\/\$defs\/Nowhere" names no definition of shop/);
 });
 
 test("the generated files are checked by the compiler: this file only has to compile", () => {
@@ -594,7 +600,7 @@ function titled(titles: Readonly<Record<string, string>>): Metamodel {
 
 test("an answer goes by the backend's own name, never under a second one", () => {
   const named = titled({ "shop.CommandPlaceOrder": "ResponsePlaceOrder" });
-  const domain = domainFileOf(named);
+  const domain = domainOf(named);
   assert.ok(domain.includes("export type ResponsePlaceOrder = {\n  order_id?: string;\n};"));
   assert.ok(!domain.includes("CommandPlaceOrderAnswer"));
   assert.ok(
@@ -610,7 +616,7 @@ test("a Response two Commands answer with is one type, written once; a name two 
     "shop.CommandPlaceOrder": "ResponseOrder",
     "shop.CommandPayOrder": "ResponseOrder",
   });
-  const domain = domainFileOf(shared);
+  const domain = domainOf(shared);
   assert.equal(domain.split("export type ResponseOrder = {").length - 1, 1);
   assert.ok(!domain.includes("CommandPlaceOrderAnswer"));
   assert.ok(!domain.includes("CommandPayOrderAnswer"));
@@ -629,11 +635,11 @@ test("a Response two Commands answer with is one type, written once; a name two 
       },
     },
   };
-  const two = domainFileOf(differ);
+  const two = domainOf(differ);
   assert.ok(!two.includes("export type ResponseOrder"));
   assert.ok(two.includes("export type CommandPlaceOrderAnswer = {"));
   // A name another type has is not taken either.
-  const clash = domainFileOf(titled({ "shop.CommandPlaceOrder": "Order" }));
+  const clash = domainOf(titled({ "shop.CommandPlaceOrder": "Order" }));
   assert.ok(clash.includes("export type CommandPlaceOrderAnswer = {"));
 });
 
@@ -713,21 +719,28 @@ const ledger: Metamodel = {
 };
 
 test("a relation published as a collection is an EntityCollection of its records", () => {
-  const source = domainFileOf(ledger);
+  const source = domainOf(ledger);
 
   assert.ok(source.includes("  entries?: EntityCollection<Entry>;\n"));
   assert.ok(!source.includes("export type Count"));
 });
 
 test("an export answers a Download, says it streams, and is the entity's export", () => {
-  const domain = domainFileOf(ledger);
+  const domain = domainOf(ledger);
   const client = clientFileOf(ledger, options);
   const entities = entitiesFileOf(ledger, { domain: "ledger", base: "/v1" });
 
   assert.ok(domain.includes("export type QueryExportEntriesAnswer = Download;"));
+  // Each file imports what it names: the answer's bytes, the record's collection.
+  const files = domainFilesOf(ledger);
   assert.ok(
-    domain.includes(
-      'import type { Download, EntityCollection } from "@sincpro/client-framework";',
+    files["commands.ts"]!.includes(
+      'import type { Download } from "@sincpro/client-framework";',
+    ),
+  );
+  assert.ok(
+    files["models.ts"]!.includes(
+      'import type { EntityCollection } from "@sincpro/client-framework";',
     ),
   );
   // The client calls it as any other; the adapter downloads what answers bytes.

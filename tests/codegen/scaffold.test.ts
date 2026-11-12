@@ -69,9 +69,8 @@ test("the skeleton compiles as it is written, beside what the generator writes",
   // The application's own packages: what the generated files import (`@sincpro/criteria`).
   symlinkSync(resolve("node_modules"), join(root, "node_modules"));
   const own = join(root, "domains", "project");
-  cpSync(resolve("tests/support/forge-contract/project"), join(own, "generated"), {
-    recursive: true,
-  });
+  // What `generate` writes, in its layers: `domain/generated/`, `adapters/generated/`.
+  cpSync(resolve("tests/support/forge-contract/project"), own, { recursive: true });
   for (const [name, source] of Object.entries(scaffoldFilesOf(project))) {
     mkdirSync(join(own, name, ".."), { recursive: true });
     writeFileSync(join(own, name), source);

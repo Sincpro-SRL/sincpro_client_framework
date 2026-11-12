@@ -15,14 +15,23 @@ import {
   identifierOf,
   keyOf,
   localOf,
+  siblingOf,
   sorted,
 } from "@sincpro/client-framework/codegen/domain/names";
 
 /**
- * The DTOs of a bounded context as TypeScript, out of the contract sincpro_framework exports:
- * a type per model, per shared definition a model or an operation reaches, per operation's
- * input and answer, and per domain event when the contract carries them. Only types — nothing in
- * the file runs.
+ * The domain of a bounded context as TypeScript, out of the contract sincpro_framework exports —
+ * written in the files of `domain/generated/`, one per kind of thing, as the backend keeps them
+ * apart:
+ *
+ *     models.ts      its entities and value objects — the domain's own words
+ *     commands.ts    every operation's Command and Response, and the `<Name>Input` a caller
+ *                    sends — the application layer's
+ *     events.ts      its domain events and `DomainEvent`, their union — the facts (only when the
+ *                    contract carries them)
+ *     index.ts       the three, re-exported: what the adapters and an application import
+ *
+ * Only types — nothing in them runs.
  *
  * Context: types, never classes. The wire is JSON, and a type says exactly what it holds — a
  * decimal as text, a page as `{items, count, cursor}` —, where a class would claim more unless
@@ -30,16 +39,21 @@ import {
  * `Command` could be registered and executed locally, the confusion between a remote operation
  * and a local use case this package keeps apart. Events read best as a union narrowed by `name`.
  *
- * Context: the file is a snapshot for whoever writes code — a person, or an agent reading the
+ * Context: the files are a snapshot for whoever writes code — a person, or an agent reading the
  * repository —, never the truth at runtime: the transport keeps reading the live definition and
- * revalidates it by `model_version`. So it is written the same way for the same contract (every
- * key sorted, byte for byte, which is what `make verify-client` compares) and never edited; an
- * application extends a type by composition (`Wire & {…}`).
+ * revalidates it by `model_version`. So they are written the same way for the same contract
+ * (every key sorted, byte for byte, which is what `make verify-client` compares) and never
+ * edited; an application extends a type by composition (`Wire & {…}`).
+ *
+ * A shared definition goes with the first kind that names it — the models, then the operations,
+ * then the events —, and a file that names one written elsewhere imports it from there. Every
+ * name is claimed once across the files: `index.ts` re-exports them side by side.
  *
  * criteria's grammar comes with every metamodel (`$defs.Criteria`); `@sincpro/criteria` already
  * types it, so it is imported, never written a second time.
  *
- *     domainFileOf(JSON.parse(readFileSync("project.contract.json", "utf8")))
+ *     domainFilesOf(JSON.parse(readFileSync("project.contract.json", "utf8")))
+ *       -> { "models.ts": "…", "commands.ts": "…", "index.ts": "…" }
  */
 
 const MODELS = "#/models/";
@@ -75,11 +89,15 @@ function keyNote(schema: Schema): string | undefined {
   return `The key of a \`${said.relation}\`.`;
 }
 
-/** What a reference names, and the definitions and imports a rendering reaches. */
+/** What a reference names, and what a rendering reaches — so its file writes it or imports it. */
 type Scope = {
   refer: (ref: string) => string;
+  /** The shared definitions it names. */
   reached: Set<string>;
+  /** What a package of the stack already types (`Criteria`). */
   imports: Set<string>;
+  /** The models it names as records: written in `models.ts`. */
+  models: Set<string>;
   /** The models written in an operation's body, each typed as its `<Name>Input`. */
   inputs: Set<string>;
 };
@@ -94,6 +112,7 @@ function scopeOf(metamodel: Metamodel, shared?: Scope, input = false): Scope {
   const scope: Scope = {
     reached: shared?.reached ?? new Set(),
     imports: shared?.imports ?? new Set(),
+    models: shared?.models ?? new Set(),
     inputs: shared?.inputs ?? new Set(),
     refer: (ref) => {
       const model = ref.startsWith(MODELS);
@@ -104,7 +123,10 @@ function scopeOf(metamodel: Metamodel, shared?: Scope, input = false): Scope {
       if (model || name in metamodel.models) {
         if (!(name in metamodel.models))
           throw new Error(`"${ref}" names no model of ${contextOf(metamodel)}`);
-        if (!input) return identifierOf(name);
+        if (!input) {
+          scope.models.add(name);
+          return identifierOf(name);
+        }
         scope.inputs.add(name);
         return `${identifierOf(name)}Input`;
       }
@@ -250,35 +272,110 @@ function eventDoc(metamodel: Metamodel, name: string, event: EventDescription): 
 }
 
 /**
- * The TypeScript of every DTO of `metamodel`, as the text of one file.
- *
- * 1. The models, by name: an entity's contract, a related model by its own name.
- * 2. Each operation, by its local name (its identity without `<context>.`): its input as
- *    `<Name>` and its answer by the backend's own name for it (`answerOf`: `ResponseX`) — or as
- *    `<Name>Answer` when it has no name.
- * 3. A model an input carries — and the ones it carries, until none is new — as `<Name>Input`:
- *    what a caller sends follows the contract's `required`; the server fills the rest.
- * 4. Each domain event, when the contract carries them, by its class's name (`title`): a record
- *    as it is received — every field present, `name` its wire name as a literal —, and
- *    `DomainEvent`, the union of them all, which a `switch` on `name` narrows.
- * 5. The shared definitions those reach — and the ones those reach, until none is new —, but
- *    never one a package of the stack already types (`Criteria`).
- * Final: a header that says where it came from and not to edit it, the imports, then models,
- *    definitions, operations and events, each sorted by name; two of them with one TypeScript
- *    name are refused, naming both.
+ * The shared definitions `scope` reaches that no other file writes (`elsewhere`) — and the ones
+ * those reach, until none is new —, each as its type, by name.
  */
-export function domainFileOf(metamodel: Metamodel): string {
-  const scope = scopeOf(metamodel);
-  const sent = scopeOf(metamodel, scope, true);
+function definitionsOf(
+  metamodel: Metamodel,
+  scope: Scope,
+  elsewhere: ReadonlySet<string>,
+): Map<string, string> {
   const definitions = metamodel.$defs ?? {};
+  const written = new Map<string, string>();
+  const pending = () =>
+    [...scope.reached].filter((name) => !elsewhere.has(name) && !written.has(name));
+  for (let next = pending(); next.length > 0; next = pending()) {
+    for (const name of next) {
+      const schema = definitions[name]!;
+      written.set(
+        name,
+        `${docOf([schema.description], "")}export type ${identifierOf(name)} = ${typeOf(schema, scope, 0, false)};`,
+      );
+    }
+  }
+  return written;
+}
+
+/**
+ * A file's imports: one line per package of the stack, then one per sibling it names something
+ * of (`import type { Issue } from "./models"`), each with its names sorted.
+ */
+function importsOf(
+  scope: Scope,
+  siblings: readonly (readonly [string, Iterable<string>])[],
+): string[] {
+  const byPackage = new Map<string, string[]>();
+  for (const name of [...scope.imports].sort()) {
+    const imported = IMPORTED[name]!;
+    byPackage.set(imported.from, [...(byPackage.get(imported.from) ?? []), imported.name]);
+  }
+  const packages = [...byPackage.keys()]
+    .sort()
+    .map((from) => `import type { ${byPackage.get(from)!.join(", ")} } from "${from}";`);
+  const own = siblings.flatMap(([file, names]) => {
+    const named = [...new Set([...names].map(identifierOf))].sort();
+    return named.length === 0
+      ? []
+      : [`import type { ${named.join(", ")} } from "${siblingOf(file)}";`];
+  });
+  return [packages, own].filter((group) => group.length > 0).map((group) => group.join("\n"));
+}
+
+/** A file of `domain/generated/`: its header, its imports, then its types. */
+function fileOf(
+  header: string,
+  imports: readonly string[],
+  types: readonly string[],
+): string {
+  return `${[header, ...imports, ...types].join("\n\n")}\n`;
+}
+
+/** The written definitions, sorted by name, each name claimed. */
+function claimedDefinitions(
+  written: ReadonlyMap<string, string>,
+  claim: (name: string, by: string) => void,
+): string[] {
+  return [...written.keys()].sort().map((name) => {
+    claim(identifierOf(name), `definition ${name}`);
+    return written.get(name)!;
+  });
+}
+
+/**
+ * The TypeScript of every DTO of `metamodel`, as the files of `domain/generated/`, by name.
+ *
+ * 1. `models.ts`: the models, by name — an entity's contract, a related model by its own name, a
+ *    value an entity holds —, and the shared definitions they reach.
+ * 2. `commands.ts`: each operation, by its local name (its identity without `<context>.`): its
+ *    input as `<Name>` and its answer by the backend's own name for it (`answerOf`: `ResponseX`) —
+ *    or as `<Name>Answer` when it has no name. A model an input carries — and the ones it carries,
+ *    until none is new — as `<Name>Input`: what a caller sends follows the contract's `required`;
+ *    the server fills the rest. Then the definitions only they reach.
+ * 3. `events.ts`, when the contract carries events: each one by its class's name (`title`), a
+ *    record as it is received — every field present, `name` its wire name as a literal —, and
+ *    `DomainEvent`, the union of them all, which a `switch` on `name` narrows. Then the
+ *    definitions only they reach.
+ * 4. `index.ts`: the files above, re-exported.
+ * Final: each file with a header that says where it came from and not to edit it, its imports —
+ *    a package of the stack never typed twice (`Criteria`), a sibling's type imported from it —,
+ *    then its types, each sorted by name; two of them with one TypeScript name, in any file, are
+ *    refused, naming both.
+ */
+export function domainFilesOf(metamodel: Metamodel): Record<string, string> {
   const claim = claimed();
 
+  // 1. The entities and the values they hold.
+  const held = scopeOf(metamodel);
   const models = sorted(metamodel.models).map(([name, schema]) => {
     claim(identifierOf(name), `model ${name}`);
-    return `${docOf([schema.description], "")}export type ${identifierOf(name)} = ${typeOf(schema, scope, 0, true)};`;
+    return `${docOf([schema.description], "")}export type ${identifierOf(name)} = ${typeOf(schema, held, 0, true)};`;
   });
+  const heldDefinitions = definitionsOf(metamodel, held, new Set());
 
-  // A Response two Commands share is written once, under the first that answers with it.
+  // 2. The operations. A Response two Commands share is written once, under the first that
+  //    answers with it.
+  const answering = scopeOf(metamodel);
+  const sent = scopeOf(metamodel, answering, true);
   const answered = new Set<string>();
   const operations = sorted(metamodel.operations).flatMap(([identity, operation]) => {
     const local = localOf(metamodel, identity);
@@ -287,7 +384,8 @@ export function domainFileOf(metamodel: Metamodel): string {
     const answer =
       operation.output === null
         ? "unknown"
-        : (streamed(operation.output, scope) ?? typeOf(operation.output, scope, 0, false));
+        : (streamed(operation.output, answering) ??
+          typeOf(operation.output, answering, 0, false));
     const written = [
       `${operationDoc(metamodel, local, operation)}export type ${local} = ${typeOf(operation.input, sent, 0, false)};`,
     ];
@@ -299,20 +397,22 @@ export function domainFileOf(metamodel: Metamodel): string {
     return written;
   });
 
-  // An event is a fact received whole: every field is there, as in a record a read answers. An
-  // event whose class is also a model — a context's base event, when a Feature hears it — is
-  // that model's type, narrowed to its own name: one class, one type.
+  // 3. The events. An event is a fact received whole: every field is there, as in a record a read
+  //    answers. An event whose class is also a model — a context's base event, when a Feature
+  //    hears it — is that model's type, narrowed to its own name: one class, one type.
+  const heard = scopeOf(metamodel);
   const members: string[] = [];
   const events = sorted(metamodel.events ?? {}).flatMap(([name, event]) => {
     const type = identifierOf(event.title);
     if (event.title in metamodel.models) {
+      heard.models.add(event.title);
       members.push(`(${type} & { name: ${JSON.stringify(name)} })`);
       return [];
     }
     claim(type, `event ${name}`);
     members.push(type);
     return [
-      `${eventDoc(metamodel, name, event)}export type ${type} = ${typeOf(event.schema, scope, 0, true)};`,
+      `${eventDoc(metamodel, name, event)}export type ${type} = ${typeOf(event.schema, heard, 0, true)};`,
     ];
   });
   if (members.length > 0) {
@@ -322,8 +422,9 @@ export function domainFileOf(metamodel: Metamodel): string {
     );
   }
 
+  // What a caller sends of a model, and the models those carry, until none is new.
   const inputs = new Map<string, string>();
-  for (let pending = [...scope.inputs]; pending.length > 0;) {
+  for (let pending = [...answering.inputs]; pending.length > 0;) {
     for (const name of pending) {
       const schema = metamodel.models[name]!;
       inputs.set(
@@ -331,38 +432,61 @@ export function domainFileOf(metamodel: Metamodel): string {
         `${docOf([`What a caller sends of a \`${name}\`: what the contract requires; the server fills the rest.`], "")}export type ${identifierOf(name)}Input = ${typeOf(schema, sent, 0, false)};`,
       );
     }
-    pending = [...scope.inputs].filter((name) => !inputs.has(name));
+    pending = [...answering.inputs].filter((name) => !inputs.has(name));
   }
   const sentModels = [...inputs.keys()].sort().map((name) => {
     claim(`${identifierOf(name)}Input`, `what a caller sends of model ${name}`);
     return inputs.get(name)!;
   });
 
-  const written = new Map<string, string>();
-  for (let pending = [...scope.reached]; pending.length > 0;) {
-    for (const name of pending) {
-      const schema = definitions[name]!;
-      written.set(
-        name,
-        `${docOf([schema.description], "")}export type ${identifierOf(name)} = ${typeOf(schema, scope, 0, false)};`,
-      );
-    }
-    pending = [...scope.reached].filter((name) => !written.has(name));
-  }
-  const shared = [...written.keys()].sort().map((name) => {
-    claim(identifierOf(name), `definition ${name}`);
-    return written.get(name)!;
-  });
+  // Each shared definition in the first file that names it: models, operations, events.
+  const inModels = new Set(heldDefinitions.keys());
+  const operationDefinitions = definitionsOf(metamodel, answering, inModels);
+  const inCommands = new Set(operationDefinitions.keys());
+  const eventDefinitions = definitionsOf(
+    metamodel,
+    heard,
+    new Set([...inModels, ...inCommands]),
+  );
+  const ownModels = claimedDefinitions(heldDefinitions, claim);
+  const ownOperations = claimedDefinitions(operationDefinitions, claim);
+  const ownEvents = claimedDefinitions(eventDefinitions, claim);
 
-  // One line per package, its names sorted.
-  const byPackage = new Map<string, string[]>();
-  for (const name of [...scope.imports].sort()) {
-    const imported = IMPORTED[name]!;
-    byPackage.set(imported.from, [...(byPackage.get(imported.from) ?? []), imported.name]);
-  }
-  const imports = [...byPackage.keys()]
-    .sort()
-    .map((from) => `import type { ${byPackage.get(from)!.join(", ")} } from "${from}";`);
+  /** What a file names that `models.ts` writes: models as records, and their definitions. */
+  const ofModels = (scope: Scope) => [
+    ...scope.models,
+    ...[...scope.reached].filter((name) => inModels.has(name)),
+  ];
 
-  return `${[headerOf("The DTOs", metamodel), ...(imports.length === 0 ? [] : [imports.join("\n")]), ...models, ...sentModels, ...shared, ...operations, ...events].join("\n\n")}\n`;
+  const files: Record<string, string> = {
+    "models.ts": fileOf(
+      headerOf("The entities and value objects", metamodel),
+      importsOf(held, []),
+      [...models, ...ownModels],
+    ),
+    "commands.ts": fileOf(
+      headerOf("The Commands and Responses", metamodel),
+      importsOf(answering, [["models", ofModels(answering)]]),
+      [...sentModels, ...ownOperations, ...operations],
+    ),
+  };
+  if (events.length > 0)
+    files["events.ts"] = fileOf(
+      headerOf("The domain events", metamodel),
+      importsOf(heard, [
+        ["models", ofModels(heard)],
+        ["commands", [...heard.reached].filter((name) => inCommands.has(name))],
+      ]),
+      [...ownEvents, ...events],
+    );
+  files["index.ts"] = fileOf(
+    headerOf("The domain", metamodel),
+    [],
+    [
+      Object.keys(files)
+        .map((file) => `export type * from "${siblingOf(file.replace(/\.ts$/, ""))}";`)
+        .join("\n"),
+    ],
+  );
+  return files;
 }

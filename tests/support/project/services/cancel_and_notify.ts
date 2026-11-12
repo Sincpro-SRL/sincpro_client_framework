@@ -1,4 +1,4 @@
-import type { ResponseCancelIssue } from "../../forge-contract/project/domain";
+import type { ResponseCancelIssue } from "../../forge-contract/project/domain/generated";
 import type { CancelAndNotify as Request } from "../domain";
 import { CancelIssue, TellNotice } from "../domain";
 import { ApplicationService } from "../infrastructure/bounded_context";

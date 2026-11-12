@@ -20,7 +20,7 @@ import {
 import { memoryReporter, memoryTracer } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
 
-import { clientOf } from "../support/forge-contract/project/client";
+import { clientOf } from "../support/forge-contract/project/adapters/generated/client";
 import { project } from "../support/project";
 import {
   CancelAndNotify,

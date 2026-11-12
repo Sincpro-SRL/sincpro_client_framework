@@ -1,32 +1,40 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { Metamodel } from "@sincpro/client-framework/codegen/domain/metamodel";
-import { aliasOf } from "@sincpro/client-framework/codegen/domain/names";
+import {
+  aliasOf,
+  GENERATED_ADAPTERS,
+  GENERATED_DOMAIN,
+} from "@sincpro/client-framework/codegen/domain/names";
 import { CheckError, checkImports } from "@sincpro/client-framework/codegen/services/check";
-import { clientFileOf } from "@sincpro/client-framework/codegen/services/client";
-import { domainFileOf } from "@sincpro/client-framework/codegen/services/domain";
-import { entitiesFileOf } from "@sincpro/client-framework/codegen/services/entities";
+import { generatedFilesOf } from "@sincpro/client-framework/codegen/services/generated";
 import type { GenerateOptions } from "@sincpro/client-framework/codegen/services/rest";
 import { scaffoldFilesOf } from "@sincpro/client-framework/codegen/services/scaffold";
 
 /**
  * `sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]` — what an
  * application's `make client` runs, once per bounded context, over the client contract
- * sincpro_framework exported (`export-client-contract`):
+ * sincpro_framework exported (`export-client-contract`). `--out` is the bounded context's folder
+ * (`src/domains/project`); each file goes in its layer (`generatedFilesOf`):
  *
- * - `domain.ts`: the DTOs, only types — and the domain events with `DomainEvent`, their union,
- *   when the contract was exported with them (`export-client-contract --events`);
- * - `client.ts`: every operation (and event) as data, and `clientOf(operations)` over any wire;
- * - `entities.ts`: an `entity<T, C>()` per model a screen can list;
- * - `contract.json`: the snapshot they were written from, for `metasOf`.
+ * - `domain/generated/models.ts`: the entities and value objects, only types;
+ * - `domain/generated/commands.ts`: every operation's Command and Response;
+ * - `domain/generated/events.ts`: the domain events and `DomainEvent`, their union — when the
+ *   contract was exported with them (`export-client-contract --events`);
+ * - `domain/generated/index.ts`: the three, re-exported;
+ * - `domain/generated/contract.json`: the snapshot they were written from, for `metasOf`;
+ * - `adapters/generated/client.ts`: every operation (and event) as data, and
+ *   `clientOf(operations)` over any wire;
+ * - `adapters/generated/entities.ts`: an `entity<T, C>()` per model a screen can list.
  *
- * A bare metamodel (`export_metamodel`, no bindings) writes `domain.ts` and `contract.json` only.
+ * A bare metamodel (`export_metamodel`, no bindings) writes only `domain/generated/`.
  *
- * Context: it writes only into `--out`, and the same bytes for the same contract, so `make
- * verify-client` regenerates and fails on any difference. The folder is the generator's: keep
- * it out of the application's prettier and eslint, or a formatter rewrites what was generated.
+ * Context: it writes only its two `generated/` folders, whole every time — what is no longer
+ * generated goes —, and the same bytes for the same contract, so `make verify-client` regenerates
+ * and fails on any difference. The folders are the generator's: keep them out of the
+ * application's prettier and eslint, or a formatter rewrites what was generated.
  */
 const USAGE = [
   "usage: sincpro-client generate <contract.json> --out <dir> [--domain <name>] [--base <path>]",
@@ -146,15 +154,16 @@ function main(args: readonly string[]): number {
   }
   const metamodel = JSON.parse(readFileSync(asked.source, "utf8")) as Metamodel;
   if (asked.command === "scaffold") return scaffold(metamodel, asked.out, asked.operations);
-  const files: Record<string, string> = { "domain.ts": domainFileOf(metamodel) };
-  if (metamodel.bindings !== undefined) {
-    files["client.ts"] = clientFileOf(metamodel, asked.options);
-    files["entities.ts"] = entitiesFileOf(metamodel, asked.options);
+  const files = generatedFilesOf(metamodel, asked.options);
+  files[`${GENERATED_DOMAIN}/contract.json`] =
+    `${JSON.stringify(canonical(metamodel), null, 2)}\n`;
+  for (const folder of [GENERATED_DOMAIN, GENERATED_ADAPTERS])
+    rmSync(join(asked.out, folder), { recursive: true, force: true });
+  for (const [name, source] of Object.entries(files)) {
+    const path = join(asked.out, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, source);
   }
-  files["contract.json"] = `${JSON.stringify(canonical(metamodel), null, 2)}\n`;
-  mkdirSync(asked.out, { recursive: true });
-  for (const [name, source] of Object.entries(files))
-    writeFileSync(join(asked.out, name), source);
   console.log(`✓ ${aliasOf(metamodel)} → ${asked.out} (${Object.keys(files).join(", ")})`);
   return 0;
 }

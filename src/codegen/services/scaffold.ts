@@ -1,12 +1,18 @@
 import type { Metamodel } from "@sincpro/client-framework/codegen/domain/metamodel";
-import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/domain/names";
+import {
+  aliasOf,
+  FRAMEWORK,
+  GENERATED_ADAPTERS,
+  GENERATED_DOMAIN,
+} from "@sincpro/client-framework/codegen/domain/names";
 
 /**
  * A bounded context's skeleton, written ONCE beside what is generated — the files that are the
  * application's from then on, laid out as the backend's (`sincpro_mcp_odoo/domains/helpdesk`):
  *
  *     domains/project/
- *       generated/                         `sincpro-client generate` — regenerated, never edited
+ *       domain/generated/                  `sincpro-client generate` — regenerated, never edited:
+ *       adapters/generated/                its types, and its client and entities
  *       infrastructure/dependencies.ts     what its services count on, and who supplies it
  *       infrastructure/framework.ts        its Feature and ApplicationService — every dependency
  *                                          typed on `this` — and `projectBoundedContext`
@@ -18,7 +24,7 @@ import { aliasOf, FRAMEWORK } from "@sincpro/client-framework/codegen/domain/nam
  * imports it to register itself (`@projectBoundedContext.feature(Command)`), and ES modules run
  * their imports first, so `index.ts` importing the services could not also define it. It is the
  * application's to change: the CLI writes a file only when it is not there, and never touches one
- * that is — unlike `generated/`, which is written whole every time.
+ * that is — unlike the `generated/` folders, which are written whole every time.
  */
 export type ScaffoldOptions = {
   /**
@@ -68,7 +74,9 @@ export function scaffoldFilesOf(
     "",
     `import type { OperationTransport } from "${FRAMEWORK}";`,
     `import type { BoundedContext } from "${at(FRAMEWORK, "core")}";`,
-    ...(client ? ["", `import { clientOf } from "${at("..", "generated", "client")}";`] : []),
+    ...(client
+      ? ["", `import { clientOf } from "${at("..", GENERATED_ADAPTERS, "client")}";`]
+      : []),
     "",
     `/** What every service of «${alias}» finds on \`this\`${client ? ": `this.client`, the service's operations" : ""}. */`,
     `export interface ${Dependencies} {`,
@@ -117,7 +125,7 @@ export function scaffoldFilesOf(
     "// with use cases of its own in a folder inside it). Each registers itself with",
     `// \`@${name}.feature(CommandX)\` — or a list: \`@${name}.feature([CommandX, EventY])\` — and is`,
     "// imported here, so it is registered before anyone executes. A generated DTO is a remote",
-    `// contract (a type): \`import type * as remote from "${at("..", "generated", "domain")}"\`.`,
+    `// contract (a type): \`import type * as remote from "${at("..", GENERATED_DOMAIN)}"\`.`,
     "export {};",
     "",
   ].join("\n");
