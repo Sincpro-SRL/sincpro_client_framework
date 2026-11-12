@@ -80,6 +80,7 @@ export { guardedTransport } from "@sincpro/client-framework/client/services/guar
 export {
   bindable,
   bindableOperations,
+  bindableTransport,
   bindOperations,
   bindTransport,
   headersOf,

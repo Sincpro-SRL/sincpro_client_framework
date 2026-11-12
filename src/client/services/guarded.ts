@@ -10,7 +10,10 @@ import type {
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/domain/transport";
-import { bindableOperations } from "@sincpro/client-framework/client/services/propagation";
+import {
+  bindableOperations,
+  bindableTransport,
+} from "@sincpro/client-framework/client/services/propagation";
 import type { Criteria } from "@sincpro/criteria";
 
 /**
@@ -64,5 +67,5 @@ export function guardedTransport(
   if (download !== undefined)
     guarded.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
       breaker.call(() => download.call(transport, route, signal, options));
-  return guarded;
+  return bindableTransport(guarded);
 }

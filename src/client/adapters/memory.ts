@@ -6,6 +6,7 @@ import {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/domain/transport";
+import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { pack, readValues } from "@sincpro/client-framework/common/serialization";
 import type { AnyRecord, Criteria, Meta, Problem } from "@sincpro/criteria";
 import { answer, answerGroups } from "@sincpro/criteria/engine";
@@ -100,7 +101,7 @@ export function memoryTransport(
     return table;
   }
 
-  return {
+  return bindableTransport({
     async list(route, criteria, signal) {
       options.observe?.(route, criteria as Criteria);
       await check(route, signal);
@@ -179,5 +180,5 @@ export function memoryTransport(
             return copyOf(await options.read!(route)) as T;
           },
         }),
-  };
+  });
 }

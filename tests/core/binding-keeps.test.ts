@@ -107,3 +107,30 @@ test("an OperationTransport that says it can be bound carries the run, and keeps
   assert.equal(await boundedContext.execute(new CommandQuote()), "grpc://backend");
   assert.match(sent[0]?.headers?.traceparent ?? "", /^00-[0-9a-f]{32}-/);
 });
+
+test("an app's object with `list`, `one` and `send` is the app's too: never wrapped, its arguments as written", async () => {
+  const received: unknown[][] = [];
+  const repository = {
+    list: (...args: unknown[]) => void received.push(["list", ...args]),
+    one: (...args: unknown[]) => void received.push(["one", ...args]),
+    send: (...args: unknown[]) => void received.push(["send", ...args]),
+  };
+  const boundedContext = new BoundedContext<{ repository: typeof repository }>("stock");
+  boundedContext.addDependency("repository", repository);
+  class CommandMove extends Command<boolean> {}
+  boundedContext.feature(CommandMove)(
+    class Move extends Feature<CommandMove, boolean> {
+      execute(): boolean {
+        const held = (this as unknown as { repository: typeof repository }).repository;
+        held.send("MOVE", "A1", { quantity: 2 }, "warehouse", { by: "cashier" });
+        return held === repository;
+      }
+    },
+  );
+  configureProcess({ tracer: memoryTracer() });
+
+  assert.equal(await boundedContext.execute(new CommandMove()), true, "the very same object");
+  assert.deepEqual(received, [
+    ["send", "MOVE", "A1", { quantity: 2 }, "warehouse", { by: "cashier" }],
+  ]);
+});

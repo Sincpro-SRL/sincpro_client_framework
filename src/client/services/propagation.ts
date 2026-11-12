@@ -133,6 +133,23 @@ export function bindOperations(
 }
 
 /**
+ * A REST `Transport` a run binds to itself when it is a dependency: its requests carry the run's
+ * trace, context and signal. `restTransport`, `memoryTransport`, `guardedTransport` and
+ * `screensTransport` answer one; a platform's own marks itself with it.
+ *
+ * Context: a run binds only what says it can be bound — never an object because it has `list`,
+ * `one` and `send`: an application's own object with those names is the application's.
+ */
+export function bindableTransport<T extends Transport>(transport: T): T {
+  Object.defineProperty(transport, BIND, {
+    value: (execution: Execution) => bindTransport(transport, execution),
+    enumerable: false,
+    configurable: true,
+  });
+  return transport;
+}
+
+/**
  * An `OperationTransport` a run binds to itself when it is a dependency: its `call` carries the
  * run's trace, context and signal. `restOperations`, `jsonRpcOperations` and `guardedTransport`
  * answer one; a platform's own (gRPC) marks itself with it.

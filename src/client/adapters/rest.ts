@@ -14,6 +14,7 @@ import {
   type DiscoveryDocument,
   modelAt,
 } from "@sincpro/client-framework/client/services/discovery";
+import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { type Criteria, type Dropped, type Meta, readProblem } from "@sincpro/criteria";
 import { RestError, restSource } from "@sincpro/criteria/rest";
 
@@ -206,7 +207,7 @@ export function restTransport(options: RestOptions = {}): Transport {
     return text ? JSON.parse(text) : null;
   }
 
-  return {
+  return bindableTransport({
     async list(route, criteria, signal, call) {
       const source = restSource<never>(`${base}${route}`, {
         // Only a page may come in another format: the decoders are said here, and nowhere else.
@@ -299,5 +300,5 @@ export function restTransport(options: RestOptions = {}): Transport {
         sending,
       )) as T;
     },
-  };
+  });
 }
