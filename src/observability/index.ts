@@ -13,13 +13,17 @@ export type {
   ErrorReporter,
 } from "@sincpro/client-framework/observability/domain/errors";
 export {
+  type IdentityKeys,
   identityOf,
   type ProcessIdentity,
   RELEASE,
   TENANT,
   tenantOf,
+  USER_ID,
+  userOf,
 } from "@sincpro/client-framework/observability/domain/identity";
 export type {
+  FailureDescription,
   LayerLogger,
   Logger,
   LogLayer,
@@ -33,6 +37,7 @@ export {
   type Span,
   type Tracer,
 } from "@sincpro/client-framework/observability/domain/tracing";
+export { describeFailure } from "@sincpro/client-framework/observability/services/failure";
 export {
   combineLoggers,
   logger,

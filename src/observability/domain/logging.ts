@@ -27,6 +27,28 @@ export type LogLayer =
   | "feature";
 
 /** Structured logging never implicitly includes a DTO, response, error body or session context. */
+/**
+ * What a failure says — sincpro_framework's failure line: its type (`error.type`), its kind, its
+ * fault and, when nobody expected it, its message, where it was raised and its stack. Told once,
+ * by the run where it was raised; a run it crosses says only where it failed (`failedIn`).
+ */
+export type FailureDescription = {
+  /** The class's name: `TypeError`, `TransportError`. */
+  readonly type: string;
+  /** The backend's failure kind (`invalid` … `internal`), or `aborted`. */
+  readonly kind: string;
+  /** The system's problem, not an answer to the caller. */
+  readonly fault: boolean;
+  /** An unexpected failure's message, cut at 500 characters. */
+  readonly message?: string;
+  /** The first frame outside the framework: the use case's own line. */
+  readonly at?: string;
+  /** An unexpected failure's stack — on the run where it was raised only. */
+  readonly stack?: string;
+  /** The use case it was raised in, when that is another run's. */
+  readonly failedIn?: string;
+};
+
 export type LogRecord = {
   readonly timestamp: string;
   readonly level: LogLevel;
@@ -47,6 +69,10 @@ export type LogRecord = {
   readonly release?: string;
   /** The run's tenant — its context's, else the deployment's —, when there is one. */
   readonly tenant?: string;
+  /** The run's user — its context's `user_id` —, when there is one. */
+  readonly userId?: string;
+  /** How the run failed, on its `execution.finished` line. */
+  readonly failure?: FailureDescription;
 };
 
 /** A sink owns filtering and delivery. Logging is best-effort and never awaited by business work. */

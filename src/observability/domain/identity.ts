@@ -23,6 +23,20 @@ export type ProcessIdentity = {
   readonly serviceVersion: string;
   /** The tenant the deployment serves, when it serves one. */
   readonly tenant?: string;
+  /** The context keys a run's tenant is read from, first found wins: `tenant`, `tenant_id`. */
+  readonly tenantKeys: readonly string[];
+  /** The context keys a run's user is read from: `user_id`. */
+  readonly userKeys: readonly string[];
+};
+
+/**
+ * Which keys of a run's context say its tenant and its user — optional both: an application
+ * that calls its tenant `company_id` names it here, one without tenants or users names nothing
+ * and nothing is sent.
+ */
+export type IdentityKeys = {
+  readonly tenant?: string | readonly string[];
+  readonly user?: string | readonly string[];
 };
 
 /** The key the release goes by on a span, a log line and a report. */
@@ -31,8 +45,27 @@ export const RELEASE = "release";
 /** The key the tenant goes by on a span, a log line and a report. */
 export const TENANT = "tenant";
 
-/** Who is running, out of its release — and the deployment's tenant, when there is one. */
-export function identityOf(release: string, tenant?: string): ProcessIdentity {
+/** The key the user goes by on a span, a log line and a report — GlitchTip's user. */
+export const USER_ID = "user_id";
+
+/** Where a run's tenant and user are read from when the application names no keys. */
+const DEFAULT_TENANT_KEYS: readonly string[] = [TENANT, "tenant_id"];
+const DEFAULT_USER_KEYS: readonly string[] = [USER_ID];
+
+const keysOf = (
+  named: string | readonly string[] | undefined,
+  fallback: readonly string[],
+) => (named === undefined ? fallback : typeof named === "string" ? [named] : [...named]);
+
+/**
+ * Who is running, out of its release — the deployment's tenant, when there is one, and the
+ * context keys its runs say their tenant and user under.
+ */
+export function identityOf(
+  release: string,
+  tenant?: string,
+  keys: IdentityKeys = {},
+): ProcessIdentity {
   const verbatim = release.trim();
   const [artifact, version] = split(verbatim);
   const deployed = tenant?.trim();
@@ -41,23 +74,43 @@ export function identityOf(release: string, tenant?: string): ProcessIdentity {
     serviceName: artifact.slice(artifact.lastIndexOf("/") + 1),
     serviceVersion: version,
     ...(deployed ? { tenant: deployed } : {}),
+    tenantKeys: keysOf(keys.tenant, DEFAULT_TENANT_KEYS),
+    userKeys: keysOf(keys.user, DEFAULT_USER_KEYS),
   };
 }
 
 /**
- * The tenant of a run: its context's (`tenant`, else `tenant_id`), else the deployment's.
- * Undefined when neither says one — most phones serve whoever opens the app.
+ * The tenant of a run: its context's, under the keys the application named (`tenant`, else
+ * `tenant_id`, by default), else the deployment's. Undefined when neither says one — most phones
+ * serve whoever opens the app.
  */
 export function tenantOf(
   context: Readonly<Record<string, unknown>>,
   identity: ProcessIdentity | undefined,
 ): string | undefined {
-  for (const key of [TENANT, "tenant_id"]) {
+  return valueOf(context, identity?.tenantKeys ?? DEFAULT_TENANT_KEYS) ?? identity?.tenant;
+}
+
+/** The user of a run: its context's, under the keys the application named (`user_id`). */
+export function userOf(
+  context: Readonly<Record<string, unknown>>,
+  identity?: ProcessIdentity,
+): string | undefined {
+  return valueOf(context, identity?.userKeys ?? DEFAULT_USER_KEYS);
+}
+
+/** The first key the context says, as text; a list of them (`tenant_ids`) is said as one. */
+function valueOf(
+  context: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
     const value = context[key];
     if (typeof value === "string" && value !== "") return value;
     if (typeof value === "number") return String(value);
+    if (Array.isArray(value) && value.length > 0) return value.map(String).join(",");
   }
-  return identity?.tenant;
+  return undefined;
 }
 
 /**

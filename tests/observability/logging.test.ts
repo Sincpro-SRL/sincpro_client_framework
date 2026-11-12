@@ -155,7 +155,7 @@ test("this.logger and an injected predefined logger carry the run after awaits",
   assert.ok(written.every((record) => record.spanId === tracer.spans[0]?.spanId));
 });
 
-test("automatic records do not include DTOs, results, errors or session context", async () => {
+test("automatic records do not include DTOs, results or session context; an unexpected failure is described", async () => {
   const engine = memoryLogger();
   configureProcess({ logger: { engine } });
   processContext.set({ authorization: "do-not-log-session" });
@@ -173,15 +173,16 @@ test("automatic records do not include DTOs, results, errors or session context"
   );
   await assert.rejects(failing.execute(new CommandCancelIssue("do-not-log-id")));
   const text = JSON.stringify(engine.records);
-  for (const marker of [
-    "do-not-log-this-dto",
-    "do-not-log-session",
-    "do-not-log-error-body",
-    "do-not-log-id",
-  ]) {
+  for (const marker of ["do-not-log-this-dto", "do-not-log-session", "do-not-log-id"]) {
     assert.equal(text.includes(marker), false);
   }
   assert.ok(engine.records.every((record) => !("context" in record) && !("error" in record)));
+  // As sincpro_framework's failure line: what nobody expected says what it was and where.
+  const failed = engine.records.find((record) => record.outcome === "failed");
+  assert.equal(failed?.failure?.type, "Error");
+  assert.equal(failed?.failure?.message, "do-not-log-error-body");
+  assert.ok(failed?.failure?.stack?.includes("do-not-log-error-body"));
+  assert.match(failed?.message ?? "", /^Execution failed: Error: do-not-log-error-body/);
 });
 
 test("failure, refusal and abort levels follow the execution outcome, not console settings", async () => {
@@ -190,7 +191,7 @@ test("failure, refusal and abort levels follow the execution outcome, not consol
   configureProcess({ logger: { engine }, reporter });
   const outcomes = [
     { error: new Error("unexpected"), outcome: "failed", level: "error" },
-    { error: new TransportError("/x", 409, null), outcome: "refused", level: "warn" },
+    { error: new TransportError("/x", 409, null), outcome: "refused", level: "info" },
     {
       error: Object.assign(new Error("stop"), { name: "AbortError" }),
       outcome: "aborted",

@@ -204,8 +204,22 @@ options)`: no route, no verb, no RPC method. The contract's bindings (`rest`, `r
   `loggerAdapter` are predefined; injected as a dependency they bind to the run (`BIND`), imported
   at module level they do not. No logger is predefined for an application layer. Console is the
   default engine; `configureProcess({ logger })` and `configureLogger(...)` take the same
-  `LoggerConfiguration`. The host chooses production explicitly. Never log DTOs, results, full
-  session context or raw errors automatically.
+  `LoggerConfiguration`. The host chooses production explicitly. Never log DTOs, results or the
+  full session context automatically.
+- **A failure is described once, as sincpro_framework's failure line** (`PRD_03 §6`,
+  `observability/failure.py`). The run where it was raised writes its type, kind, fault and —
+  when nobody expected it — its message, the use case's own line (`at`) and its stack; a run it
+  crosses says only `failedIn`. Its span records the exception; the spans it crosses take the
+  error status. An expected failure is information: type and kind, never its message (it may
+  carry the caller's data) nor a stack. `sincpro.outcome` is `ok` or the failure's kind, beside
+  `sincpro.fault` and `error.type`, on the span and in GlitchTip.
+- **Who is running is on every signal** (`configureProcess({ identity })`, `PRD_03 §4.10`):
+  `release`, the run's `tenant` and `user_id`. Tenant and user are optional, and so are their
+  keys — `identity.keys` names the context keys an application uses (`company_id`, `tenant_ids`);
+  nothing is sent when its context says none. Nothing else of the context is copied.
+- **Observability never fails a use case.** Every tracer, logger and reporter call is shielded:
+  a collector down, Loki unreachable or no network leave the run's own answer — or its own error —
+  untouched.
 
 - **Only what is transversal comes here.** A value's wire form (a decimal as text, a day never
   an instant, a money with its currency) is the backend's contract, the same on every platform,

@@ -101,8 +101,15 @@ test("a failure is an error with its exception; a refusal is an outcome, never a
   const [failed, refused] = exporter.getFinishedSpans();
   assert.equal(failed?.status.code, 2); // ERROR
   assert.equal(failed?.events[0]?.name, "exception");
+  // sincpro_framework's keys: the outcome is the failure's kind, with its fault and its type.
+  assert.equal(failed?.attributes["sincpro.outcome"], "internal");
+  assert.equal(failed?.attributes["sincpro.fault"], true);
+  assert.equal(failed?.attributes["error.type"], "TypeError");
   assert.equal(refused?.status.code, 0); // UNSET: the business answered
-  assert.equal(refused?.attributes["sincpro.outcome"], "refused");
+  assert.equal(refused?.attributes["sincpro.outcome"], "conflict");
+  assert.equal(refused?.attributes["sincpro.fault"], false);
+  assert.equal(refused?.attributes["error.type"], "TransportError");
+  assert.equal(refused?.events.length, 0, "an expected answer records no exception");
 });
 
 type Sent = Record<string, string>;

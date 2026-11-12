@@ -42,7 +42,15 @@ export function consoleLogger(options: ConsoleLoggerOptions): Logger {
             : record.level === "error"
               ? console.error
               : console.log;
-      method.call(console, prefix, record.message, record);
+      // An unexpected failure's stack prints as a stack, readable, after its line — not escaped
+      // inside the record.
+      const stack = record.failure?.stack;
+      if (!stack) {
+        method.call(console, prefix, record.message, record);
+        return;
+      }
+      const { stack: _printedBelow, ...failure } = record.failure ?? {};
+      method.call(console, prefix, record.message, { ...record, failure }, `\n${stack}`);
     },
   };
 }

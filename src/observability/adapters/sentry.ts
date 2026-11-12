@@ -13,6 +13,7 @@ export type ExceptionClient = {
     hint?: {
       captureContext?: {
         tags?: Record<string, string>;
+        user?: { id: string };
         contexts?: Record<string, Record<string, unknown>>;
       };
     },
@@ -38,13 +39,38 @@ export function sentryReporter(client: ExceptionClient): ErrorReporter {
     report(error: unknown, about: ErrorAbout) {
       client.captureException(error, {
         captureContext: {
+          // sincpro_framework's keys (PRD_03 §5, §4.10): the same text as the log line and the span.
           tags: {
             "sincpro.use_case": about.useCase,
+            ...(about.boundedContext ? { "sincpro.context": about.boundedContext } : {}),
+            ...(about.layer ? { "sincpro.layer": about.layer } : {}),
+            ...(about.kind
+              ? { "sincpro.outcome": about.kind, "sincpro.kind": about.kind }
+              : {}),
+            ...(about.errorType ? { "error.type": about.errorType } : {}),
             ...(about.release ? { release: about.release } : {}),
+            ...(about.serviceName ? { service_name: about.serviceName } : {}),
+            ...(about.serviceVersion
+              ? {
+                  service_version: about.serviceVersion,
+                  "sincpro.version": about.serviceVersion,
+                }
+              : {}),
             ...(about.tenant ? { tenant: about.tenant } : {}),
+            ...(about.userId ? { user_id: about.userId } : {}),
             ...(about.traceId === "" ? {} : { trace_id: about.traceId }),
           },
+          // The issue opens its trace, and says how many users it hit.
+          ...(about.userId ? { user: { id: about.userId } } : {}),
           contexts: {
+            ...(about.traceId === ""
+              ? {}
+              : {
+                  trace: {
+                    trace_id: about.traceId,
+                    ...(about.spanId ? { span_id: about.spanId } : {}),
+                  },
+                }),
             sincpro: {
               use_case: about.useCase,
               execution_id: about.executionId,
