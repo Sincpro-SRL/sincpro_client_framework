@@ -57,19 +57,20 @@ Entrypoint -> BoundedContext.execute(Command | event) -> Feature or ApplicationS
 
 ## Remote contracts are not local services
 
-| Word                | Meaning                                                                                    |
-| ------------------- | ------------------------------------------------------------------------------------------ |
-| Client contract     | What a remote service publishes: models, operations, input/output schemas and bindings     |
-| Generated client    | Typed methods per remote operation, over an `OperationTransport`; injected into a Feature  |
-| Remote operation    | An operation of the contract: its identity and each wire's binding (`rest`, `rpc`, `grpc`) |
-| Operation transport | The port that calls an operation by who it is; one adapter per wire, injected by the app   |
-| Generated DTO       | A compile-time type from that contract — never a class, never on the local bus             |
-| Domain event        | A fact a context recorded, known by its wire `name`; in the contract only on `--events`    |
-| Recorded event      | One of the context's own events: its aggregates record it                                  |
-| Handled event       | An event the context has a use case of (a Feature registered for its class)                |
-| `DomainEvent`       | The generated union of a contract's events, narrowed by `name`                             |
-| Mapping Entity      | The remote descriptor exported as `Entity`, used for routes, fields and commands           |
-| Transport           | REST's own port: what `restOperations` and screens (`entity()`, pages) stand on            |
+| Word                | Meaning                                                                                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Client contract     | What a remote service publishes: models, operations, input/output schemas and bindings                                                                         |
+| Generated client    | Typed methods per remote operation, over an `OperationTransport`; injected into a Feature                                                                      |
+| Remote operation    | An operation of the contract: its identity and each wire's binding (`rest`, `rpc`, `grpc`)                                                                     |
+| Operation transport | The port that calls an operation by who it is; one adapter per wire, injected by the app                                                                       |
+| Generated DTO       | A compile-time type from that contract — never a class, never on the local bus                                                                                 |
+| Domain event        | A fact a context recorded, known by its wire `name`; in the contract only on `--events`                                                                        |
+| Recorded event      | One of the context's own events: its aggregates record it                                                                                                      |
+| Handled event       | An event the context has a use case of (a Feature registered for its class)                                                                                    |
+| `DomainEvent`       | The generated union of a contract's events, narrowed by `name`                                                                                                 |
+| Mapping Entity      | The remote descriptor exported as `Entity`, used for routes, fields and commands                                                                               |
+| Transport           | REST's own port: what `restOperations` and screens (`entity()`, pages) stand on                                                                                |
+| Screens transport   | A transport whose reads and writes run as use cases of `screens`; marked with `SCREENS`, so a wrapper of it is not made twice — `screensTransport`, `markedAs` |
 
 Local classes may implement generated DTO types, but a generated client is not automatically
 an ApplicationService or registered local executor. A history response containing event records
@@ -82,28 +83,29 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 
 ## Process, context and telemetry
 
-| Word                | Meaning                                                                                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Process             | Ports configured once at application startup through `configureProcess`                                                                                             |
-| Identity            | Who is running: its release, and the deployment's tenant — `configureProcess({ identity })`                                                                         |
-| Release             | `<name>:<version>` as deployed (the backend's `APP_RELEASE`); `service.name`/`.version` in it                                                                       |
-| Tenant              | Whom a run serves: its context's, under the keys the app names (`tenant`, `tenant_id` by default; `company_id`…), else the deployment's; optional                   |
-| User                | Who a run acts for: its context's `user_id` (or the key the app names); optional; GlitchTip's user                                                                  |
-| Failure description | What a failed run says once, where it was raised: type, kind, fault, message, `at`, stack                                                                           |
-| Context             | Values an execution runs with: process, bounded context, then explicit scope                                                                                        |
-| ContextStore        | Synchronous values/version/subscription port; persistence belongs to the platform                                                                                   |
-| Execution           | One run: id, service identity, context snapshot, span and parent                                                                                                    |
-| Tracer              | Opens a span; the application supplies/export configures its implementation                                                                                         |
-| ErrorReporter       | Reports unexpected failures with trace/execution correlation                                                                                                        |
-| Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                                       |
-| Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                                              |
-| Failure kind        | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it                                                                      |
-| Change              | A write that may have changed what was read: its method and route; a preview or a dry run is none                                                                   |
-| Change feed         | Where writes are announced and readers follow them, so neither knows the other — `processChanges`, `follow`, `announce`                                             |
-| Cancellation        | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                                                                                      |
-| Logger              | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter                                                                         |
-| Log layer           | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`                                                                                  |
-| Log filter          | Which INFO and DEBUG lines speak, by level, layer and bounded context; WARN and ERROR always do; spans are never filtered — `LogFilter`, `speaks`, `filteredLogger` |
+| Word                | Meaning                                                                                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Process             | Ports configured once at application startup through `configureProcess`                                                                                                              |
+| Identity            | Who is running: its release, and the deployment's tenant — `configureProcess({ identity })`                                                                                          |
+| Release             | `<name>:<version>` as deployed (the backend's `APP_RELEASE`); `service.name`/`.version` in it                                                                                        |
+| Tenant              | Whom a run serves: its context's, under the keys the app names (`tenant`, `tenant_id` by default; `company_id`…), else the deployment's; optional                                    |
+| User                | Who a run acts for: its context's `user_id` (or the key the app names); optional; GlitchTip's user                                                                                   |
+| Time zone           | The zone a run reads days and times in: its context's `time_zone` (or the key the app names), else the process's — `timeZoneOf`, `installTimeZone`, `configureProcess({ timeZone })` |
+| Failure description | What a failed run says once, where it was raised: type, kind, fault, message, `at`, stack                                                                                            |
+| Context             | Values an execution runs with: process, bounded context, then explicit scope                                                                                                         |
+| ContextStore        | Synchronous values/version/subscription port; persistence belongs to the platform                                                                                                    |
+| Execution           | One run: id, service identity, context snapshot, span and parent                                                                                                                     |
+| Tracer              | Opens a span; the application supplies/export configures its implementation                                                                                                          |
+| ErrorReporter       | Reports unexpected failures with trace/execution correlation                                                                                                                         |
+| Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                                                        |
+| Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                                                               |
+| Failure kind        | The backend's twelve (`invalid` … `internal`), the same on every wire; an error may declare it                                                                                       |
+| Change              | A write that may have changed what was read: its method and route; a preview or a dry run is none                                                                                    |
+| Change feed         | Where writes are announced and readers follow them, so neither knows the other — `processChanges`, `follow`, `announce`                                                              |
+| Cancellation        | `execute(…, { signal })`: the run, its Features and its requests end `aborted`                                                                                                       |
+| Logger              | Structured records tagged by layer and execution; not a synonym for Tracer or ErrorReporter                                                                                          |
+| Log layer           | `infrastructure`, `adapter`, `bounded_context`, `application_service` or `feature`                                                                                                   |
+| Log filter          | Which INFO and DEBUG lines speak, by level, layer and bounded context; WARN and ERROR always do; spans are never filtered — `LogFilter`, `speaks`, `filteredLogger`                  |
 
 Span names use `<bounded context>/<Service>` and use-case identity `<bounded context>.<Service>`:
 the service's class name, taken by the framework when it registers it (a standard decorator's
