@@ -43,6 +43,10 @@ export type LogRecord = {
   readonly spanId?: string;
   readonly outcome?: Outcome;
   readonly durationMs?: number;
+  /** Who was running (`configureProcess({ identity })`), when the process says. */
+  readonly release?: string;
+  /** The run's tenant — its context's, else the deployment's —, when there is one. */
+  readonly tenant?: string;
 };
 
 /** A sink owns filtering and delivery. Logging is best-effort and never awaited by business work. */

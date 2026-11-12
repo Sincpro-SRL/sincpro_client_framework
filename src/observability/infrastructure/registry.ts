@@ -1,5 +1,6 @@
 import { consoleLogger } from "@sincpro/client-framework/observability/adapters/console";
 import type { ErrorReporter } from "@sincpro/client-framework/observability/domain/errors";
+import type { ProcessIdentity } from "@sincpro/client-framework/observability/domain/identity";
 import type { Logger } from "@sincpro/client-framework/observability/domain/logging";
 import {
   NO_TRACER,
@@ -17,6 +18,8 @@ import { outcomeOf } from "@sincpro/client-framework/observability/services/outc
  * nothing reports, and logs go to the console in development mode.
  */
 export type ObservabilityPorts = {
+  /** Who is running: its release and the deployment's tenant, on every signal. */
+  readonly identity: ProcessIdentity | undefined;
   readonly tracer: Tracer;
   readonly reporter: ErrorReporter | undefined;
   readonly logger: Logger | undefined;
@@ -24,6 +27,7 @@ export type ObservabilityPorts = {
 };
 
 const DEFAULTS: ObservabilityPorts = {
+  identity: undefined,
   tracer: NO_TRACER,
   reporter: undefined,
   logger: consoleLogger({ mode: "development" }),

@@ -81,6 +81,9 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 | Word          | Meaning                                                                                        |
 | ------------- | ---------------------------------------------------------------------------------------------- |
 | Process       | Ports configured once at application startup through `configureProcess`                        |
+| Identity      | Who is running: its release, and the deployment's tenant — `configureProcess({ identity })`    |
+| Release       | `<name>:<version>` as deployed (the backend's `APP_RELEASE`); `service.name`/`.version` in it  |
+| Tenant        | Whom a run serves: its context's `tenant` (or `tenant_id`), else the deployment's; often none  |
 | Context       | Values an execution runs with: process, bounded context, then explicit scope                   |
 | ContextStore  | Synchronous values/version/subscription port; persistence belongs to the platform              |
 | Execution     | One run: id, service identity, context snapshot, span and parent                               |
@@ -119,6 +122,10 @@ execution. Only `logger` (infrastructure, the global one) and `loggerAdapter` ar
 they carry the run only when injected as a dependency. `configureProcess({ logger })` and
 `configureLogger(...)` take the same `LoggerConfiguration`; the second replaces only logging.
 Automatic lifecycle records include outcome and duration, never DTOs or full session context.
+Every span, log record and report says who was running — its `release` and, when there is one,
+its `tenant` —, the keys sincpro_framework puts on its own signals (`correlation.md`). Nothing
+else of the context is copied onto them. A platform's tracer and log shipping read
+`processIdentity()` for their resource and labels, so no adapter invents a key of its own.
 Loki, buffers, endpoints, credentials and flush guarantees remain platform responsibilities.
 
 ## Values and serialization

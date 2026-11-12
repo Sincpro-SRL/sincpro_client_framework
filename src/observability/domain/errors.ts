@@ -17,6 +17,10 @@ export type ErrorAbout = {
   executionId: string;
   /** What the use case ran with: the process's context, its bounded context's, its scope's. */
   context: Readonly<Record<string, unknown>>;
+  /** Who was running (`configureProcess({ identity })`), when the process says. */
+  release?: string;
+  /** The run's tenant — its context's, else the deployment's —, when there is one. */
+  tenant?: string;
 };
 
 /** Reports what nobody expected. One per platform; none when nothing reports. */

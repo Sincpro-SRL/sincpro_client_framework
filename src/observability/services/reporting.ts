@@ -1,5 +1,6 @@
 import { newEntityId } from "@sincpro/client-framework/common/ids";
 import { processContext } from "@sincpro/client-framework/context/infrastructure/process";
+import { tenantOf } from "@sincpro/client-framework/observability/domain/identity";
 import { observabilityNow } from "@sincpro/client-framework/observability/infrastructure/registry";
 
 /**
@@ -40,11 +41,15 @@ export function reportError(error: unknown, where: string): void {
   }
   if (!firstReport(error)) return;
   try {
+    const context = processContext.values;
+    const tenant = tenantOf(context, settings.identity);
     settings.reporter?.report(error, {
       useCase: where,
       traceId: "",
       executionId: newEntityId(),
-      context: processContext.values,
+      context,
+      ...(settings.identity ? { release: settings.identity.release } : {}),
+      ...(tenant ? { tenant } : {}),
     });
   } catch {
     // Ignored, as a reporter that fails inside a use case is.

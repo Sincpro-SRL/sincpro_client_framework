@@ -493,6 +493,7 @@ import { openTelemetryTracer } from "@sincpro/client-framework/opentelemetry";
 import { sentryReporter } from "@sincpro/client-framework/sentry";
 
 configureProcess({
+  identity: { release: "forge-web:1.4.0" }, // + tenant, when the deployment serves one
   tracer: openTelemetryTracer(provider.getTracer("forge-web")), // the app's provider
   reporter: sentryReporter(client), // the app's Sentry or GlitchTip client
   logger: { mode: production ? "production" : "development" },
@@ -501,7 +502,11 @@ configureProcess({
 ```
 
 Every execution opens a span `<bounded context>/<Service>`; an ApplicationService's Features
-are its children, on the same trace. A dependency that is a `Transport` or a generated client is
+are its children, on the same trace. Each span, log record and report says who was running, with
+sincpro_framework's keys: `release` (`<name>:<version>`, the backend's `APP_RELEASE`) and, when
+there is one, `tenant` — the run's context's, else the deployment's. `processIdentity()` gives
+`release`, `serviceName` and `serviceVersion` (read out of the release with the backend's rules)
+to a platform's tracer resource and log labels; nothing else of the context is copied. A dependency that is a `Transport` or a generated client is
 bound to the run, so each request carries `traceparent` (and `tracestate`) and
 `sincpro-context` — the backend continues the trace. A tracer, reporter or logger that fails is
 ignored: telling about a use case never changes its answer.
