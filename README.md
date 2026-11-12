@@ -509,6 +509,7 @@ import { sentryReporter } from "@sincpro/client-framework/sentry";
 
 configureProcess({
   identity: { release: "forge-web:1.4.0" }, // + tenant, when the deployment serves one
+  timeZone: { keys: "company_zone" }, // where a run's zone is read from (default: time_zone)
   tracer: openTelemetryTracer(provider.getTracer("forge-web")), // the app's provider
   reporter: sentryReporter(client), // the app's Sentry or GlitchTip client
   logger: { mode: production ? "production" : "development" },
@@ -625,6 +626,22 @@ optional `watch`. `memoryContexts()` is the default; a browser, a phone or a ser
 its own. `values` is the same object until it changes, so a screen can hand it to React's
 `useSyncExternalStore`.
 
+### The time zone of a run
+
+A run reads days and times in the zone its context says, not in the device's: a user in La Paz
+looking at a company in Madrid sees «today» as Madrid's. The zone is the `time_zone` key of the
+context, unless the application names another key; with none, the process's zone
+(`installTimeZone`, else the platform's).
+
+```ts
+configureProcess({ timeZone: { keys: ["company_zone", "time_zone"] } }); // the first found wins
+
+const zone = timeZoneOf(this.execution); // or timeZoneOf(context)
+dayOf(instant, zone); // «today» for that company
+```
+
+The zone travels to the server with the rest of the context, so the backend cuts days the same way.
+
 ## Talking to a server
 
 A remote service is reached through a port. The generated client never names a wire: it says
@@ -653,12 +670,17 @@ await forge.sendIssue({ issue_id: "acme-3", message: "hola" }); // ResponseSendI
 | `retryKeys()`                     | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
 | `guardedTransport(t, breaker)`    | every call of a transport through a circuit breaker                                   |
 | `screensTransport(transport)`     | screen reads and writes run as use cases of `screens`: traced and reported            |
+| `markedAs(wrapper, inner)`        | a wrapper of a screens transport keeps its mark: one `screens` context, not two       |
 | `parquetDecoder` (`./parquet`)    | large pages read as Parquet through the same transport                                |
 
 Inside a Feature, inject the generated client as it is: the run binds it, so every call carries
 its trace (`traceparent`), its context (`sincpro-context`) and its signal — as headers over HTTP,
 as metadata where a platform's adapter puts them. `screensTransport` and `entity()` stay on the
 REST `Transport`: they are how a screen reads pages of an entity, with its model and its drafts.
+
+A wrapper over a screens transport — a cache, a guard — keeps its mark, so the screens are not made
+twice: `guardedTransport` does it, and a platform's own wrapper calls `markedAs(wrapper, inner)`.
+One span then answers each screen read, whether the wrapper answered it from its own memory or not.
 
 ### What a write changed
 
@@ -806,7 +828,7 @@ needs them.
 | Decimal    | exact text, `"10.50"`                  | `Decimal`                                      |
 | Money      | `{ amount: "10.50", currency: "BOB" }` | `Money`                                        |
 | Day        | `"2026-10-02"`, never an instant       | `isDay`, `dayOf`                               |
-| Instant    | ISO text                               | `wallTimeOf`, `instantOf`                      |
+| Instant    | ISO text                               | `wallTimeOf`, `instantOf`, `timeZoneOf`        |
 | ID         | UUID v7 as 32 hex                      | `newEntityId`, `isEntityId`, `momentOf`        |
 | Bytes      | `{ "$bytes": "<base64>" }`             | `valuesOf`, `readValues`                       |
 | Collection | items, count and cursor                | `collectionOf`, `isPartial`, `relatedCriteria` |
