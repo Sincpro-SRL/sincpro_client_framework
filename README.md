@@ -506,9 +506,12 @@ are its children, on the same trace. Each span, log record and report says who w
 sincpro_framework's keys: `release` (`<name>:<version>`, the backend's `APP_RELEASE`) and, when
 there is one, `tenant` — the run's context's, else the deployment's. `processIdentity()` gives
 `release`, `serviceName` and `serviceVersion` (read out of the release with the backend's rules)
-to a platform's tracer resource and log labels; nothing else of the context is copied. A dependency that is a `Transport` or a generated client is
-bound to the run, so each request carries `traceparent` (and `tracestate`) and
-`sincpro-context` — the backend continues the trace. A tracer, reporter or logger that fails is
+to a platform's tracer resource and log labels; nothing else of the context is copied. A dependency that says it can be bound — a generated
+client, or one of the framework's transports (`restTransport`, `restOperations`,
+`jsonRpcOperations`, `guardedTransport`; `bindableTransport`/`bindableOperations` for a
+platform's own) — is bound to the run, so each request carries `traceparent` (and `tracestate`)
+and `sincpro-context` — the backend continues the trace. Nothing is guessed from a method's
+name: an application's own object (an Odoo client with a `call`) reaches its use cases as it is. A tracer, reporter or logger that fails is
 ignored: telling about a use case never changes its answer.
 
 The vendor entries wrap what the application built — they initialize nothing, read no

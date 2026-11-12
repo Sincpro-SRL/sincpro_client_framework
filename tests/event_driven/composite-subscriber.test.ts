@@ -232,8 +232,11 @@ test("the stored queue retries only the consumer that failed; the others are nev
   assert.equal(waiting?.failures[0]?.kind, "unavailable");
 
   said.length = 0;
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  await queue.drain();
+  // Until its retry is due — a fixed sleep lost the race under a loaded machine.
+  for (let tries = 0; tries < 100 && store.events[0]?.state !== "delivered"; tries++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await queue.drain();
+  }
   assert.equal(store.events[0]?.state, "delivered");
   assert.deepEqual(said, ["sales.sale.v1.paid s-5", "closed s-5 by sales.OnSaleChanged"]);
 });

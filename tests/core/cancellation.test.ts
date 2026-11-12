@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   ApplicationService,
+  bindableTransport,
   BoundedContext,
   type CallOptions,
   Command,
@@ -92,7 +93,8 @@ test("a Feature inherits its ApplicationService's signal, and so does a scope", 
 test("the run's requests are cancelled with it: the bound transport carries its signal", async () => {
   const seen: (AbortSignal | undefined)[] = [];
   const memory = memoryTransport({});
-  const watching: Transport = {
+  // A transport made by hand says it can be bound; a run never guesses it from its methods.
+  const watching: Transport = bindableTransport({
     ...memory,
     send: <T>(
       method: Parameters<Transport["send"]>[0],
@@ -104,7 +106,7 @@ test("the run's requests are cancelled with it: the bound transport carries its 
       seen.push(signal);
       return memory.send<T>(method, route, body, signal, options);
     },
-  };
+  });
   class CommandSend extends Command<unknown> {}
   class Send extends Feature<CommandSend, unknown> {
     declare readonly transport: Transport;

@@ -4,6 +4,7 @@ import {
   type OperationTransport,
   type RemoteOperation,
 } from "@sincpro/client-framework/client/domain/operation";
+import { bindableOperations } from "@sincpro/client-framework/client/services/propagation";
 import { kindOfJsonRpcCode } from "@sincpro/client-framework/common/failures";
 import { type FailureKind, type Problem, readProblem } from "@sincpro/criteria";
 
@@ -69,7 +70,7 @@ export function jsonRpcOperations(options: JsonRpcOptions): OperationTransport {
   const send = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const own = () =>
     typeof options.headers === "function" ? options.headers() : options.headers;
-  return {
+  return bindableOperations({
     async call<T>(operation: RemoteOperation, input: unknown, call: OperationOptions = {}) {
       const method = operation.rpc?.method;
       if (method === undefined)
@@ -124,5 +125,5 @@ export function jsonRpcOperations(options: JsonRpcOptions): OperationTransport {
       }
       return answer.result as T;
     },
-  };
+  });
 }

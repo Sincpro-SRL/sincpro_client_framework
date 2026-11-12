@@ -6,6 +6,7 @@ import type {
   SendOptions,
   Transport,
 } from "@sincpro/client-framework/client/domain/transport";
+import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { Command } from "@sincpro/client-framework/core/domain/dto";
 import { Feature } from "@sincpro/client-framework/core/domain/services";
 import { BoundedContext } from "@sincpro/client-framework/core/entrypoint/bounded-context";
@@ -157,5 +158,5 @@ export function screensTransport(transport: Transport, name = "screens"): Transp
       screens.execute(new Export(route, signal, options));
   }
   MADE.add(through);
-  return through;
+  return bindableTransport(through);
 }

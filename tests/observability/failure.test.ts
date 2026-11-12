@@ -184,15 +184,22 @@ test("GlitchTip gets sincpro_framework's tags, the event's user and its trace", 
   assert.equal(contexts.trace.span_id, tracer.spans[0]?.spanId);
 });
 
-test("in development the console prints an unexpected failure's stack as a stack", async () => {
+test("in development the console prints an unexpected failure as an Error, with its stack", async () => {
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     configureProcess({ logger: { engine: consoleLogger({ mode: "development" }) } });
     await assert.rejects(saving().execute(new CommandSave()));
-    const [, message, record, stack] = error.mock.calls.at(-1) ?? [];
-    assert.match(String(message), /Execution failed: TypeError: server is undefined/);
+    const [line, record, shown] = error.mock.calls.at(-1) ?? [];
+    assert.match(
+      String(line),
+      /\[feature\] ERROR Execution failed: TypeError: server is undefined/,
+    );
     assert.equal((record as { failure: { stack?: string } }).failure.stack, undefined);
-    assert.match(String(stack), /TypeError: server is undefined\n/);
+    // An Error — what LogBox and Expo's terminal print with its code frame, never `null null`.
+    assert.ok(shown instanceof Error);
+    assert.equal(shown.name, "TypeError");
+    assert.equal(shown.message, "server is undefined");
+    assert.match(shown.stack ?? "", /TypeError: server is undefined\n/);
   } finally {
     error.mockRestore();
   }

@@ -53,13 +53,36 @@ export function headersOf(execution: Execution): Record<string, string> {
  * cases running at once, so they travel per call (`CallOptions`). A call that gives no signal of
  * its own is cancelled with the run.
  */
+/**
+ * The dependency as it is — its state, its own methods, its getters —, with only its wire's
+ * methods carrying the run. Binding a transport never takes away what the dependency is: an
+ * Odoo client that happens to have a `call` is still the Odoo client, and `setServer` still sets
+ * the server of the one the app holds.
+ *
+ * Context: it used to answer a new object with only the wire's methods, and only when the run had
+ * something to carry (a trace, a context, a signal): with tracing on, every other method vanished
+ * — `this.odoo.setServer is not a function` on a phone, never in a test without a tracer.
+ */
+function keeping<T extends object>(original: T, wire: Partial<T>): T {
+  return new Proxy(original, {
+    get(target, property) {
+      if (Object.hasOwn(wire, property))
+        return (wire as Record<PropertyKey, unknown>)[property];
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+    set: (target, property, value) => Reflect.set(target, property, value, target),
+    has: (target, property) => Object.hasOwn(wire, property) || property in target,
+  });
+}
+
 export function bindTransport(transport: Transport, execution: Execution): Transport {
   const own = headersOf(execution);
   const cancels = execution.signal;
   if (Object.keys(own).length === 0 && cancels === undefined) return transport;
   const call = <O extends CallOptions>(options?: O): O =>
     ({ ...options, headers: { ...own, ...options?.headers } }) as O;
-  const bound: Transport = {
+  const bound: Partial<Transport> = {
     list: <T>(
       route: string,
       criteria: Criteria<T>,
@@ -84,7 +107,7 @@ export function bindTransport(transport: Transport, execution: Execution): Trans
   if (download !== undefined)
     bound.download = (route: string, signal?: AbortSignal, options?: CallOptions) =>
       download.call(transport, route, signal ?? cancels, call(options));
-  return bound;
+  return keeping(transport, bound);
 }
 
 /**
@@ -99,14 +122,51 @@ export function bindOperations(
   const own = headersOf(execution);
   const cancels = execution.signal;
   if (Object.keys(own).length === 0 && cancels === undefined) return transport;
-  return {
+  return keeping(transport, {
     call: <T>(operation: RemoteOperation, input: unknown, options?: OperationOptions) =>
       transport.call<T>(operation, input, {
         ...options,
         headers: { ...own, ...options?.headers },
         ...((options?.signal ?? cancels) ? { signal: options?.signal ?? cancels } : {}),
       }),
-  };
+  });
+}
+
+/**
+ * A REST `Transport` a run binds to itself when it is a dependency: its requests carry the run's
+ * trace, context and signal. `restTransport`, `memoryTransport`, `guardedTransport` and
+ * `screensTransport` answer one; a platform's own marks itself with it.
+ *
+ * Context: a run binds only what says it can be bound — never an object because it has `list`,
+ * `one` and `send`: an application's own object with those names is the application's.
+ */
+export function bindableTransport<T extends Transport>(transport: T): T {
+  Object.defineProperty(transport, BIND, {
+    value: (execution: Execution) => bindTransport(transport, execution),
+    enumerable: false,
+    configurable: true,
+  });
+  return transport;
+}
+
+/**
+ * An `OperationTransport` a run binds to itself when it is a dependency: its `call` carries the
+ * run's trace, context and signal. `restOperations`, `jsonRpcOperations` and `guardedTransport`
+ * answer one; a platform's own (gRPC) marks itself with it.
+ *
+ *     boundedContext.addDependency("operations", bindableOperations(grpcOperations(channel)));
+ *
+ * Context: an object is not taken for a transport because it has a `call` — an Odoo client's is
+ * `call(service, method, args)`, and binding it rewrote its arguments and hid its other methods.
+ * A run binds what says it can be bound (`BIND`) and a REST `Transport`; nothing else.
+ */
+export function bindableOperations<T extends OperationTransport>(transport: T): T {
+  Object.defineProperty(transport, BIND, {
+    value: (execution: Execution) => bindOperations(transport, execution),
+    enumerable: false,
+    configurable: true,
+  });
+  return transport;
 }
 
 /** A transport of either kind, bound to `execution`. */

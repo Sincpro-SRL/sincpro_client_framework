@@ -158,9 +158,19 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **Decorators are optional.** Function registration must work without any decorator
   transform. Standard and legacy (`experimentalDecorators`) fixtures are compiled explicitly in
   tests; do not claim Metro (Babel) or web bundler support without testing those configurations.
+- **A run binds what says it can be bound, never what looks like a transport.** A dependency is
+  bound only when it carries `BIND`: a generated client, `restOperations`, `jsonRpcOperations`,
+  `restTransport`, `memoryTransport`, `guardedTransport`, `screensTransport`, and what a
+  platform marks with `bindableOperations(…)` / `bindableTransport(…)`. Nothing else — not an
+  object with `list`/`one`/`send`, not one with a `call` — is ever wrapped: an application's
+  abstraction reaches its use cases as it is.
+  An object is never taken for an `OperationTransport` because it has a `call`: an Odoo client's
+  is `call(service, method, args)`, and binding it hid `setServer` and rewrote its `args` — only
+  with a trace to carry, so never in a test without a tracer. Binding wraps only the wire's
+  methods; the dependency's state, methods and getters stay its own (`keeping`).
 - **The trace reaches the wire through the dependencies.** A dependency is bound to the run when it
-  is a `Transport` or carries `BIND` (every generated client does, through `bindable`); anything
-  else is handed as it is. A client built elsewhere and closed over sends no trace.
+  carries `BIND` (every generated client does, through `bindable`; the framework's transports do);
+  anything else is handed as it is. A client built elsewhere and closed over sends no trace.
 - **The process is read on every call, never at import.** `project` is defined when its module
   loads, before `main` runs `configureProcess`; nothing may capture the tracer, the reporter or the
   store at definition time. `configureProcess` replaces everything at once — a test calls it in
