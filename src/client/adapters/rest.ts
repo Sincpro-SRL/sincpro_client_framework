@@ -1,3 +1,4 @@
+import type { ChangeFeed } from "@sincpro/client-framework/client/domain/changes";
 import {
   type CallOptions,
   type Decoder,
@@ -9,6 +10,7 @@ import {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/domain/transport";
+import { announced, processChanges } from "@sincpro/client-framework/client/services/changes";
 import {
   definitionOf,
   type DiscoveryDocument,
@@ -62,6 +64,9 @@ export type RestOptions = {
   /** Called once per model and version the server answers that the snapshot does not hold —
    *  never an error: the screen keeps working on the live definition. */
   onVersionDrift?: (drift: VersionDrift) => void;
+  /** Where each write is announced (`Change`): the process's feed (`processChanges`) by default,
+   *  so a cache or a screen hears it whoever wrote — a screen, or a use case's client. */
+  changes?: ChangeFeed;
 };
 
 /** A model the server answers at another version than the snapshot the code came from. */
@@ -111,6 +116,7 @@ function documentUrl(base: string, document: string): string {
 export function restTransport(options: RestOptions = {}): Transport {
   const base = options.base ?? "";
   const doFetch = options.fetch ?? ((input, init) => fetch(input, init));
+  const changes = options.changes ?? processChanges;
 
   const decoders = options.decoders ?? [];
   const accept: Record<string, string> =
@@ -292,13 +298,15 @@ export function restTransport(options: RestOptions = {}): Transport {
       signal?: AbortSignal,
       sending?: SendOptions,
     ) {
-      return (await get(
-        route,
-        urlOf(base, route),
-        signal,
-        { method, body, key: sending?.idempotencyKey },
-        sending,
-      )) as T;
+      return announced(changes, method, route, body, async () => {
+        return (await get(
+          route,
+          urlOf(base, route),
+          signal,
+          { method, body, key: sending?.idempotencyKey },
+          sending,
+        )) as T;
+      });
     },
   });
 }

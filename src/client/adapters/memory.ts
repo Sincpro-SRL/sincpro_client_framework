@@ -1,3 +1,4 @@
+import type { ChangeFeed } from "@sincpro/client-framework/client/domain/changes";
 import {
   type Draft,
   type Method,
@@ -6,6 +7,7 @@ import {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/domain/transport";
+import { announced, processChanges } from "@sincpro/client-framework/client/services/changes";
 import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { pack, readValues } from "@sincpro/client-framework/common/serialization";
 import type { AnyRecord, Criteria, Meta, Problem } from "@sincpro/criteria";
@@ -49,6 +51,9 @@ export type MemoryOptions = {
   observe?: (route: string, criteria: Criteria) => void;
   /** Refuse a route the way a server would: return the problem it answers with. */
   refuse?: (route: string) => (Problem & { status?: number }) | undefined;
+  /** Where each write is announced (`Change`), as a real server's transport does: the
+   *  process's feed (`processChanges`) by default. */
+  changes?: ChangeFeed;
 };
 
 /**
@@ -77,6 +82,7 @@ export function memoryTransport(
   options: MemoryOptions = {},
 ): Transport {
   const answered = new Map<string, unknown>();
+  const changes = options.changes ?? processChanges;
 
   async function check(route: string, signal?: AbortSignal): Promise<void> {
     await wait(options.latency ?? 0, signal);
@@ -150,25 +156,27 @@ export function memoryTransport(
       signal?: AbortSignal,
       sending?: SendOptions,
     ) {
-      await check(route, signal);
-      // A key already answered is answered again, without running the Command twice — what
-      // sincpro_framework's `@idempotency` does with a repeated `Idempotency-Key`.
-      const key = sending?.idempotencyKey;
-      if (key !== undefined && answered.has(key)) return copyOf(answered.get(key)) as T;
-      if (options.handle === undefined)
-        throw new TransportError(route, 404, {
-          kind: "not_found",
-          reason: "ROUTE_NOT_FOUND",
-          next_step: "fix_request",
-          retryable: false,
-          errors: [],
-          extensions: {},
-          detail: `Nothing answers ${method} ${route}.`,
-        });
-      // A deep copy: what the caller sent is not what the server keeps.
-      const answer = await options.handle(method, route, copyOf(body));
-      if (key !== undefined) answered.set(key, copyOf(answer));
-      return answer as T;
+      return announced(changes, method, route, body, async () => {
+        await check(route, signal);
+        // A key already answered is answered again, without running the Command twice — what
+        // sincpro_framework's `@idempotency` does with a repeated `Idempotency-Key`.
+        const key = sending?.idempotencyKey;
+        if (key !== undefined && answered.has(key)) return copyOf(answered.get(key)) as T;
+        if (options.handle === undefined)
+          throw new TransportError(route, 404, {
+            kind: "not_found",
+            reason: "ROUTE_NOT_FOUND",
+            next_step: "fix_request",
+            retryable: false,
+            errors: [],
+            extensions: {},
+            detail: `Nothing answers ${method} ${route}.`,
+          });
+        // A deep copy: what the caller sent is not what the server keeps.
+        const answer = await options.handle(method, route, copyOf(body));
+        if (key !== undefined) answered.set(key, copyOf(answer));
+        return answer as T;
+      });
     },
 
     ...(options.read === undefined

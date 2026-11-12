@@ -3,9 +3,10 @@
  * commands, the service's client contract, and how a run's trace and context reach the wire.
  *
  *   domain/    the port and the server's words: `Transport`, `TransportError`, `entity()`, the
- *              client contract
+ *              client contract, what a write changed (`Change`, `ChangeFeed`)
  *   adapters/  REST, memory, and Parquet (optional entry `./parquet`)
- *   services/  discovery, retry keys, propagation (`traceparent`, `sincpro-context`)
+ *   services/  discovery, retry keys, propagation (`traceparent`, `sincpro-context`), the
+ *              process's change feed (`processChanges`)
  */
 export {
   JsonRpcError,
@@ -24,6 +25,11 @@ export {
   type VersionDrift,
 } from "@sincpro/client-framework/client/adapters/rest";
 export { restOperations } from "@sincpro/client-framework/client/adapters/rest-operations";
+export {
+  type Change,
+  type ChangeFeed,
+  changeOf,
+} from "@sincpro/client-framework/client/domain/changes";
 export {
   type ClientContract,
   entityKeyOf,
@@ -76,6 +82,11 @@ export {
   type Transport,
   TransportError,
 } from "@sincpro/client-framework/client/domain/transport";
+export {
+  announced,
+  changeFeed,
+  processChanges,
+} from "@sincpro/client-framework/client/services/changes";
 export { guardedTransport } from "@sincpro/client-framework/client/services/guarded";
 export {
   bindable,
