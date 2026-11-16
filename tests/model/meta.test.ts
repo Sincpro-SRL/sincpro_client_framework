@@ -64,3 +64,22 @@ test("naming a field that is not declared is caught when the definition is writt
     /name named but not declared/,
   );
 });
+
+test("a field says how a form shows it, as the framework publishes it — and only when it says so", () => {
+  const notes = field.text({ widget: "textarea" });
+  assert.equal(notes.widget, "textarea");
+  assert.equal("widget" in field.text(), false);
+  // Every kind may name one: a relation, a value it holds, a choice.
+  assert.equal(
+    field.many2many("Tag", { identifiedBy: "id" }, { widget: "tags" }).widget,
+    "tags",
+  );
+  assert.equal(field.embedded(tenantMeta, { widget: "address" }).widget, "address");
+  assert.equal(field.choice(["a", "b"], { widget: "radio" }).widget, "radio");
+  const meta = defineMeta({
+    aggregate: "Ticket",
+    identity: "id",
+    fields: { id: field.text({ readonly: true }), notes },
+  });
+  assert.equal(meta.fields["notes"]?.widget, "textarea");
+});

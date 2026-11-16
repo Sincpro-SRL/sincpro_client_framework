@@ -99,6 +99,12 @@ export type Entity<
    *  `query`, the list opens on that literal search — what was typed in the picker; with
    *  `scope`, it offers only what the picker may choose (`scopeOfRef`). */
   chooserRef: (query?: string, scope?: Expression) => ResourceRef;
+  /** Its list opened under a cut — «this member's payments», what a smart button opens. With
+   *  `name`, the list says whose it is («Payments · María»): a cut that travels without one
+   *  reads as the whole list. The cut travels as a chooser's does (`scopeOfRef`), the name
+   *  under `SCOPE_NAME_PARAM` (`scopeNameOf`). A method, so an `Entity<Invoice>` is still an
+   *  `Entity`. */
+  listRef(cut: Expression<T>, name?: string): ResourceRef;
   /** The route of its list. */
   list: string;
   /** The route of one record. */
@@ -188,9 +194,12 @@ export const TRAIL_PARAM = "from";
 /** What a new record starts with, as JSON: one param keeps each value's type (a number stays
  *  a number), where a param per field would turn all of them into text. */
 export const WITH_PARAM = "with";
-/** What a chooser may offer at all, as JSON: the picker's cut — its criteria, the keys it
- *  excludes, its named list's scope — that the list it opens ANDs under everything. */
+/** What a chooser may offer at all, or what a list opened under a cut shows (`listRef`), as
+ *  JSON: the cut — its criteria, the keys it excludes, its named list's scope — that the list
+ *  it opens ANDs under everything. */
 export const SCOPE_PARAM = "scope";
+/** Whose a list opened under a cut is (`listRef(cut, name)`): «María» of «Payments · María». */
+export const SCOPE_NAME_PARAM = "of";
 
 /**
  * What a new record's reference says it starts with (`newRef(values)`), or nothing.
@@ -229,6 +238,19 @@ export function scopeOfRef(ref: Pick<ResourceRef, "params">): Expression | undef
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Whose a list opened under a cut is (`listRef(cut, name)`), or nothing: what its heading, its
+ * tab and its breadcrumb say beside the list's name.
+ *
+ * Context: a cut that travels without a name reads as the whole list — «Payments» showing one
+ * member's. The name travels beside the cut, in the reference, so a reload and a link keep it;
+ * an empty one is none.
+ */
+export function scopeNameOf(ref: Pick<ResourceRef, "params">): string | undefined {
+  const name = ref.params?.[SCOPE_NAME_PARAM];
+  return name === undefined || name === "" ? undefined : name;
 }
 
 /**
@@ -427,6 +449,14 @@ export function entity<
           ? {}
           : { [QUERY_PARAM]: query.trim() }),
         ...(scope === undefined ? {} : { [SCOPE_PARAM]: JSON.stringify(scope) }),
+      },
+    }),
+    listRef: (cut, name) => ({
+      domain,
+      kind,
+      params: {
+        [SCOPE_PARAM]: JSON.stringify(cut),
+        ...(name === undefined || name.trim() === "" ? {} : { [SCOPE_NAME_PARAM]: name }),
       },
     }),
     list: routes.list,
