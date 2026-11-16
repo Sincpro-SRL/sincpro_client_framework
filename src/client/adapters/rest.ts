@@ -17,6 +17,7 @@ import {
   modelAt,
 } from "@sincpro/client-framework/client/services/discovery";
 import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
+import { valuesOf } from "@sincpro/client-framework/common/serialization";
 import { type Criteria, type Dropped, type Meta, readProblem } from "@sincpro/criteria";
 import { RestError, restSource } from "@sincpro/criteria/rest";
 
@@ -28,6 +29,19 @@ import { RestError, restSource } from "@sincpro/criteria/rest";
  * console found wrong in 0.3.0, fixed there). What this adds is what criteria does not know:
  * one record (`one()`), a write (`send()`, with its `Idempotency-Key`), and its refusals as a
  * `TransportError`, the one error every screen explains.
+ *
+ * A write's fields travel where the wire reads them. sincpro_framework reads a `DELETE`'s DTO
+ * from its URL, as a `GET`'s (`READ_FROM_URL`), and never its body: a field sent there is dropped
+ * — or refused with a 422 (`out_of_place`) where the server checks it. So a `DELETE` sends its
+ * fields as its query string (`queryOf`) and no body; every other method sends them as a JSON
+ * body. Sent in a body, `dry_run` is lost and a rehearsal would run the real delete, and so is
+ * `origin_version`, so a stale delete would go through.
+ *
+ * The fields reach `send` as its `body` whatever the method — the change feed reads `dry_run`
+ * there — and `send` gets the path already filled, so leaving out a key the path took is the
+ * caller's, who knows the template: `restOperations` does, and an entity's `delete` puts its key
+ * only in the path. A key that travels in both is harmless: the wire reads a `DELETE` as
+ * `{**query, **path_params}` — the path wins — and looks for misplaced fields only in its body.
  *
  * The definition of each model — what a list, a form and a select are built from — is read
  * from the bounded context's discovery document (`document`, `/openapi.json` by default), once,
@@ -93,6 +107,55 @@ function filenameOf(disposition: string | null): string {
   const plain = /filename\s*=\s*("([^"]*)"|[^;]+)/i.exec(said);
   return (plain?.[2] ?? plain?.[1] ?? "").trim();
 }
+
+/**
+ * The fields of a DTO as a query string, the way sincpro_framework's REST wire reads them back
+ * (`payload_from_query`): a plain value — text, a number, a boolean — as its text, which the
+ * server coerces to the field's type; anything else — a list, an object, a `Money` — as JSON,
+ * which it decodes. A value with a wire form of its own is written as that first (`valuesOf`):
+ * a `Decimal` as its text, a `Date` as its instant. A field with no value (`undefined`, `null`,
+ * `""`) is not sent, and the DTO's default stands — as a filter left blank.
+ *
+ *     queryOf({ dry_run: true, origin_version: 3, tags: ["a"] })
+ *       ->  "dry_run=true&origin_version=3&tags=%5B%22a%22%5D"
+ *
+ * Context: the client does not know each field's schema, so `null` cannot be told apart: as
+ * text it would be the word «null» for a plain field. Left out, the field takes its default.
+ */
+export function queryOf(fields: Readonly<Record<string, unknown>>): string {
+  return new URLSearchParams(
+    Object.entries(fields).flatMap(([name, value]) => {
+      const wire = value === undefined ? null : valuesOf(value);
+      if (wire === null || wire === "") return [];
+      return [[name, typeof wire === "object" ? JSON.stringify(wire) : String(wire)]];
+    }),
+  ).toString();
+}
+
+/** `route` with `query` added to the query it may already carry. */
+export function withQuery(route: string, query: string): string {
+  return query === "" ? route : `${route}${route.includes("?") ? "&" : "?"}${query}`;
+}
+
+/**
+ * The fields a `DELETE` carries in its URL: its body, which must be a set of fields as the wire
+ * writes it — a list or a lone value has no field to put in a query, and dropping it silently is
+ * the bug this exists to prevent.
+ */
+function urlFieldsOf(route: string, body: unknown): Readonly<Record<string, unknown>> {
+  if (body === undefined || body === null) return {};
+  const fields = valuesOf(body);
+  if (fields === null || typeof fields !== "object" || Array.isArray(fields))
+    throw new TypeError(
+      `DELETE ${route} sends its fields in the URL: its body is an object of them, not ${
+        Array.isArray(fields) ? "a list" : typeof fields
+      }`,
+    );
+  return fields;
+}
+
+/** The methods of a write sincpro_framework reads from the URL alone (its `READ_FROM_URL`). */
+const FROM_URL: ReadonlySet<Method> = new Set(["DELETE"]);
 
 export function urlOf<T>(base: string, route: string, criteria?: Criteria<T>): string {
   const url = `${base}${route}`;
@@ -187,6 +250,7 @@ export function restTransport(options: RestOptions = {}): Transport {
     return (again === null ? undefined : definitionOf(again, name))?.meta ?? known.meta;
   }
 
+  /** A request and its answer: a write's body as JSON — none for one read from its URL. */
   async function get(
     route: string,
     url: string,
@@ -194,17 +258,20 @@ export function restTransport(options: RestOptions = {}): Transport {
     write?: { method: Method; body: unknown; key?: string | undefined },
     call?: CallOptions,
   ): Promise<unknown> {
+    const json = write !== undefined && !FROM_URL.has(write.method);
     const headers = write
       ? {
           ...own(),
           ...call?.headers,
-          "Content-Type": "application/json",
+          ...(json ? { "Content-Type": "application/json" } : {}),
           ...(write.key === undefined ? {} : { "Idempotency-Key": write.key }),
         }
       : { ...own(), ...call?.headers };
     const response = await doFetch(url, {
       headers,
-      ...(write ? { method: write.method, body: JSON.stringify(write.body) } : {}),
+      ...(write
+        ? { method: write.method, ...(json ? { body: JSON.stringify(write.body) } : {}) }
+        : {}),
       ...(signal ? { signal } : {}),
     });
     const text = await response.text();
@@ -298,10 +365,15 @@ export function restTransport(options: RestOptions = {}): Transport {
       signal?: AbortSignal,
       sending?: SendOptions,
     ) {
+      // A DELETE is read from its URL: its fields go in the query, and it has no body.
+      const url = urlOf(
+        base,
+        FROM_URL.has(method) ? withQuery(route, queryOf(urlFieldsOf(route, body))) : route,
+      );
       return announced(changes, method, route, body, async () => {
         return (await get(
           route,
-          urlOf(base, route),
+          url,
           signal,
           { method, body, key: sending?.idempotencyKey },
           sending,

@@ -56,8 +56,9 @@ function operation(over: Partial<Operation>): Operation {
 
 const order = { $ref: "#/models/Order" };
 
-/** A small context with every case: a page, a record, an edit, a write on a record, one that
- *  creates, a GET no transport reads, a model with two searches, and a value a record holds. */
+/** A small context with every case: a page, a record, an edit, a delete, a write on a record,
+ *  one that creates, a GET no transport reads, a model with two searches, and a value a record
+ *  holds. */
 const shop: Metamodel = {
   format: "sincpro.client-contract/1",
   bounded_context: "shop",
@@ -143,6 +144,24 @@ const shop: Metamodel = {
         properties: { id: { type: "string" }, values: order },
       },
     }),
+    // sincpro_framework's generic `Delete[Order]`: by its key, run dry or checked against the
+    // version read, answering nothing.
+    "shop.CommandDeleteOrder": operation({
+      role: "delete",
+      entities: ["Order"],
+      targets: { Order: "id" },
+      dry_run: true,
+      input: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" },
+          origin_version: { anyOf: [{ type: "integer" }, { type: "null" }] },
+          dry_run: { type: "boolean" },
+        },
+      },
+      output: { type: "null" },
+    }),
     "shop.CommandPayOrder": operation({
       entities: ["Order"],
       targets: { Order: "order_id" },
@@ -185,6 +204,11 @@ const shop: Metamodel = {
       "shop.CommandEditOrder": {
         method: "PUT",
         path: "/v1/orders/{id}/edit",
+        path_fields: ["id"],
+      },
+      "shop.CommandDeleteOrder": {
+        method: "DELETE",
+        path: "/v1/orders/{id}",
         path_fields: ["id"],
       },
       "shop.CommandPayOrder": {
@@ -402,7 +426,8 @@ test("an operation no wire publishes still has its method: the adapter says it i
 test("a path outside the base is refused, never sent half-right", () => {
   assert.throws(
     () => clientFileOf(shop, { base: "/v2" }),
-    /shop\.CommandEditOrder is at \/v1\/orders\/\{id\}\/edit, outside the base \/v2/,
+    // The first operation by name is the one refused: the delete, now that `shop` has one.
+    /shop\.CommandDeleteOrder is at \/v1\/orders\/\{id\}, outside the base \/v2/,
   );
 });
 
@@ -425,6 +450,43 @@ test("an entity's routes come from what each operation is for it", () => {
   );
   assert.ok(source.includes('    placeOrder: "POST /orders",'));
   assert.ok(source.includes("export const entities = [orders] as const;"));
+});
+
+test("a `Delete` is the entity's delete route, never one of its Commands; its method answers null", () => {
+  const entities = entitiesFileOf(shop, options);
+  assert.ok(
+    entities.includes('  edit: "PUT /orders/{id}/edit",\n  delete: "DELETE /orders/{id}",'),
+  );
+  assert.ok(!entities.includes("deleteOrder"));
+  // Its key under another name is written `{id}`, as `entity()` fills it.
+  const keyed: Metamodel = {
+    ...shop,
+    operations: {
+      ...shop.operations,
+      "shop.CommandDeleteOrder": {
+        ...shop.operations["shop.CommandDeleteOrder"]!,
+        targets: { Order: "order_id" },
+      },
+    },
+    bindings: {
+      rest: {
+        ...shop.bindings!.rest,
+        "shop.CommandDeleteOrder": {
+          method: "DELETE",
+          path: "/v1/orders/{order_id}",
+          path_fields: ["order_id"],
+        },
+      },
+    },
+  };
+  assert.ok(entitiesFileOf(keyed, options).includes('  delete: "DELETE /orders/{id}",'));
+  // The client still calls it by who it is; how a DELETE travels is the REST adapter's.
+  assert.ok(
+    clientFileOf(shop, options).includes(
+      "deleteOrder: (input: dto.CommandDeleteOrder, options?: OperationOptions) =>\n      transport.call<dto.CommandDeleteOrderAnswer>(operations.CommandDeleteOrder, input, options),",
+    ),
+  );
+  assert.ok(domainOf(shop).includes("export type CommandDeleteOrderAnswer = null;"));
 });
 
 test("an entity edited through `Edit` reads its record with the caller's draft; one without, as it is", () => {

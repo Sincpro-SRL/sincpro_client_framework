@@ -52,8 +52,8 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  * Everything a screen needs to know about where an entity lives on the server, declared once.
  *
  * Context: a screen should not know a URL. It names the entity, and the entity says where its
- * list is, where one record is, which Commands it takes, how it is saved and previewed, where a
- * draft is kept and where its history is. `key` is how the workspace refers to it
+ * list is, where one record is, which Commands it takes, how it is saved, previewed and deleted,
+ * where a draft is kept and where its history is. `key` is how the workspace refers to it
  * (`domain:kind`, the shape of a composer `ResourceRef`).
  *
  * The routes are declared, not guessed: sincpro_framework publishes a route per use case and
@@ -64,6 +64,7 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  *       create: "POST /invoices",
  *       save: "PUT /invoices/{id}",
  *       preview: "POST /invoices/preview",
+ *       delete: "DELETE /invoices/{id}",
  *       commands: { confirm: "POST /invoices/{id}/confirm", cancel: "POST /invoices/{id}/cancel" },
  *       history: "/invoices/{id}/events",
  *     });
@@ -109,9 +110,15 @@ export type Entity<
   /** Where this caller keeps an edit between requests — sincpro_framework's `Drafts`. */
   draft?: WriteRoute;
   /** sincpro_framework's `Edit`: ONE route that keeps the draft, saves and discards, by its
-   *  `action`. Declared, a save sends the record whole as the form holds it — not the fields
-   *  that changed under `save` — and it is also where the draft is kept. */
+   *  `action`. Declared, a save goes through it — what changed, with the draft and stored
+   *  versions it started from: the server puts it over what it stored and the caller's draft —
+   *  and it is also where the draft is kept. */
   edit?: WriteRoute;
+  /** sincpro_framework's `Delete`: the record deleted by its key, `{id}` in the path. It answers
+   *  nothing (`null`); with `dry_run: true` it answers the `Preview` of what would go and deletes
+   *  nothing, and `origin_version` refuses it when the record moved past the version read. Over
+   *  REST those fields travel in the query string — a `DELETE` is read from its URL. */
+  delete?: WriteRoute;
   /** Its business events: where ONE record's events are read (sincpro_framework's
    *  `DomainEvents`), `{id}` where its key goes — a page of them, as a list answers. */
   history?: string;
@@ -227,6 +234,8 @@ export type EntityRoutes<C extends CommandBodies = CommandBodies> = CommandRoute
   draft?: string;
   /** `"PUT /invoices/{id}/edit"`: the use case that answers sincpro_framework's `Edit`. */
   edit?: string;
+  /** `"DELETE /invoices/{id}"`: the use case that answers sincpro_framework's `Delete`. */
+  delete?: string;
   /** `"/invoices/{id}/events"`: a record's events (`DomainEvents[Invoice, …]`), oldest first. */
   history?: string;
   /** `"/invoices/export"`: every record of a criteria as a file (`Export[Invoice, Streamed]`),
@@ -400,6 +409,7 @@ export function entity<
     ...(routes.preview === undefined ? {} : { preview: writeRoute(routes.preview) }),
     ...(routes.draft === undefined ? {} : { draft: writeRoute(routes.draft) }),
     ...(routes.edit === undefined ? {} : { edit: writeRoute(routes.edit) }),
+    ...(routes.delete === undefined ? {} : { delete: writeRoute(routes.delete) }),
     ...(routes.history === undefined ? {} : { history: routes.history }),
     ...(routes.export === undefined ? {} : { export: routes.export }),
     summary: routes.summary ?? {},
