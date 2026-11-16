@@ -69,6 +69,7 @@ Entrypoint -> BoundedContext.execute(Command | event) -> Feature or ApplicationS
 | Handled event       | An event the context has a use case of (a Feature registered for its class)                                                                                    |
 | `DomainEvent`       | The generated union of a contract's events, narrowed by `name`                                                                                                 |
 | Mapping Entity      | The remote descriptor exported as `Entity`, used for routes, fields and commands                                                                               |
+| Resource ref        | Where the workspace opens an entity — `{domain, kind, id?, params?}`, composer's `ResourceRef` — built by `ref`, `newRef`, `chooserRef`; never «entity ref»    |
 | Transport           | REST's own port: what `restOperations` and screens (`entity()`, pages) stand on                                                                                |
 | Screens transport   | A transport whose reads and writes run as use cases of `screens`; marked with `SCREENS`, so a wrapper of it is not made twice — `screensTransport`, `markedAs` |
 

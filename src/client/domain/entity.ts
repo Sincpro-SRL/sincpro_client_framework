@@ -86,15 +86,15 @@ export type Entity<
   kind: string;
   /** Where the workspace finds it: the list without an id, one record with it — the shape of a
    *  composer `ResourceRef`, built here so no screen writes `{ domain, kind, id }` by hand. */
-  ref: (id?: string) => EntityRef;
+  ref: (id?: string) => ResourceRef;
   /** A record that does not exist yet — the form that creates one. Its view is the record's.
    *  With `values`, the form starts with them over the model's defaults: an invoice created
    *  from its customer starts with that customer (`startingValuesOf`). */
-  newRef: (values?: AnyRecord) => EntityRef;
+  newRef: (values?: AnyRecord) => ResourceRef;
   /** Its list opened to CHOOSE one: a row answers whoever asked (composer's `api.pick`). With
    *  `query`, the list opens on that literal search — what was typed in the picker; with
    *  `scope`, it offers only what the picker may choose (`scopeOfRef`). */
-  chooserRef: (query?: string, scope?: Expression) => EntityRef;
+  chooserRef: (query?: string, scope?: Expression) => ResourceRef;
   /** The route of its list. */
   list: string;
   /** The route of one record. */
@@ -138,8 +138,15 @@ export type Entity<
   readonly _answers?: A;
 };
 
-/** A composer `ResourceRef`, structurally: `core/` does not import the composer. */
-export type EntityRef = {
+/**
+ * Where the workspace opens an entity — its list, one record, a new one, a chooser —: a composer
+ * `ResourceRef`, structurally, since nothing here imports the composer.
+ *
+ * Context: named as composer names it. `EntityRef` is sincpro_framework's word for something
+ * else — a record of any bounded context written as one text (`billing.Invoice:01a1…`), what a
+ * payload carries —, and two types of one name cannot both be public.
+ */
+export type ResourceRef = {
   domain: string;
   kind: string;
   id?: string;
@@ -170,7 +177,7 @@ export const SCOPE_PARAM = "scope";
  * Context: a reference survives a reload and a link, so its params can be anything a person
  * typed in the address bar — a value that is not a JSON object is not a start, never an error.
  */
-export function startingValuesOf(ref: Pick<EntityRef, "params">): AnyRecord {
+export function startingValuesOf(ref: Pick<ResourceRef, "params">): AnyRecord {
   const written = ref.params?.[WITH_PARAM];
   if (written === undefined) return {};
   try {
@@ -193,7 +200,7 @@ export function startingValuesOf(ref: Pick<EntityRef, "params">): AnyRecord {
  * (`readExpression`), and one that does not read is no cut, never an error. It narrows what is
  * OFFERED; the server still decides what may be stored.
  */
-export function scopeOfRef(ref: Pick<EntityRef, "params">): Expression | undefined {
+export function scopeOfRef(ref: Pick<ResourceRef, "params">): Expression | undefined {
   const written = ref.params?.[SCOPE_PARAM];
   if (written === undefined) return undefined;
   try {
