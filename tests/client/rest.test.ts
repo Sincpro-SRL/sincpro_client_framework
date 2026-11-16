@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 
 import {
+  Decimal,
   entity,
   memoryTransport,
+  Money,
+  pathFor,
   readRoute,
   restTransport,
   TransportError,
@@ -222,4 +225,94 @@ test("an entity is domain:kind, and its record lives under its list", () => {
   const invoices = entity("billing:invoice", { list: "/invoices" });
   assert.equal(invoices.one("F 1"), "/invoices/F%201");
   assert.throws(() => entity("invoice", { list: "/invoices" }), /domain:kind/);
+});
+
+type Sent = { url: string; method: string; body: unknown; headers: Headers };
+
+/** A `fetch` that keeps what each request really carried — its method, its URL and its body. */
+function recorded(sent: Sent[], answer: () => Response): typeof fetch {
+  return (async (url: string, init?: RequestInit) => {
+    sent.push({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body,
+      headers: new Headers(init?.headers),
+    });
+    return answer();
+  }) as typeof fetch;
+}
+
+test("a DELETE sends its fields in the query string and no body — sincpro_framework reads a DELETE from its URL", async () => {
+  const sent: Sent[] = [];
+  const transport = restTransport({
+    base: "/v1",
+    document: null,
+    fetch: recorded(sent, () => new Response(null, { status: 204 })),
+  });
+  const answer = await transport.send(
+    "DELETE",
+    "/issues/i%207",
+    { dry_run: true, origin_version: 3 },
+    undefined,
+    { idempotencyKey: "k-1" },
+  );
+  // Answered nothing: `null`, as every Command that answers nothing — never `undefined`.
+  assert.equal(answer, null);
+  assert.equal(sent[0]?.method, "DELETE");
+  assert.equal(sent[0]?.url, "/v1/issues/i%207?dry_run=true&origin_version=3");
+  assert.equal(sent[0]?.body, undefined);
+  assert.equal(sent[0]?.headers.get("Content-Type"), null);
+  assert.equal(sent[0]?.headers.get("Idempotency-Key"), "k-1");
+});
+
+test("a DELETE's fields travel as the wire decodes them: plain values as text, anything else as JSON", async () => {
+  const sent: Sent[] = [];
+  const transport = restTransport({
+    document: null,
+    fetch: recorded(sent, () => new Response(null, { status: 204 })),
+  });
+  await transport.send("DELETE", "/lines/l1?draft=true", {
+    reason: "duplicada",
+    qty: new Decimal("2.500"),
+    at: new Date("2026-11-16T12:00:00Z"),
+    tags: ["a", "b"],
+    total: new Money("1.50", "BOB"),
+    note: null,
+    left: undefined,
+    blank: "",
+  });
+  const url = new URL(sent[0]?.url ?? "", "http://x");
+  assert.equal(url.pathname, "/lines/l1");
+  assert.deepEqual(
+    [...url.searchParams],
+    [
+      ["draft", "true"],
+      ["reason", "duplicada"],
+      ["qty", "2.500"],
+      ["at", "2026-11-16T12:00:00.000Z"],
+      ["tags", '["a","b"]'],
+      ["total", '{"amount":"1.50","currency":"BOB"}'],
+    ],
+  );
+  await assert.rejects(
+    transport.send("DELETE", "/lines/l1", ["l1"]),
+    /DELETE \/lines\/l1 sends its fields in the URL/,
+  );
+  assert.equal(sent.length, 1, "a body that is no set of fields is never sent");
+});
+
+test("an entity's delete is its own route: its dry run asks in the URL and reads the Preview", async () => {
+  const orders = entity("shop:order", { list: "/orders", delete: "DELETE /orders/{id}" });
+  assert.deepEqual(orders.delete, { method: "DELETE", path: "/orders/{id}" });
+  const sent: Sent[] = [];
+  const preview = { text: "Would delete Order o 1", data: { id: "o 1", version: 3 } };
+  const transport = restTransport({
+    document: null,
+    fetch: recorded(sent, () => Response.json(preview)),
+  });
+  const route = orders.delete!;
+  const answer = await transport.send(route.method, pathFor(route, "o 1"), { dry_run: true });
+  assert.deepEqual(answer, preview);
+  assert.equal(sent[0]?.url, "/orders/o%201?dry_run=true");
+  assert.equal(sent[0]?.body, undefined);
 });

@@ -666,7 +666,7 @@ await forge.sendIssue({ issue_id: "acme-3", message: "hola" }); // ResponseSendI
 | Piece                             | What it does                                                                          |
 | --------------------------------- | ------------------------------------------------------------------------------------- |
 | `OperationTransport` port         | `call(operation, input, options)`: an operation by who it is, over any wire           |
-| `restOperations(transport)`       | over REST: the path from the input's fields, a Query's query, a Command's body        |
+| `restOperations(transport)`       | over REST: the path from the input, a Query's and a DELETE's query, a Command's body  |
 | `jsonRpcOperations({ endpoint })` | over JSON-RPC 2.0: one `POST`, the operation's method, its input as named params      |
 | `restTransport({ base })`         | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
 | `memoryTransport(tables)`         | the same REST contract in memory, copying by the wire's rules — for tests and demos   |
@@ -688,6 +688,12 @@ server would), so `forge.editProject({ values, action: "save" })` creates a proj
 wire, REST's `PUT /projects/{id}/edit` included. A screen that keeps a draft of a new record
 names its key once, so every save of the draft reaches the same record. A Command that answers
 nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`.
+
+A `DELETE` — the backend's `Delete`, role `delete`, an entity's `delete` route — is read from its
+URL, never from a body. `restTransport` sends its fields in the query string, as the server decodes
+them (plain values as text, anything else as JSON): `DELETE /projects/acme?dry_run=true` answers
+the `Preview` of what would go, and `origin_version` refuses a delete of a record that moved on.
+Sent in a body they are dropped, and a rehearsal would run the real delete.
 
 Which of the ways a screen reaches the backend fits a call — an entity's screens, the generated
 client over the screens transport, or a Command and its Feature — is in
@@ -765,7 +771,7 @@ each file in the layer it belongs to, under the bounded context's folder (`--out
 | `domain/generated/events.ts`     | the domain events and `DomainEvent`, their union — when the contract carries them             |
 | `domain/generated/index.ts`      | the three, re-exported: `import type * as remote from "../domain/generated"`                  |
 | `adapters/generated/client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
-| `adapters/generated/entities.ts` | each entity's list, record, edit, export, Commands and history, for screens                   |
+| `adapters/generated/entities.ts` | each entity's list, record, edit, delete, export, Commands and history, for screens           |
 
 The backend keeps them apart — the domain's words, the application layer's DTOs, the facts, the
 adapters to another system —, and so does the application: each beside its own code of that layer.

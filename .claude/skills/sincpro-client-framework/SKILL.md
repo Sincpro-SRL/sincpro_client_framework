@@ -141,7 +141,9 @@ run binds it, so each call carries `traceparent`, `sincpro-context` and the run'
 method takes the operation's input DTO and answers its answer DTO, as `domain/generated/commands.ts`
 types them. A local Command may `implements remote.CommandX` (`import type * as remote`). An
 edit's method mints the record's key when the input names none (`newEntityId`), so a new record
-is created with no key in hand; a Command that answers nothing (a 204) resolves `null`.
+is created with no key in hand; a Command that answers nothing (a 204) resolves `null`. A
+`DELETE` is read from its URL: `restTransport` sends its fields (`dry_run`, `origin_version`) in
+the query string, never in a body.
 
 **Is a use case worth it?** A call with no logic of its own needs no Command and Feature: an
 entity's screens use the platform's entity pieces, and one operation from a screen goes through

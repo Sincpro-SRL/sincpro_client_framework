@@ -40,6 +40,10 @@ export type MemoryOptions = {
    * Answer a Command — a write, an action, a preview — the way the service would. It may
    * change the tables' rows (they are read on every request) and throw a `TransportError` to
    * refuse. Without it, every Command is a 404.
+   *
+   * Its `body` is the Command's fields whatever the method — a `DELETE`'s too, which REST sends
+   * in its query string (`restTransport`): this stands for the service, which reads a DTO, not a
+   * URL.
    */
   handle?: (method: Method, route: string, body: unknown) => unknown;
   /** Answer a read that is neither a page nor a record (`GET /me`), its route with its query.

@@ -42,7 +42,11 @@ export interface Transport {
   ): Promise<Page<T>>;
   /** One record, with the definition of its model. */
   one<T>(route: string, signal?: AbortSignal, options?: CallOptions): Promise<One<T>>;
-  /** A Command — a write, an action, a preview: `method` and a JSON body, its answer back. */
+  /**
+   * A Command — a write, an action, a preview: `method` and its fields (`body`), its answer back,
+   * `null` when it answers nothing. Where the fields travel is the wire's: over REST a `DELETE` is
+   * read from its URL, so its fields go in the query string; any other method's, in a JSON body.
+   */
   send<T>(
     method: Method,
     route: string,

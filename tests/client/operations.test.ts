@@ -4,6 +4,7 @@ import {
   BoundedContext,
   Command,
   configureProcess,
+  Decimal,
   failureOf,
   Feature,
   JsonRpcError,
@@ -101,12 +102,19 @@ test("REST: a Query sends its other fields as its query — criteria as JSON —
     }),
   );
   const criteria = { where: { state: "paid" } };
-  const answer = await rest.call(list, { customer_id: "c-1", criteria, drafts: false });
+  const answer = await rest.call(list, {
+    customer_id: "c-1",
+    criteria,
+    drafts: false,
+    above: new Decimal("10.50"),
+  });
   assert.deepEqual(answer, { orders: [], cursor: null });
   const url = new URL(sent[0]?.url ?? "", "https://x");
   assert.equal(url.pathname, "/customers/c-1/orders");
   assert.deepEqual(JSON.parse(url.searchParams.get("criteria") ?? ""), criteria);
   assert.equal(url.searchParams.get("drafts"), "false");
+  // A value with a wire form of its own goes as that text, never quoted as JSON.
+  assert.equal(url.searchParams.get("above"), "10.50");
 });
 
 test("REST: what answers bytes is downloaded; what REST does not publish is said, not guessed", async () => {
@@ -151,6 +159,31 @@ test("REST: a Command that answers nothing — a DELETE's 204 — resolves `null
   assert.equal(answer, null);
   assert.equal(sent[0]?.method, "DELETE");
   assert.equal(sent[0]?.url, "/orders/o-1");
+});
+
+test("REST: a DELETE is read from its URL — its path takes its key, the rest is its query, and no body", async () => {
+  const remove: RemoteOperation = {
+    identity: "shop.CommandDeleteOrder",
+    role: "delete",
+    query: false,
+    entities: ["Order"],
+    targets: { Order: "id" },
+    rest: { method: "DELETE", path: "/orders/{id}" },
+  };
+  const sent: Sent[] = [];
+  const rest = restOperations(
+    restTransport({
+      document: null,
+      fetch: recording(sent, () => new Response(null, { status: 204 })),
+    }),
+  );
+  // A dry run dropped on the way would run the real delete; a stale check dropped, a blind one.
+  const answer = await rest.call(remove, { id: "o 1", dry_run: true, origin_version: 3 });
+  assert.equal(answer, null);
+  assert.equal(sent[0]?.method, "DELETE");
+  // The key the path took is not said again in the query.
+  assert.equal(sent[0]?.url, "/orders/o%201?dry_run=true&origin_version=3");
+  assert.equal(sent[0]?.body, undefined);
 });
 
 test("an edit with no key creates under one minted before it leaves; a key the caller names goes as it is", async () => {

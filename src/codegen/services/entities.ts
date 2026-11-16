@@ -129,7 +129,8 @@ function entitySourceOf(
       routes.push(`  one: ${JSON.stringify(path)},`);
     else missing.push(`one: \`${one.found.local}\` is at ${one.found.rest.path}`);
   } else if (one !== undefined) missing.push(`one: ${one.missing}`);
-  for (const role of ["edit", "preview"]) {
+  // sincpro_framework's `Delete` (role `delete`) is the record's own route too, never a Command.
+  for (const role of ["edit", "preview", "delete"]) {
     const write = oneOf(reads(role, isWrite), role);
     if (write === undefined) continue;
     if ("missing" in write) {
@@ -213,9 +214,9 @@ function entitySourceOf(
  *
  * 1. Per model, by name: the one `search` a transport reads for it (`own` when there are
  *    several) — none, and the model gets no entity, said in the file's own doc.
- * 2. Its `get`, `edit` and `preview` the same way, the record's field written `{id}`; its
- *    `events` — a record's `DomainEvents` — as `history`, the same way; and its `export` — every
- *    record of a criteria as a file — by its path.
+ * 2. Its `get`, `edit`, `preview` and `delete` the same way, the record's field written `{id}`;
+ *    its `events` — a record's `DomainEvents` — as `history`, the same way; and its `export` —
+ *    every record of a criteria as a file — by its path.
  * 3. Every write of role `command` that concerns it: with `target` when its body names the
  *    record, as it is when it creates one; its body typed without that field.
  * Final: an `entity<T, C>()` per model listed, keyed `<domain>:<kind>`, and `entities`, all of
