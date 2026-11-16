@@ -43,6 +43,10 @@ export type FieldOptions = {
    *  publishes as the field's `widget`. A name, never a component: which component answers it
    *  is the platform's. */
   widget?: string;
+  /** `false`: a grouping never splits by it — an identity, a trace id, each value its own
+   *  group —, as sincpro_framework publishes a field declared `groupable: False` (3.37). It only
+   *  turns grouping off: a list of tags is never grouped. */
+  groupable?: boolean;
 };
 
 /** What a scalar and a relation both say of themselves: their words and their widget. */
@@ -88,7 +92,7 @@ function scalar(type: FieldType, options: FieldOptions = {}): FieldMeta {
     kind: "scalar",
     nullable,
     sortable: !listed,
-    groupable: !listed,
+    groupable: !listed && options.groupable !== false,
     ops,
     ...common(options),
     ...(options.required === undefined ? {} : { required: options.required }),

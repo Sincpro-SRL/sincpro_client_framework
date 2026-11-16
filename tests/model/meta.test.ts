@@ -83,3 +83,11 @@ test("a field says how a form shows it, as the framework publishes it — and on
   });
   assert.equal(meta.fields["notes"]?.widget, "textarea");
 });
+
+test("a field a grouping never splits by says so, as the framework publishes it", () => {
+  assert.equal(field.text({ groupable: false }).groupable, false);
+  assert.equal(field.text().groupable, true);
+  assert.equal(field.integer({ groupable: true }).groupable, true);
+  // It only turns grouping off: a list of tags is never grouped.
+  assert.equal(field.tags({ groupable: true }).groupable, false);
+});
