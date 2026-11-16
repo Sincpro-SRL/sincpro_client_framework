@@ -836,3 +836,108 @@ test("an export under a record's keys keeps its path as data", () => {
     ),
   );
 });
+
+/** sincpro_framework's `EntityRef`, as its JSON Schema publishes it (3.37). */
+const entityRefSchema = {
+  type: "string",
+  format: "entity-ref",
+  pattern: "^[^:]+\\.[A-Za-z_][A-Za-z0-9_]*:.+$",
+  examples: ["billing.Invoice:01a1e6f2c0b37a4e9b1d2c3e4f5a6b7c"],
+};
+
+/** `shop` with a payment that names any record by its ref, and the backend's `Resolve`. */
+const referring: Metamodel = {
+  ...shop,
+  models: {
+    ...shop.models,
+    Payment: {
+      type: "object",
+      "x-sincpro": { identity: "id" },
+      properties: {
+        id: { type: "string", "x-sincpro": { type: "text" } },
+        subject: { ...entityRefSchema, "x-sincpro": { type: "text" } },
+        paid_on: { type: "string", format: "date", "x-sincpro": { type: "date" } },
+      },
+    },
+  },
+  operations: {
+    ...shop.operations,
+    "shop.CommandConfirmPayment": operation({
+      input: {
+        type: "object",
+        required: ["subject"],
+        properties: {
+          subject: entityRefSchema,
+          origin: { anyOf: [entityRefSchema, { type: "null" }] },
+        },
+      },
+      output: { $ref: "#/models/Payment" },
+    }),
+    // sincpro_framework's `Resolve`: an operation like any other of whoever publishes it.
+    "shop.QueryResolve": operation({
+      query: true,
+      input: {
+        type: "object",
+        required: ["refs"],
+        properties: { refs: { type: "array", items: entityRefSchema } },
+      },
+      output: {
+        type: "object",
+        properties: {
+          records: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["ref"],
+              properties: {
+                ref: entityRefSchema,
+                display: { type: "string" },
+                record: { anyOf: [{ type: "object" }, { type: "null" }] },
+              },
+            },
+          },
+        },
+      },
+    }),
+  },
+  bindings: {
+    rest: {
+      ...shop.bindings!.rest,
+      "shop.CommandConfirmPayment": {
+        method: "POST",
+        path: "/v1/payments/confirm",
+        path_fields: [],
+      },
+      "shop.QueryResolve": { method: "GET", path: "/v1/refs", path_fields: [] },
+    },
+  },
+};
+
+test("a ref to a record of any bounded context is an EntityRef, imported; another text stays a string", () => {
+  const files = domainFilesOf(referring);
+  const domain = Object.values(files).join("\n");
+  assert.ok(domain.includes("  subject: EntityRef;\n"), domain);
+  assert.ok(domain.includes("  origin?: EntityRef | null;\n"));
+  assert.ok(domain.includes("  refs: EntityRef[];\n"));
+  assert.ok(domain.includes("    ref: EntityRef;\n  }>;"));
+  // A record's field of that format too; a day is still the text the wire carries.
+  assert.ok(files["models.ts"]!.includes("  paid_on: string;\n  subject: EntityRef;"));
+  assert.ok(
+    files["models.ts"]!.includes(
+      'import type { EntityCollection, EntityRef } from "@sincpro/client-framework";',
+    ),
+  );
+  assert.ok(
+    files["commands.ts"]!.includes(
+      'import type { EntityRef } from "@sincpro/client-framework";',
+    ),
+  );
+  // A contract with no ref imports none.
+  assert.ok(!domainOf(shop).includes("EntityRef"));
+  // Resolving is the operation of whoever publishes it: a method like any other.
+  assert.ok(
+    clientFileOf(referring, options).includes(
+      "transport.call<dto.QueryResolveAnswer>(operations.QueryResolve, input, options),",
+    ),
+  );
+});

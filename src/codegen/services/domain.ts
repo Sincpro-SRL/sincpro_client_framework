@@ -50,7 +50,9 @@ import {
  * name is claimed once across the files: `index.ts` re-exports them side by side.
  *
  * criteria's grammar comes with every metamodel (`$defs.Criteria`); `@sincpro/criteria` already
- * types it, so it is imported, never written a second time.
+ * types it, so it is imported, never written a second time. So is a text whose `format` this
+ * package types: a ref to a record of any bounded context (`format: "entity-ref"`) is an
+ * `EntityRef`, never a bare `string`.
  *
  *     domainFilesOf(JSON.parse(readFileSync("project.contract.json", "utf8")))
  *       -> { "models.ts": "…", "commands.ts": "…", "index.ts": "…" }
@@ -64,6 +66,15 @@ const IMPORTED: Readonly<Record<string, { name: string; from: string }>> = {
   Download: { name: "Download", from: "@sincpro/client-framework" },
   EntityCollection: { name: "EntityCollection", from: "@sincpro/client-framework" },
 };
+/** A text whose `format` a package of the stack already types — the backend's `EntityRef`,
+ *  `bounded_context.Entity:key` —: the field is that type, imported. */
+const FORMATS: Readonly<Record<string, { name: string; from: string }>> = {
+  "entity-ref": { name: "EntityRef", from: "@sincpro/client-framework" },
+};
+/** Everything a file may import from the stack, by the name it imports. */
+const STACK: ReadonlyMap<string, { name: string; from: string }> = new Map(
+  [...Object.values(IMPORTED), ...Object.values(FORMATS)].map((one) => [one.name, one]),
+);
 /** A relation that holds several records: a reading answers it as a page of them. */
 const TO_MANY = new Set(["one2many", "many2many"]);
 /** The field types whose value is the record itself, not a key that names it. */
@@ -94,7 +105,7 @@ type Scope = {
   refer: (ref: string) => string;
   /** The shared definitions it names. */
   reached: Set<string>;
-  /** What a package of the stack already types (`Criteria`). */
+  /** What a package of the stack already types (`Criteria`, `EntityRef`), by the name imported. */
   imports: Set<string>;
   /** The models it names as records: written in `models.ts`. */
   models: Set<string>;
@@ -210,8 +221,12 @@ function typeOf(schema: Schema, scope: Scope, depth: number, record: boolean): s
   if (types.length > 1)
     return union(types.map((one) => typeOf({ ...schema, type: one }, scope, depth, record)));
   switch (types[0]) {
-    case "string":
-      return "string";
+    case "string": {
+      const typed = schema.format === undefined ? undefined : FORMATS[schema.format];
+      if (typed === undefined) return "string";
+      scope.imports.add(typed.name);
+      return typed.name;
+    }
     case "integer":
     case "number":
       return "number";
@@ -306,7 +321,7 @@ function importsOf(
 ): string[] {
   const byPackage = new Map<string, string[]>();
   for (const name of [...scope.imports].sort()) {
-    const imported = IMPORTED[name]!;
+    const imported = STACK.get(name)!;
     byPackage.set(imported.from, [...(byPackage.get(imported.from) ?? []), imported.name]);
   }
   const packages = [...byPackage.keys()]

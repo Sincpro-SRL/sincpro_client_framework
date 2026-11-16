@@ -851,6 +851,7 @@ needs them.
 | Day        | `"2026-10-02"`, never an instant       | `isDay`, `dayOf`                               |
 | Instant    | ISO text                               | `wallTimeOf`, `instantOf`, `timeZoneOf`        |
 | ID         | UUID v7 as 32 hex                      | `newEntityId`, `isEntityId`, `momentOf`        |
+| Entity ref | `"billing.Invoice:0192…"`              | `EntityRef`, `parseEntityRef`, `entityRefOf`   |
 | Bytes      | `{ "$bytes": "<base64>" }`             | `valuesOf`, `readValues`                       |
 | Collection | items, count and cursor                | `collectionOf`, `isPartial`, `relatedCriteria` |
 | Export     | Parquet, Arrow or JSON Lines           | `downloadRoute`, `exportRoute`                 |
@@ -859,6 +860,15 @@ needs them.
 never a `Date`. `valuesOf`/`pack` write; `readValues` reads tagged values back; `rebuilt`/`unpack`
 use a reader given explicitly. Cycles, functions and non-finite numbers are refused. How a value
 is shown, typed or stored is the platform's.
+
+An entity ref — the backend's `EntityRef` — names a record of any bounded context by one text,
+`bounded_context.Entity:key`: what a payment's metadata, a webhook or a notification carries to
+say which record it is about. It is a text on the wire, so it is a text here, typed by its form:
+the generator types a field published as `format: "entity-ref"` as `EntityRef`, `parseEntityRef`
+reads one (refusing what the backend refuses), `isEntityRef` checks a string read from outside,
+and `entityRefOf({ boundedContext, entity, key })` writes one. Resolving it is the backend's
+`Resolve` — `GET …/refs?refs=[…]` — a generated operation of whichever bounded context publishes
+it, never a route of this package.
 
 ## An application's layout
 
