@@ -139,7 +139,16 @@ export const operations = guardedTransport(
 The generated `clientOf(operations)` is injected as a dependency (`addDependency("client", …)`); a
 run binds it, so each call carries `traceparent`, `sincpro-context` and the run's signal. Each
 method takes the operation's input DTO and answers its answer DTO, as `domain/generated/commands.ts`
-types them. A local Command may `implements remote.CommandX` (`import type * as remote`).
+types them. A local Command may `implements remote.CommandX` (`import type * as remote`). An
+edit's method mints the record's key when the input names none (`newEntityId`), so a new record
+is created with no key in hand; a Command that answers nothing (a 204) resolves `null`.
+
+**Is a use case worth it?** A call with no logic of its own needs no Command and Feature: an
+entity's screens use the platform's entity pieces, and one operation from a screen goes through
+the generated client over the screens transport (`clientOf(restOperations(screens))`, `screens =
+screensTransport(rest)`), each call a use case of `screens`. A Command and its Feature earn their
+place when the call decides something, composes calls, publishes or consumes an event, travels
+in a queue, or is reused — [docs/WEB.md](../../../docs/WEB.md#which-way-a-screen-reaches-the-backend).
 
 ### Start a bounded context (as the backend's `dependencies.py` + `framework.py`)
 

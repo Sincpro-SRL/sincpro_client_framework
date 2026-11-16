@@ -131,6 +131,54 @@ test("REST: what answers bytes is downloaded; what REST does not publish is said
   await assert.rejects(rest.call(pay, {}), /needs "order_id"/);
 });
 
+test("REST: a Command that answers nothing — a DELETE's 204 — resolves `null`, never `undefined`", async () => {
+  const remove: RemoteOperation = {
+    identity: "shop.CommandRemoveOrder",
+    role: "command",
+    query: false,
+    entities: ["Order"],
+    targets: { Order: "id" },
+    rest: { method: "DELETE", path: "/orders/{id}" },
+  };
+  const sent: Sent[] = [];
+  const rest = restOperations(
+    restTransport({
+      document: null,
+      fetch: recording(sent, () => new Response(null, { status: 204 })),
+    }),
+  );
+  const answer = await rest.call(remove, { id: "o-1" });
+  assert.equal(answer, null);
+  assert.equal(sent[0]?.method, "DELETE");
+  assert.equal(sent[0]?.url, "/orders/o-1");
+});
+
+test("an edit with no key creates under one minted before it leaves; a key the caller names goes as it is", async () => {
+  const sent: Sent[] = [];
+  const client = clientOf(
+    restOperations(
+      restTransport({
+        document: null,
+        fetch: recording(sent, (one) =>
+          Response.json({ project: { id: (one.body as { id: string }).id } }),
+        ),
+      }),
+    ),
+  );
+  // A new record from a custom screen: no key named — the route still needs one in its path.
+  await client.editProject({ values: { display_name: "Acme" }, action: "save" });
+  const minted = (sent[0]?.body as { id: string }).id;
+  assert.match(minted, /^[0-9a-f]{12}7[0-9a-f]{19}$/);
+  assert.equal(sent[0]?.method, "PUT");
+  assert.equal(sent[0]?.url, `/projects/${minted}/edit`);
+  // Each new record gets its own; a stored record, or a form's draft, keeps the key it names.
+  await client.editProject();
+  assert.notEqual((sent[1]?.body as { id: string }).id, minted);
+  await client.editProject({ id: "odoo-acme", values: { display_name: "Acme" } });
+  assert.equal(sent[2]?.url, "/projects/odoo-acme/edit");
+  assert.deepEqual(sent[2]?.body, { id: "odoo-acme", values: { display_name: "Acme" } });
+});
+
 test("JSON-RPC: one POST with the operation's method and its input as named params", async () => {
   const sent: Sent[] = [];
   const rpc = jsonRpcOperations({

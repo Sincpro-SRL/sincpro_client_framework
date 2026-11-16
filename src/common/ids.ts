@@ -5,7 +5,8 @@
  * Context: sincpro_framework's `Edit` creates a new record under the id the CLIENT names («a
  * UUID v7 it mints»), and the draft and the stored record share it from the first draft save.
  * A form that waited for the server to name it could neither keep a draft of a new record nor
- * reach the edit route at all (`PUT /invoices/{id}/edit` needs the id in its path). The layout
+ * reach the edit route at all (`PUT /invoices/{id}/edit` needs the id in its path) — so a
+ * generated client's edit mints one here when its caller names none. The layout
  * is the backend's (RFC 9562): 48 bits of unix milliseconds, the version, a 12-bit counter
  * within the millisecond, the variant and 62 random bits — so ids minted here sort by when
  * they were minted, like the server's, and ordering by `id` is still ordering by creation.

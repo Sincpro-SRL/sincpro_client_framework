@@ -682,6 +682,17 @@ its trace (`traceparent`), its context (`sincpro-context`) and its signal — as
 as metadata where a platform's adapter puts them. `screensTransport` and `entity()` stay on the
 REST `Transport`: they are how a screen reads pages of an entity, with its model and its drafts.
 
+An edit — the backend's `Edit`, role `edit` — creates a record under the key its caller names.
+Its generated method mints one when the input names none (`newEntityId`, a UUID v7, as the
+server would), so `forge.editProject({ values, action: "save" })` creates a project over any
+wire, REST's `PUT /projects/{id}/edit` included. A screen that keeps a draft of a new record
+names its key once, so every save of the draft reaches the same record. A Command that answers
+nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`.
+
+Which of the ways a screen reaches the backend fits a call — an entity's screens, the generated
+client over the screens transport, or a Command and its Feature — is in
+[docs/WEB.md](docs/WEB.md#which-way-a-screen-reaches-the-backend).
+
 A wrapper over a screens transport — a cache, a guard — keeps its mark, so the screens are not made
 twice: `guardedTransport` does it, and a platform's own wrapper calls `markedAs(wrapper, inner)`.
 One span then answers each screen read, whether the wrapper answered it from its own memory or not.

@@ -43,20 +43,55 @@ keep the REST `Transport` underneath (`entity()`, `screensTransport`).
 ## Running a use case from a screen
 
 A screen executes a bounded context's Command; the pipeline traces it, reports it and answers
-through its handlers. What web-framework adds is the React side: the pending state, the answer,
-the error, and dropping the answer of a screen that closed.
+through its handlers. What web-framework adds is the React side (`useService`): the pending
+state, the answer, the error, and dropping the answer of a screen that closed.
 
 ```ts
-const { run, busy, answer, error } = useExecute(sales);
-await run(new CommandQuote(3)); // ResponseTotal
+const quote = useService((quantity: number) =>
+  salesBoundedContext.execute(new CommandQuote(quantity)),
+);
+await quote.run(3); // ResponseTotal; the failure, if any, in `quote.error`
 ```
 
 `processListeners.onStart`, `onCompletion` and `onFailure` are where an application-wide
-indicator (a toast, a progress bar) hears every run of every bounded context. A hook passes the
-screen's `AbortSignal` (`execute(command, { signal })`): a screen that closes cancels its run and
-its requests, which end `aborted`, never reported. `failureOf(error)` tells the screen what to do
-— fix the form, sign in again, retry, refresh — whatever the wire. A `CircuitBreaker` around a
+indicator (a toast, a progress bar) hears every run of every bounded context. A run takes an
+`AbortSignal` (`execute(command, { signal })`): cancelled, it ends `aborted`, never reported, and
+its requests with it — what a screen reads can be dropped with the screen; a write, once sent,
+is not, since the server may have done it. `failureOf(error)` tells the screen what to do — fix
+the form, sign in again, retry, refresh — whatever the wire. A `CircuitBreaker` around a
 transport (`guardedTransport`) stops a screen from hammering a backend that is down.
+
+## Which way a screen reaches the backend
+
+There are three ways, and each answers a different need. Choose by what the call does, not by
+habit — and start with the lightest that fits:
+
+| The call…                                                                                                                                     | The way                                                                                             | What it gives                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| lists, opens, edits or runs a declared command of an entity — a back office, a form                                                           | web-framework's entity screens: `useListing`, `useRecord`, `useCommand(entity, "name")`             | the model, drafts, dry runs and one `Idempotency-Key` per gesture, with nothing to write                                           |
+| calls one operation and has no logic of its own — a read for a panel, a write that forwards what was typed                                    | the generated client over the screens transport, run with `useService`                              | one line; each call a use case of `screens` (`screens/EntityRead`, `screens/EntitySend`), traced, reported, its route on the span  |
+| decides something, composes several calls, publishes or consumes an event, travels in a queue, or is reused by another screen or a subscriber | a Command and its `Feature` (or `ApplicationService`) in the bounded context, run with `useService` | a span of its own name, its error handlers and expected errors, its events, the queue, a test in Node with the in-memory transport |
+
+The screens transport is made once, beside `operations`, and handed to web-framework's provider
+too — a screens transport given again is answered as it is, so there is one `screens` context:
+
+```ts
+// domains/common/infrastructure/screens.ts
+export const screens = screensTransport(
+  restTransport({ base: "/v1", headers: () => session() }),
+);
+
+// domains/tienda/infrastructure/screens.ts
+export const tiendaScreens = clientOf(restOperations(screens));
+
+// a screen
+const vitrina = useService(() => tiendaScreens.vitrina());
+```
+
+A Feature keeps the client made over `operations` — its run already traces each call, and a
+screens transport under it would make every call a second use case. When a call gains logic, it
+moves to a Feature and only the screen's line changes:
+`useService(() => tiendaBoundedContext.execute(new CommandLeerVitrina()))`.
 
 ## Events in a browser
 
@@ -94,8 +129,8 @@ own, a cron registry and a `Scheduler` port come to the client framework.
 1. Depend on a published release; never a local link or a version written by hand.
 2. Plug the tracer, the reporter and the logger once, in `main`.
 3. Write each bounded context's Commands and services; inject the generated client.
-4. Add the React hook that runs a use case; keep `screensTransport` for what a screen reads
-   directly.
+4. Add the React hook that runs a use case (`useService`); keep `screensTransport` for what a
+   screen reads directly — [which way](#which-way-a-screen-reaches-the-backend) each call takes.
 5. Start with `syncQueue`; add a durable or cross-tab queue when a screen needs it.
 
 See the [shared vocabulary](UBIQUITOUS_LANGUAGE.md), [MOBILE.md](MOBILE.md) and the
