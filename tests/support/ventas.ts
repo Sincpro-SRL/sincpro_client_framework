@@ -150,6 +150,7 @@ export const facturas = entity<Factura>("ventas:factura", {
   save: "PUT /facturas/{id}",
   preview: "POST /facturas/preview",
   draft: "PUT /facturas/{id}/draft",
+  delete: "DELETE /facturas/{id}",
   commands: {
     confirmar: "POST /facturas/{id}/confirm",
     anular: "POST /facturas/{id}/cancel",

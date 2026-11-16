@@ -670,6 +670,7 @@ await forge.sendIssue({ issue_id: "acme-3", message: "hola" }); // ResponseSendI
 | `jsonRpcOperations({ endpoint })` | over JSON-RPC 2.0: one `POST`, the operation's method, its input as named params      |
 | `restTransport({ base })`         | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
 | `memoryTransport(tables)`         | the same REST contract in memory, copying by the wire's rules — for tests and demos   |
+| `assignableValues(route, values)` | an `Edit`'s values as the server reads them, for a memory `handle`                    |
 | `entity(key, routes)`             | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
 | `retryKeys()`                     | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
 | `guardedTransport(t, breaker)`    | every call of a transport through a circuit breaker                                   |
@@ -687,7 +688,7 @@ Its generated method mints one when the input names none (`newEntityId`, a UUID 
 server would), so `forge.editProject({ values, action: "save" })` creates a project over any
 wire, REST's `PUT /projects/{id}/edit` included. A screen that keeps a draft of a new record
 names its key once, so every save of the draft reaches the same record. A Command that answers
-nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`.
+nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`, over REST and in memory alike.
 
 A `DELETE` — the backend's `Delete`, role `delete`, an entity's `delete` route — is read from its
 URL, never from a body. `restTransport` sends its fields in the query string, as the server decodes

@@ -68,3 +68,32 @@ test("a Command goes as a POST with its JSON body, dry run included", async () =
     body: { dry_run: true },
   });
 });
+
+test("a DELETE is read from its URL: a dry run is only a rehearsal, a stale one is refused, a real one answers 204", async () => {
+  const { server, servidor, transport } = wire();
+  const remove = facturas.delete!;
+  const route = pathFor(remove, "F-2026-0002");
+  const preview = await transport.send<{ text: string }>(remove.method, route, {
+    dry_run: true,
+  });
+  assert.match(preview.text, /Would delete Factura F-2026-0002/);
+  assert.equal(server.calls.at(-1)?.url, "/v1/facturas/F-2026-0002?dry_run=true");
+  assert.equal(server.calls.at(-1)?.body, undefined);
+  // The version it was read at travels too: one that moved on is refused.
+  await assert.rejects(
+    transport.send(remove.method, route, { origin_version: 0 }),
+    (error: unknown) => error instanceof TransportError && error.status === 409,
+  );
+  const { record } = await transport.one<{ version: number }>(facturas.one("F-2026-0002"));
+  const rows = () => servidor.tables["/facturas"].rows.length;
+  const before = rows();
+  assert.equal(
+    await transport.send(remove.method, route, { origin_version: record.version }),
+    null,
+  );
+  assert.equal(
+    server.calls.at(-1)?.url,
+    `/v1/facturas/F-2026-0002?origin_version=${record.version}`,
+  );
+  assert.equal(rows(), before - 1);
+});

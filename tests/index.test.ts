@@ -49,6 +49,7 @@ const PUBLIC = [
   "WAITING_KINDS",
   "WITH_PARAM",
   "announced",
+  "assignableValues",
   "bindOperations",
   "bindTransport",
   "bindable",

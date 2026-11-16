@@ -39,7 +39,9 @@ export type MemoryOptions = {
   /**
    * Answer a Command — a write, an action, a preview — the way the service would. It may
    * change the tables' rows (they are read on every request) and throw a `TransportError` to
-   * refuse. Without it, every Command is a 404.
+   * refuse. Without it, every Command is a 404. What it returns is the answer; nothing — a
+   * Command that answers nothing — is `null`, as REST's 204. An `Edit`'s `values` are read as the
+   * server reads them with `assignableValues`.
    *
    * Its `body` is the Command's fields whatever the method — a `DELETE`'s too, which REST sends
    * in its query string (`restTransport`): this stands for the service, which reads a DTO, not a
@@ -176,8 +178,9 @@ export function memoryTransport(
             extensions: {},
             detail: `Nothing answers ${method} ${route}.`,
           });
-        // A deep copy: what the caller sent is not what the server keeps.
-        const answer = await options.handle(method, route, copyOf(body));
+        // A deep copy: what the caller sent is not what the server keeps. A Command that
+        // answers nothing is `null`, as REST's 204 is — never `undefined`.
+        const answer = (await options.handle(method, route, copyOf(body))) ?? null;
         if (key !== undefined) answered.set(key, copyOf(answer));
         return answer as T;
       });
@@ -193,4 +196,194 @@ export function memoryTransport(
           },
         }),
   });
+}
+
+/**
+ * What sincpro_framework writes on a record — `Entity`'s fields and its mixins' (`AuditedMixin`'s
+ * `created_by` / `updated_by`, `ArchivableMixin`'s `archived_at`): in a form's values only as the
+ * record's echo. A record without a mixin never holds its fields, so a form never sends them.
+ */
+const FRAMEWORK_FIELDS: readonly string[] = [
+  "id",
+  "version",
+  "created_at",
+  "updated_at",
+  "created_by",
+  "updated_by",
+  "archived_at",
+];
+
+/** Where a value is inside an `Edit`'s values: a field's name, a record's id or position. */
+type ValuePath = readonly (string | number)[];
+
+export type AssignableOptions = {
+  /** The key of the record the edit names — its `Edit`'s `id`: an identity in the values other
+   *  than it is refused. */
+  id?: string;
+  /** The record's definition: a name it does not declare is refused, and its `identity` is the
+   *  field checked against `id`. */
+  meta?: Meta;
+  /** What the framework writes on the record — left out at every level, a nested record keeping
+   *  its `id`. By default `Entity`'s (`id`, `version`, `created_at`, `updated_at`) and its
+   *  mixins' (`created_by`, `updated_by`, `archived_at`); a project's own framework base names
+   *  its own. */
+  framework?: readonly string[];
+};
+
+/** A refusal of a value, as the server's `InvalidValue` answers it: a 422 pointing at it. */
+function invalidValue(route: string, path: ValuePath, detail: string): TransportError {
+  const pointer = ["values", ...path]
+    .map((one) => String(one).replaceAll("~", "~0").replaceAll("/", "~1"))
+    .join("/");
+  return new TransportError(route, 422, {
+    kind: "invalid",
+    reason: "INVALID_VALUE",
+    status: 422,
+    detail,
+    next_step: "fix_request",
+    retryable: false,
+    errors: [{ pointer: `#/${pointer}`, detail }],
+    extensions: {},
+  });
+}
+
+function isFields(value: unknown): value is AnyRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Each record of a list as a form sends it — its echo left out, its `id` kept —, named by its
+ *  `id` where a refusal inside it points, by its position when it has none. */
+function recordsOf(
+  route: string,
+  records: readonly unknown[],
+  path: ValuePath,
+  framework: ReadonlySet<string>,
+): unknown[] {
+  return records.map((one, index) => {
+    if (!isFields(one)) return one;
+    const named = one["id"];
+    const at = named === undefined || named === null || named === "" ? index : String(named);
+    return formValues(route, one, [...path, at], framework, true);
+  });
+}
+
+/**
+ * A list of records as a form sends it — sincpro_framework's `_sent_whole`: the list, or the
+ * collection a reading answered (`{items, count, cursor}`) sent back whole, as its records. A page
+ * of it — a cursor, or a count that is only a floor — is refused: written back, it would remove
+ * every record it did not bring. An exact count above what it holds is a whole collection a form
+ * edited (a record removed), not a page — the server's rule, not `isPartial`'s.
+ */
+function heldValue(
+  route: string,
+  value: unknown,
+  path: ValuePath,
+  framework: ReadonlySet<string>,
+): unknown {
+  if (Array.isArray(value)) return recordsOf(route, value, path, framework);
+  if (!isFields(value) || !("items" in value)) return value;
+  const name = String(path[path.length - 1]);
+  const items = value["items"];
+  if (!Array.isArray(items))
+    throw invalidValue(route, path, `${name} holds records: send them as a list`);
+  const count = isFields(value["count"]) ? value["count"] : {};
+  const floor = count["exact"] === false;
+  if ((value["cursor"] !== undefined && value["cursor"] !== null) || floor) {
+    const total = typeof count["value"] === "number" ? count["value"] : items.length;
+    throw invalidValue(
+      route,
+      path,
+      `${name} was sent as a page — ${items.length} of ${floor ? "at least " : ""}${total} — ` +
+        "and a page written back would remove every record it did not bring: send all of them",
+    );
+  }
+  return recordsOf(route, items, path, framework);
+}
+
+/** A record's values without what the framework writes — a nested one keeping its `id`. */
+function formValues(
+  route: string,
+  values: AnyRecord,
+  path: ValuePath,
+  framework: ReadonlySet<string>,
+  nested: boolean,
+): AnyRecord {
+  const read: AnyRecord = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (framework.has(name) && !(nested && name === "id")) continue;
+    read[name] = heldValue(route, value, [...path, name], framework);
+  }
+  return read;
+}
+
+/**
+ * The values of an `Edit` its record may be assigned, read as sincpro_framework 3.37 reads them
+ * (`assignable`, `form_values`, `apply_values`) — for a `memoryTransport`'s `handle` that stands
+ * for a service's `Edit`:
+ *
+ *     handle(method, route, body) {
+ *       const sent = body as { id: string; values?: AnyRecord; action?: string };
+ *       const values = assignableValues(route, sent.values, { id: sent.id, meta: invoiceMeta });
+ *       …
+ *     }
+ *
+ * 1. The values are an object of fields (none is `{}`); anything else is refused.
+ * 2. An identity other than the record's (`id`) is refused: it would put one record's values on
+ *    another.
+ * 3. What the framework writes is the record's echo — a form reads a record whole and sends it
+ *    back whole —: left out, never assigned and never refused. In a record a list holds (a line),
+ *    all of it but its `id`, the way a form names the line it edits.
+ * 4. A name the definition does not declare is refused.
+ * 5. A list of records goes whole: the collection a reading answered is read as its records, each
+ *    as in 3; a page of it is refused (`heldValue`). A record held as one object (a many2one
+ *    sent expanded) is passed as it came: which fields of it are the record's is the service's.
+ * Final: the values to assign. Each refusal is a `TransportError` 422 — `invalid`,
+ *    `INVALID_VALUE` — pointing at the value (`#/values/lines/l1/parts`): a nested record by its
+ *    `id`, by its position when it has none, as the server's `InvalidValue` points.
+ *
+ * Context: opt-in, and generic. A fake server that took whatever came hid that a form sent the
+ * record whole — the framework's echo, a relation read as a page — while the real `Edit` refused
+ * it: stories passed, and a stored record could not be edited against the real backend. A `handle`
+ * that does not call it reads `values` as it likes.
+ */
+export function assignableValues(
+  route: string,
+  values: unknown,
+  options: AssignableOptions = {},
+): AnyRecord {
+  if (values === undefined || values === null) return {};
+  if (!isFields(values))
+    throw invalidValue(route, [], "values is the record's fields, as an object");
+  const { meta, id } = options;
+  const aggregate = meta?.aggregate ?? "The record";
+  const identity = meta?.identity ?? "id";
+  const echoed = values[identity];
+  // Only where the record is found by its identity: a key of its own is another field.
+  const byIdentity = meta === undefined || (meta.get_id || meta.identity) === identity;
+  if (
+    id !== undefined &&
+    byIdentity &&
+    echoed !== undefined &&
+    echoed !== null &&
+    String(echoed) !== id
+  )
+    throw invalidValue(
+      route,
+      [identity],
+      `${aggregate} ${id} was sent the values of ${aggregate} ${String(echoed)}`,
+    );
+  const framework = new Set(options.framework ?? FRAMEWORK_FIELDS);
+  if (meta !== undefined) {
+    const unknown = Object.keys(values).filter(
+      (name) => !framework.has(name) && !(name in meta.fields),
+    );
+    const [first] = unknown;
+    if (first !== undefined)
+      throw invalidValue(
+        route,
+        [first],
+        `${aggregate} has no field ${unknown.join(", ")} to assign`,
+      );
+  }
+  return formValues(route, values, [], framework, false);
 }

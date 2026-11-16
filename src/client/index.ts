@@ -14,6 +14,8 @@ export {
   type JsonRpcOptions,
 } from "@sincpro/client-framework/client/adapters/json-rpc";
 export {
+  type AssignableOptions,
+  assignableValues,
   type MemoryOptions,
   type MemoryTable,
   memoryTransport,

@@ -330,7 +330,8 @@ salesBoundedContext.extend(auditing); // a module's pieces in one place
 
 Use the ports in memory: `configureProcess({ tracer: memoryTracer(), reporter: memoryReporter(), logger: { engine: memoryLogger() } })`
 in `beforeEach`; `restOperations(memoryTransport(tables))` or a fake `OperationTransport` for the
-backend; `memoryEventStore()` with `await queue.drain()` for events.
+backend — a `handle` that stands for an `Edit` reads its values with `assignableValues`, as the
+server does —; `memoryEventStore()` with `await queue.drain()` for events.
 
 ## Mistakes to avoid
 
