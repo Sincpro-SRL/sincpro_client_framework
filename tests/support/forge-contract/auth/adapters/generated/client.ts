@@ -2,7 +2,7 @@
 // Version 008a5966d192c1c3b1b6606ba3fb913c765f61ef732a74d49ba267333c71dbd2.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
-import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
+import { bindable, newEntityId, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
 import type * as dto from "../../domain/generated/index";
 
@@ -225,24 +225,30 @@ export function clientOf(transport: OperationTransport) {
     /**
      * Change a group's name: a draft, a save or a discard.
      *
+     * A new record's `id` is minted here when the input names none (`newEntityId`).
+     *
      * Published over REST.
      */
     editGroup: (input?: dto.CommandEditGroup, options?: OperationOptions) =>
-      transport.call<dto.ResponseEditGroup>(operations.CommandEditGroup, input ?? {}, options),
+      transport.call<dto.ResponseEditGroup>(operations.CommandEditGroup, { ...input, id: input?.id || newEntityId() }, options),
     /**
      * Change a tenant's name or whether it is active: a draft, a save or a discard.
+     *
+     * A new record's `id` is minted here when the input names none (`newEntityId`).
      *
      * Published over REST.
      */
     editTenant: (input?: dto.CommandEditTenant, options?: OperationOptions) =>
-      transport.call<dto.ResponseEditTenant>(operations.CommandEditTenant, input ?? {}, options),
+      transport.call<dto.ResponseEditTenant>(operations.CommandEditTenant, { ...input, id: input?.id || newEntityId() }, options),
     /**
      * Change a user's name: a draft, a save or a discard.
+     *
+     * A new record's `id` is minted here when the input names none (`newEntityId`).
      *
      * Published over REST.
      */
     editUser: (input?: dto.CommandEditUser, options?: OperationOptions) =>
-      transport.call<dto.ResponseEditUser>(operations.CommandEditUser, input ?? {}, options),
+      transport.call<dto.ResponseEditUser>(operations.CommandEditUser, { ...input, id: input?.id || newEntityId() }, options),
     /**
      * Who calls and what they may do: the admin, or a user and the tenant they act in.
      *

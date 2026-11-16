@@ -7,6 +7,7 @@ import {
   markedAs,
   memoryTransport,
   processContext,
+  restOperations,
   restTransport,
   screensTransport,
   type Transport,
@@ -18,6 +19,8 @@ import {
   memoryTracer,
 } from "@sincpro/client-framework/testing";
 import { beforeEach, test } from "vitest";
+
+import { clientOf } from "../support/forge-contract/project/adapters/generated/client";
 
 type Sent = { url: string; headers: Record<string, string> };
 
@@ -56,6 +59,30 @@ test("what a screen reads and writes is a use case of `screens`: traced, its rou
   assert.equal(span?.attributes["http.method"], "POST");
   assert.equal(sent[0]?.headers["traceparent"], `00-${span?.traceId}-${span?.spanId}-01`);
   assert.equal(sent[0]?.headers["sincpro-context"], '{"company_id":2}');
+});
+
+test("a generated client over a screens transport: each call a use case of `screens`, with no Command or Feature of its own", async () => {
+  const sent: Sent[] = [];
+  const tracer = memoryTracer();
+  configureProcess({ tracer });
+  const client = clientOf(
+    restOperations(
+      screensTransport(restTransport({ document: null, fetch: recording(sent) })),
+    ),
+  );
+  await client.getIssue({ id: "acme-3" });
+  await client.sendIssue({ issue_id: "acme-3", message: "hola" });
+  assert.deepEqual(
+    tracer.spans.map((span) => [span.name, span.attributes["http.route"]]),
+    [
+      ["screens/EntityRead", "/issues/acme-3"],
+      ["screens/EntitySend", "/issues/acme-3/messages"],
+    ],
+  );
+  assert.equal(
+    sent[1]?.headers["traceparent"],
+    `00-${tracer.spans[1]?.traceId}-${tracer.spans[1]?.spanId}-01`,
+  );
 });
 
 test("a screen's read that breaks is reported once, as the use case it was; a refusal is the screen's to show", async () => {

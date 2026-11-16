@@ -58,6 +58,34 @@ function isStreamed(operation: Operation): boolean {
   );
 }
 
+/**
+ * The field of an edit that names its record, minted by the client when the caller names none.
+ *
+ * Context: an operation of role `edit` is sincpro_framework's `Edit` (`role_of`: what descends
+ * from it), whose `id` — the record's key — the server mints with `new_entity_id()` when none is
+ * sent. Over REST its route carries the key in its path (`PUT /invoices/{id}/edit`), so creating
+ * a record through the generated method failed before it left («needs "id"»). The method mints it
+ * as the server would (`newEntityId`, a UUID v7), the same on every wire; a key the caller names
+ * — a stored record's, or the one a form minted for its draft — goes as it is.
+ */
+const EDIT_KEY = "id";
+
+/** Whether `operation` is an edit whose key the caller may leave out — the method mints it. */
+function mintsKey(operation: Operation): boolean {
+  return (
+    operation.role === "edit" &&
+    operation.input.properties?.[EDIT_KEY] !== undefined &&
+    !(operation.input.required ?? []).includes(EDIT_KEY)
+  );
+}
+
+/** The input a method hands the transport: as the caller gave it, an edit's key minted if absent. */
+function inputOf(operation: Operation, optional: boolean): string {
+  if (mintsKey(operation))
+    return `{ ...input, ${EDIT_KEY}: input?.${EDIT_KEY} || newEntityId() }`;
+  return optional ? "input ?? {}" : "input";
+}
+
 /** The data of one operation: what it is, and how each wire reaches it. */
 function dataOf(
   metamodel: Metamodel,
@@ -93,6 +121,7 @@ function dataOf(
  *    whether it answers bytes, and the binding of each wire that publishes it.
  * 2. A method per operation, named by `methodOf`: its input — optional when nothing in it is
  *    required — and the call's options (headers, signal, idempotency key), answering its answer.
+ *    An edit's method mints the record's key when the input names none (`mintsKey`).
  * 3. When the contract carries them, every domain event as data, by its type's name: its wire
  *    name, and whether the bounded context records it or handles it.
  * Final: `clientOf(transport)` over an `OperationTransport`, bound to each run that uses it; two
@@ -102,16 +131,22 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
   const claim = claimed();
   const data: string[] = [];
   const methods: string[] = [];
+  let minting = false;
   for (const [identity, operation] of sorted(metamodel.operations)) {
     const local = localOf(metamodel, identity);
     data.push(dataOf(metamodel, identity, operation, restOf(metamodel, identity, options)));
     const method = methodOf(local);
     claim(method, `operation ${identity}`);
     const wires = wiresOf(metamodel, identity);
+    const mints = mintsKey(operation);
+    minting ||= mints;
     const doc = docOf(
       [
         operation.description,
         deprecationOf(metamodel, operation),
+        mints
+          ? `A new record's \`${EDIT_KEY}\` is minted here when the input names none (\`newEntityId\`).`
+          : undefined,
         wires.length === 0 ? undefined : `Published over ${wires.join(", ")}.`,
       ],
       "    ",
@@ -120,7 +155,7 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
     methods.push(
       [
         `${doc}    ${method}: (input${optional ? "?" : ""}: dto.${local}, options?: OperationOptions) =>`,
-        `      transport.call<dto.${answerOf(metamodel, identity)}>(operations.${local}, input${optional ? " ?? {}" : ""}, options),`,
+        `      transport.call<dto.${answerOf(metamodel, identity)}>(operations.${local}, ${inputOf(operation, optional)}, options),`,
       ].join("\n"),
     );
   }
@@ -131,7 +166,7 @@ export function clientFileOf(metamodel: Metamodel, options: GenerateOptions = {}
   );
 
   const imports = [
-    `import { bindable, type OperationOptions, type OperationTransport } from "${FRAMEWORK}";`,
+    `import { bindable,${minting ? " newEntityId," : ""} type OperationOptions, type OperationTransport } from "${FRAMEWORK}";`,
     "",
     `import type * as dto from "${DOMAIN_MODULE}";`,
   ].join("\n");

@@ -2,7 +2,7 @@
 // Version 5a9473783e7d83ade46ed4972746d65db20404a63a305d2f5308baa9fc22cf69.
 // Do not edit: regenerate it (`sincpro-client generate`).
 
-import { bindable, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
+import { bindable, newEntityId, type OperationOptions, type OperationTransport } from "@sincpro/client-framework";
 
 import type * as dto from "../../domain/generated/index";
 
@@ -209,10 +209,12 @@ export function clientOf(transport: OperationTransport) {
     /**
      * Change a project's definition: a draft, a save or a discard.
      *
+     * A new record's `id` is minted here when the input names none (`newEntityId`).
+     *
      * Published over REST.
      */
     editProject: (input?: dto.CommandEditProject, options?: OperationOptions) =>
-      transport.call<dto.ResponseEditProject>(operations.CommandEditProject, input ?? {}, options),
+      transport.call<dto.ResponseEditProject>(operations.CommandEditProject, { ...input, id: input?.id || newEntityId() }, options),
     /**
      * One issue, by its id.
      *
