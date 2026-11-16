@@ -6,7 +6,7 @@ how a web application adopts it — a plan, not a claim that it is adopted.
 
 | Responsibility        | Here                                                                                         | Web                                                                                  |
 | --------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Application execution | `BoundedContext`, Commands, events, Features, AppServices                                    | A hook that runs a use case from a component, with its state                         |
+| Application execution | `BoundedContext`, Commands, events, Features, AppServices                                    | Hooks that run a use case from a component — a reading, an action — with its state   |
 | Pipeline              | interceptors, `onStart` / `onCompletion` / `onFailure`                                       | What a screen shows of a run: busy, done, failed                                     |
 | Observability         | Tracer, ErrorReporter, Logger ports; console by default                                      | `browserTracer`, `sentryReporter` (web-framework), plugged in `main`                 |
 | Context               | levels, `ContextStore`, `memoryContexts()`                                                   | `useContextValues`; a store over `sessionStorage` if it must survive a reload        |
@@ -43,15 +43,33 @@ keep the REST `Transport` underneath (`entity()`, `screensTransport`).
 ## Running a use case from a screen
 
 A screen executes a bounded context's Command; the pipeline traces it, reports it and answers
-through its handlers. What web-framework adds is the React side (`useService`): the pending
-state, the answer, the error, and dropping the answer of a screen that closed.
+through its handlers. What web-framework adds is the React side, one hook for each kind of call
+(web-framework, after 2.5.0):
+
+- **An action** — what runs when a person presses — is `useService`: it never runs on mount,
+  and gives the pending state, the answer, the error, and drops the answer of a screen that
+  closed.
+- **A read** — what a screen shows — is `useServiceReading(useCase, args, { follows })`: it runs
+  on mount, again whenever its arguments change (keyed by them, so the answer of other
+  arguments is never shown), when the process's context changes, and when a write touches an
+  entity it follows.
 
 ```ts
 const quote = useService((quantity: number) =>
   salesBoundedContext.execute(new CommandQuote(quantity)),
 );
 await quote.run(3); // ResponseTotal; the failure, if any, in `quote.error`
+
+const balance = useServiceReading(
+  (memberId: string) => membersBoundedContext.execute(new QueryBalance(memberId)),
+  [memberId],
+  { follows: [payments] },
+);
+balance.status === "ready" ? balance.answer : null; // another member starts as "loading"
 ```
+
+A read run with `useService` ran only when called: a screen re-ran it by hand when a route param
+changed, easy to miss, and kept showing the answer of the tab it had left.
 
 `processListeners.onStart`, `onCompletion` and `onFailure` are where an application-wide
 indicator (a toast, a progress bar) hears every run of every bounded context. A run takes an
@@ -66,11 +84,11 @@ transport (`guardedTransport`) stops a screen from hammering a backend that is d
 There are three ways, and each answers a different need. Choose by what the call does, not by
 habit — and start with the lightest that fits:
 
-| The call…                                                                                                                                     | The way                                                                                             | What it gives                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| lists, opens, edits or runs a declared command of an entity — a back office, a form                                                           | web-framework's entity screens: `useListing`, `useRecord`, `useCommand(entity, "name")`             | the model, drafts, dry runs and one `Idempotency-Key` per gesture, with nothing to write                                           |
-| calls one operation and has no logic of its own — a read for a panel, a write that forwards what was typed                                    | the generated client over the screens transport, run with `useService`                              | one line; each call a use case of `screens` (`screens/EntityRead`, `screens/EntitySend`), traced, reported, its route on the span  |
-| decides something, composes several calls, publishes or consumes an event, travels in a queue, or is reused by another screen or a subscriber | a Command and its `Feature` (or `ApplicationService`) in the bounded context, run with `useService` | a span of its own name, its error handlers and expected errors, its events, the queue, a test in Node with the in-memory transport |
+| The call…                                                                                                                                     | The way                                                                                                                              | What it gives                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| lists, opens, edits or runs a declared command of an entity — a back office, a form                                                           | web-framework's entity screens: `useListing`, `useRecord`, `useCommand(entity, "name")`                                              | the model, drafts, dry runs and one `Idempotency-Key` per gesture, with nothing to write                                           |
+| calls one operation and has no logic of its own — a read for a panel, a write that forwards what was typed                                    | the generated client over the screens transport: a read with `useServiceReading`, a write with `useService`                          | one line; each call a use case of `screens` (`screens/EntityRead`, `screens/EntitySend`), traced, reported, its route on the span  |
+| decides something, composes several calls, publishes or consumes an event, travels in a queue, or is reused by another screen or a subscriber | a Command and its `Feature` (or `ApplicationService`) in the bounded context, read with `useServiceReading` or run with `useService` | a span of its own name, its error handlers and expected errors, its events, the queue, a test in Node with the in-memory transport |
 
 The screens transport is made once, beside `operations`, and handed to web-framework's provider
 too — a screens transport given again is answered as it is, so there is one `screens` context:
@@ -84,14 +102,35 @@ export const screens = screensTransport(
 // domains/tienda/infrastructure/screens.ts
 export const tiendaScreens = clientOf(restOperations(screens));
 
-// a screen
-const vitrina = useService(() => tiendaScreens.vitrina());
+// a screen: what it shows is a reading; what a person presses, an action
+const vitrina = useServiceReading(() => tiendaScreens.vitrina(), []);
+const reservar = useService((sku: string) => tiendaScreens.reservar({ sku }));
 ```
 
 A Feature keeps the client made over `operations` — its run already traces each call, and a
 screens transport under it would make every call a second use case. When a call gains logic, it
 moves to a Feature and only the screen's line changes:
-`useService(() => tiendaBoundedContext.execute(new CommandLeerVitrina()))`.
+`useServiceReading(() => tiendaBoundedContext.execute(new QueryLeerVitrina()), [])`.
+
+## What a ref points at
+
+A payment, an event or a notification names its record by an entity ref
+(`billing.Invoice:0192…`, `EntityRef`). A screen that shows what it points at asks the backend's
+`Resolve` — a Query like any other, generated as a method of whichever bounded context publishes
+it (`GET /platform/refs?refs=[…]`) —, and each record comes back through its own `Get`, under that
+`Get`'s guards:
+
+```ts
+const subjects = useServiceReading(
+  (refs: EntityRef[]) => platformScreens.resolve({ refs }),
+  [payments.map((one) => one.subject)],
+);
+// subjects.answer?.records: [{ ref, display: "F-0042", record }], in the order asked
+```
+
+`display` is what a link shows; `record` is `null` when the record is gone. Where a ref opens is
+the application's: `parseEntityRef(ref)` gives its bounded context, its entity and its key. One
+to 500 refs per request: with none, ask nothing.
 
 ## Events in a browser
 
@@ -129,8 +168,10 @@ own, a cron registry and a `Scheduler` port come to the client framework.
 1. Depend on a published release; never a local link or a version written by hand.
 2. Plug the tracer, the reporter and the logger once, in `main`.
 3. Write each bounded context's Commands and services; inject the generated client.
-4. Add the React hook that runs a use case (`useService`); keep `screensTransport` for what a
-   screen reads directly — [which way](#which-way-a-screen-reaches-the-backend) each call takes.
+4. Add the React hooks that run a use case — `useServiceReading` for what a screen shows,
+   `useService` for what a person presses (web-framework, after 2.5.0); keep `screensTransport`
+   for what a screen reads directly — [which way](#which-way-a-screen-reaches-the-backend) each
+   call takes.
 5. Start with `syncQueue`; add a durable or cross-tab queue when a screen needs it.
 
 See the [shared vocabulary](UBIQUITOUS_LANGUAGE.md), [MOBILE.md](MOBILE.md) and the
