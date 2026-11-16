@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 
 import {
   bodyFor,
+  type Entity,
   entity,
   listRoute,
   pathFor,
+  PICK_PARAM,
+  type ResourceRef,
+  SCOPE_NAME_PARAM,
   SCOPE_PARAM,
+  scopeNameOf,
   scopeOfRef,
 } from "@sincpro/client-framework";
 import type { Expression } from "@sincpro/criteria";
@@ -116,4 +121,73 @@ test("an entity keeps its export route, and a record route with a question reads
   assert.equal(groups.export, "/groups/export");
   const read = await transport.one<{ id: string }>(groups.one("g1"));
   assert.equal(read.record.id, "g1");
+});
+
+test("an entity knows its trash: archive and restore by the record's key, purge over all of it", () => {
+  const banners = entity("site:banner", {
+    list: "/banners",
+    delete: "DELETE /banners/{id}",
+    archive: "POST /banners/{id}/archive",
+    restore: "POST /banners/{id}/restore",
+    purge: "POST /banners/purge",
+  });
+  assert.deepEqual(banners.archive, { method: "POST", path: "/banners/{id}/archive" });
+  assert.deepEqual(banners.restore, { method: "POST", path: "/banners/{id}/restore" });
+  assert.deepEqual(banners.purge, { method: "POST", path: "/banners/purge" });
+  assert.equal(pathFor(banners.archive!, "b 1"), "/banners/b%201/archive");
+  assert.equal(pathFor(banners.restore!, "b1"), "/banners/b1/restore");
+  // A purge names no record: its path is the collection's.
+  assert.equal(pathFor(banners.purge!), "/banners/purge");
+  // None of them is a Command, and an entity without a trash has none of them.
+  assert.deepEqual(banners.commands, {});
+  const plain = entity("site:page", { list: "/pages" });
+  assert.equal(plain.archive, undefined);
+  assert.equal(plain.restore, undefined);
+  assert.equal(plain.purge, undefined);
+  // A route without its method is refused when the entity is declared.
+  assert.throws(
+    () => entity("site:banner", { list: "/banners", purge: "/banners/purge" }),
+    /is not "METHOD \/path"/,
+  );
+});
+
+type Payment = { id: string; member_id: string; amount: string };
+const payments = entity<Payment>("members:payment", { list: "/payments" });
+
+test("a list opened under a cut carries the cut and whose it is, and reads both back", () => {
+  const cut = { field: "member_id", operator: "=", value: "m-1" } as const;
+  const ref: ResourceRef = payments.listRef(cut, "María");
+  // It is the list, never a chooser: no row answers anyone.
+  assert.equal(ref.params?.[PICK_PARAM], undefined);
+  assert.equal(ref.id, undefined);
+  assert.deepEqual(ref, {
+    domain: "members",
+    kind: "payment",
+    params: { [SCOPE_PARAM]: JSON.stringify(cut), [SCOPE_NAME_PARAM]: "María" },
+  });
+  assert.equal(SCOPE_NAME_PARAM, "of");
+  assert.deepEqual(scopeOfRef(ref), cut);
+  assert.equal(scopeNameOf(ref), "María");
+});
+
+test("a cut without a name says nothing of whose it is", () => {
+  const cut = { field: "member_id", operator: "=", value: "m-1" } as const;
+  for (const ref of [
+    payments.listRef(cut),
+    payments.listRef(cut, ""),
+    payments.listRef(cut, " "),
+  ]) {
+    assert.equal(SCOPE_NAME_PARAM in (ref.params ?? {}), false);
+    assert.equal(scopeNameOf(ref), undefined);
+  }
+  assert.equal(scopeNameOf({ params: { [SCOPE_NAME_PARAM]: "" } }), undefined);
+  assert.equal(scopeNameOf({}), undefined);
+});
+
+test("a typed entity's cut names its fields, and the entity is still an Entity", () => {
+  // @ts-expect-error — a cut over a field a payment does not have
+  const wrong = payments.listRef({ field: "nope", operator: "=", value: 1 });
+  const loose: Entity = payments;
+  assert.equal(wrong.kind, "payment");
+  assert.equal(loose.listRef({ field: "anything", operator: "=", value: 1 }).kind, "payment");
 });

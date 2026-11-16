@@ -38,7 +38,25 @@ export type FieldOptions = {
   readonlyWhen?: Expression;
   requiredWhen?: Expression;
   visibleWhen?: Expression;
+  /** How a form shows the field, when not the way its kind is shown: any name a client
+   *  registers a component under (`"textarea"`) — what sincpro_framework's `presentation`
+   *  publishes as the field's `widget`. A name, never a component: which component answers it
+   *  is the platform's. */
+  widget?: string;
+  /** `false`: a grouping never splits by it — an identity, a trace id, each value its own
+   *  group —, as sincpro_framework publishes a field declared `groupable: False` (3.37). It only
+   *  turns grouping off: a list of tags is never grouped. */
+  groupable?: boolean;
 };
+
+/** What a scalar and a relation both say of themselves: their words and their widget. */
+function common(options: FieldOptions): Partial<FieldMeta> {
+  return {
+    ...(options.label === undefined ? {} : { label: words(options.label) }),
+    ...(options.help === undefined ? {} : { help: words(options.help) }),
+    ...(options.widget === undefined ? {} : { widget: options.widget }),
+  };
+}
 
 function hints(options: FieldOptions): Partial<FieldMeta> {
   return {
@@ -74,10 +92,9 @@ function scalar(type: FieldType, options: FieldOptions = {}): FieldMeta {
     kind: "scalar",
     nullable,
     sortable: !listed,
-    groupable: !listed,
+    groupable: !listed && options.groupable !== false,
     ops,
-    ...(options.label === undefined ? {} : { label: words(options.label) }),
-    ...(options.help === undefined ? {} : { help: words(options.help) }),
+    ...common(options),
     ...(options.required === undefined ? {} : { required: options.required }),
     ...(options.readonly === undefined ? {} : { readonly: options.readonly }),
     ...(options.default === undefined ? {} : { default: options.default }),
@@ -101,8 +118,7 @@ function relational(
     relation,
     identified_by: keys.identifiedBy,
     ...(keys.definition === undefined ? {} : { definition: keys.definition }),
-    ...(options.label === undefined ? {} : { label: words(options.label) }),
-    ...(options.help === undefined ? {} : { help: words(options.help) }),
+    ...common(options),
     ...(options.readonly === undefined ? {} : { readonly: options.readonly }),
   };
 }
@@ -166,6 +182,7 @@ export const field = {
     definition,
     ...(options.many ? { many: true } : {}),
     ...(options.label === undefined ? {} : { label: words(options.label) }),
+    ...(options.widget === undefined ? {} : { widget: options.widget }),
   }),
 };
 

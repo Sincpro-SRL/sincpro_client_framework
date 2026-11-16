@@ -670,6 +670,7 @@ await forge.sendIssue({ issue_id: "acme-3", message: "hola" }); // ResponseSendI
 | `jsonRpcOperations({ endpoint })` | over JSON-RPC 2.0: one `POST`, the operation's method, its input as named params      |
 | `restTransport({ base })`         | REST over `fetch`: `Idempotency-Key`, the server's `Problem`, model versions, Parquet |
 | `memoryTransport(tables)`         | the same REST contract in memory, copying by the wire's rules — for tests and demos   |
+| `assignableValues(route, values)` | an `Edit`'s values as the server reads them, for a memory `handle`                    |
 | `entity(key, routes)`             | a model's routes and Commands, typed — what a generated `entities.ts` declares        |
 | `retryKeys()`                     | one `Idempotency-Key` per gesture, kept while a retry may repeat it                   |
 | `guardedTransport(t, breaker)`    | every call of a transport through a circuit breaker                                   |
@@ -687,13 +688,20 @@ Its generated method mints one when the input names none (`newEntityId`, a UUID 
 server would), so `forge.editProject({ values, action: "save" })` creates a project over any
 wire, REST's `PUT /projects/{id}/edit` included. A screen that keeps a draft of a new record
 names its key once, so every save of the draft reaches the same record. A Command that answers
-nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`.
+nothing — a `DELETE`'s 204 — resolves `null`, never `undefined`, over REST and in memory alike.
 
 A `DELETE` — the backend's `Delete`, role `delete`, an entity's `delete` route — is read from its
 URL, never from a body. `restTransport` sends its fields in the query string, as the server decodes
 them (plain values as text, anything else as JSON): `DELETE /projects/acme?dry_run=true` answers
 the `Preview` of what would go, and `origin_version` refuses a delete of a record that moved on.
 Sent in a body they are dropped, and a rehearsal would run the real delete.
+
+A trash — the backend's `Archive`, `Restore` and `Purge`, roles `archive`, `restore` and `purge` —
+is three more routes of an entity: `archive` and `restore` by the record's key, `purge` over the
+whole collection (`older_than`, a duration as the contract writes it: `"P30D"`). Each answers
+nothing — `null` — or, with `dry_run: true`, the `Preview` of what it would do; a purge's says how
+many would go (`data: { count }`). The trash itself is the entity's list asked for what is
+archived (`archived_at` not null), which every other reading leaves out.
 
 Which of the ways a screen reaches the backend fits a call — an entity's screens, the generated
 client over the screens transport, or a Command and its Feature — is in
@@ -771,7 +779,7 @@ each file in the layer it belongs to, under the bounded context's folder (`--out
 | `domain/generated/events.ts`     | the domain events and `DomainEvent`, their union — when the contract carries them             |
 | `domain/generated/index.ts`      | the three, re-exported: `import type * as remote from "../domain/generated"`                  |
 | `adapters/generated/client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
-| `adapters/generated/entities.ts` | each entity's list, record, edit, delete, export, Commands and history, for screens           |
+| `adapters/generated/entities.ts` | each entity's list, record, edit, delete, trash, export, Commands and history, for screens    |
 
 The backend keeps them apart — the domain's words, the application layer's DTOs, the facts, the
 adapters to another system —, and so does the application: each beside its own code of that layer.
@@ -851,6 +859,7 @@ needs them.
 | Day        | `"2026-10-02"`, never an instant       | `isDay`, `dayOf`                               |
 | Instant    | ISO text                               | `wallTimeOf`, `instantOf`, `timeZoneOf`        |
 | ID         | UUID v7 as 32 hex                      | `newEntityId`, `isEntityId`, `momentOf`        |
+| Entity ref | `"billing.Invoice:0192…"`              | `EntityRef`, `parseEntityRef`, `entityRefOf`   |
 | Bytes      | `{ "$bytes": "<base64>" }`             | `valuesOf`, `readValues`                       |
 | Collection | items, count and cursor                | `collectionOf`, `isPartial`, `relatedCriteria` |
 | Export     | Parquet, Arrow or JSON Lines           | `downloadRoute`, `exportRoute`                 |
@@ -859,6 +868,15 @@ needs them.
 never a `Date`. `valuesOf`/`pack` write; `readValues` reads tagged values back; `rebuilt`/`unpack`
 use a reader given explicitly. Cycles, functions and non-finite numbers are refused. How a value
 is shown, typed or stored is the platform's.
+
+An entity ref — the backend's `EntityRef` — names a record of any bounded context by one text,
+`bounded_context.Entity:key`: what a payment's metadata, a webhook or a notification carries to
+say which record it is about. It is a text on the wire, so it is a text here, typed by its form:
+the generator types a field published as `format: "entity-ref"` as `EntityRef`, `parseEntityRef`
+reads one (refusing what the backend refuses), `isEntityRef` checks a string read from outside,
+and `entityRefOf({ boundedContext, entity, key })` writes one. Resolving it is the backend's
+`Resolve` — `GET …/refs?refs=[…]` — a generated operation of whichever bounded context publishes
+it, never a route of this package.
 
 ## An application's layout
 

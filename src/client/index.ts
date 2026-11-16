@@ -14,6 +14,8 @@ export {
   type JsonRpcOptions,
 } from "@sincpro/client-framework/client/adapters/json-rpc";
 export {
+  type AssignableOptions,
+  assignableValues,
   type MemoryOptions,
   type MemoryTable,
   memoryTransport,
@@ -44,7 +46,6 @@ export {
   type CommandRoute,
   type Entity,
   entity,
-  type EntityRef,
   type EntityRoutes,
   type ExportFormat,
   exportRoute,
@@ -53,7 +54,10 @@ export {
   pathFor,
   PICK_PARAM,
   QUERY_PARAM,
+  type ResourceRef,
+  SCOPE_NAME_PARAM,
   SCOPE_PARAM,
+  scopeNameOf,
   scopeOfRef,
   startingValuesOf,
   type SummaryFields,

@@ -143,7 +143,12 @@ types them. A local Command may `implements remote.CommandX` (`import type * as 
 edit's method mints the record's key when the input names none (`newEntityId`), so a new record
 is created with no key in hand; a Command that answers nothing (a 204) resolves `null`. A
 `DELETE` is read from its URL: `restTransport` sends its fields (`dry_run`, `origin_version`) in
-the query string, never in a body.
+the query string, never in a body. A trash's `Archive` and `Restore` (by the record's key) and
+`Purge` (the whole collection) are an entity's `archive`, `restore` and `purge` routes, never
+Commands; each answers `null`, or its `Preview` with `dry_run: true`. A field published as `format: "entity-ref"` — the backend's
+`EntityRef`, a record of any bounded context as one text (`billing.Invoice:0192…`) — is typed
+`EntityRef`: read one with `parseEntityRef`, write one with `entityRefOf`; resolving it is the
+backend's `Resolve`, a generated operation like any other.
 
 **Is a use case worth it?** A call with no logic of its own needs no Command and Feature: an
 entity's screens use the platform's entity pieces, and one operation from a screen goes through
@@ -325,7 +330,8 @@ salesBoundedContext.extend(auditing); // a module's pieces in one place
 
 Use the ports in memory: `configureProcess({ tracer: memoryTracer(), reporter: memoryReporter(), logger: { engine: memoryLogger() } })`
 in `beforeEach`; `restOperations(memoryTransport(tables))` or a fake `OperationTransport` for the
-backend; `memoryEventStore()` with `await queue.drain()` for events.
+backend — a `handle` that stands for an `Edit` reads its values with `assignableValues`, as the
+server does —; `memoryEventStore()` with `await queue.drain()` for events.
 
 ## Mistakes to avoid
 

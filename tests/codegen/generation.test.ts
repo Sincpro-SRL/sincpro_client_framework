@@ -836,3 +836,237 @@ test("an export under a record's keys keeps its path as data", () => {
     ),
   );
 });
+
+/** sincpro_framework's `EntityRef`, as its JSON Schema publishes it (3.37). */
+const entityRefSchema = {
+  type: "string",
+  format: "entity-ref",
+  pattern: "^[^:]+\\.[A-Za-z_][A-Za-z0-9_]*:.+$",
+  examples: ["billing.Invoice:01a1e6f2c0b37a4e9b1d2c3e4f5a6b7c"],
+};
+
+/** `shop` with a payment that names any record by its ref, and the backend's `Resolve`. */
+const referring: Metamodel = {
+  ...shop,
+  models: {
+    ...shop.models,
+    Payment: {
+      type: "object",
+      "x-sincpro": { identity: "id" },
+      properties: {
+        id: { type: "string", "x-sincpro": { type: "text" } },
+        subject: { ...entityRefSchema, "x-sincpro": { type: "text" } },
+        paid_on: { type: "string", format: "date", "x-sincpro": { type: "date" } },
+      },
+    },
+  },
+  operations: {
+    ...shop.operations,
+    "shop.CommandConfirmPayment": operation({
+      input: {
+        type: "object",
+        required: ["subject"],
+        properties: {
+          subject: entityRefSchema,
+          origin: { anyOf: [entityRefSchema, { type: "null" }] },
+        },
+      },
+      output: { $ref: "#/models/Payment" },
+    }),
+    // sincpro_framework's `Resolve`: an operation like any other of whoever publishes it.
+    "shop.QueryResolve": operation({
+      query: true,
+      input: {
+        type: "object",
+        required: ["refs"],
+        properties: { refs: { type: "array", items: entityRefSchema } },
+      },
+      output: {
+        type: "object",
+        properties: {
+          records: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["ref"],
+              properties: {
+                ref: entityRefSchema,
+                display: { type: "string" },
+                record: { anyOf: [{ type: "object" }, { type: "null" }] },
+              },
+            },
+          },
+        },
+      },
+    }),
+  },
+  bindings: {
+    rest: {
+      ...shop.bindings!.rest,
+      "shop.CommandConfirmPayment": {
+        method: "POST",
+        path: "/v1/payments/confirm",
+        path_fields: [],
+      },
+      "shop.QueryResolve": { method: "GET", path: "/v1/refs", path_fields: [] },
+    },
+  },
+};
+
+test("a ref to a record of any bounded context is an EntityRef, imported; another text stays a string", () => {
+  const files = domainFilesOf(referring);
+  const domain = Object.values(files).join("\n");
+  assert.ok(domain.includes("  subject: EntityRef;\n"), domain);
+  assert.ok(domain.includes("  origin?: EntityRef | null;\n"));
+  assert.ok(domain.includes("  refs: EntityRef[];\n"));
+  assert.ok(domain.includes("    ref: EntityRef;\n  }>;"));
+  // A record's field of that format too; a day is still the text the wire carries.
+  assert.ok(files["models.ts"]!.includes("  paid_on: string;\n  subject: EntityRef;"));
+  assert.ok(
+    files["models.ts"]!.includes(
+      'import type { EntityCollection, EntityRef } from "@sincpro/client-framework";',
+    ),
+  );
+  assert.ok(
+    files["commands.ts"]!.includes(
+      'import type { EntityRef } from "@sincpro/client-framework";',
+    ),
+  );
+  // A contract with no ref imports none.
+  assert.ok(!domainOf(shop).includes("EntityRef"));
+  // Resolving is the operation of whoever publishes it: a method like any other.
+  assert.ok(
+    clientFileOf(referring, options).includes(
+      "transport.call<dto.QueryResolveAnswer>(operations.QueryResolve, input, options),",
+    ),
+  );
+});
+
+/** What sincpro_framework's trash DTOs are sent with (3.37): a record by its key, run dry or
+ *  checked against the version read. */
+const byKey: Operation["input"] = {
+  type: "object",
+  required: ["id"],
+  properties: {
+    id: { type: "string" },
+    origin_version: { anyOf: [{ type: "integer" }, { type: "null" }] },
+    dry_run: { type: "boolean" },
+  },
+};
+
+/** `shop` with a trash: `Archive[Order]`, `Restore[Order]` and `Purge[Order]`. */
+const trashed: Metamodel = {
+  ...shop,
+  operations: {
+    ...shop.operations,
+    "shop.CommandArchiveOrder": operation({
+      role: "archive",
+      entities: ["Order"],
+      targets: { Order: "id" },
+      dry_run: true,
+      input: byKey,
+      output: { type: "null" },
+    }),
+    "shop.CommandRestoreOrder": operation({
+      role: "restore",
+      entities: ["Order"],
+      targets: { Order: "order_id" },
+      dry_run: true,
+      input: byKey,
+      output: { type: "null" },
+    }),
+    "shop.CommandPurgeOrders": operation({
+      role: "purge",
+      entities: ["Order"],
+      dry_run: true,
+      input: {
+        type: "object",
+        required: ["older_than"],
+        properties: {
+          older_than: { type: "string", format: "duration" },
+          dry_run: { type: "boolean" },
+        },
+      },
+      output: { type: "null" },
+    }),
+  },
+  bindings: {
+    rest: {
+      ...shop.bindings!.rest,
+      "shop.CommandArchiveOrder": {
+        method: "POST",
+        path: "/v1/orders/{id}/archive",
+        path_fields: ["id"],
+      },
+      "shop.CommandRestoreOrder": {
+        method: "POST",
+        path: "/v1/orders/{order_id}/restore",
+        path_fields: ["order_id"],
+      },
+      "shop.CommandPurgeOrders": {
+        method: "POST",
+        path: "/v1/orders/purge",
+        path_fields: [],
+      },
+    },
+  },
+};
+
+test("a trash's Archive, Restore and Purge are the entity's routes, never its Commands; their methods answer null", () => {
+  const entities = entitiesFileOf(trashed, options);
+  assert.ok(
+    entities.includes(
+      [
+        '  delete: "DELETE /orders/{id}",',
+        '  archive: "POST /orders/{id}/archive",',
+        // Its key under another name is written `{id}`, as `entity()` fills it.
+        '  restore: "POST /orders/{id}/restore",',
+        // A purge names no record: the collection's own route.
+        '  purge: "POST /orders/purge",',
+      ].join("\n"),
+    ),
+    entities,
+  );
+  for (const method of ["archiveOrder", "restoreOrder", "purgeOrders"])
+    assert.ok(!entities.includes(method), method);
+  // The client calls each by who it is, as any other operation.
+  const client = clientFileOf(trashed, options);
+  for (const name of ["CommandArchiveOrder", "CommandRestoreOrder", "CommandPurgeOrders"])
+    assert.ok(
+      client.includes(
+        `transport.call<dto.${name}Answer>(operations.${name}, input, options),`,
+      ),
+      name,
+    );
+  const domain = domainOf(trashed);
+  assert.ok(domain.includes("export type CommandPurgeOrdersAnswer = null;"));
+  assert.ok(domain.includes("  older_than: string;\n"));
+});
+
+test("two archives of one entity and none `own`: no archive route, and the file says which", () => {
+  const twice: Metamodel = {
+    ...trashed,
+    operations: {
+      ...trashed.operations,
+      "shop.CommandShelveOrder": { ...trashed.operations["shop.CommandArchiveOrder"]! },
+    },
+    bindings: {
+      rest: {
+        ...trashed.bindings!.rest,
+        "shop.CommandShelveOrder": {
+          method: "POST",
+          path: "/v1/orders/{id}/shelve",
+          path_fields: ["id"],
+        },
+      },
+    },
+  };
+  const entities = entitiesFileOf(twice, options);
+  assert.ok(!entities.includes("  archive:"));
+  assert.ok(
+    entities.includes(
+      " * - archive: 2 of role `archive` (`CommandArchiveOrder`, `CommandShelveOrder`) and none `own`.",
+    ),
+    entities,
+  );
+});

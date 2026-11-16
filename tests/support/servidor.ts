@@ -13,8 +13,9 @@ import { CLIENTES, type Factura, FACTURAS, VENTAS } from "./ventas";
  * The sales service the use cases run against — what a sincpro_framework service does, in
  * memory: a save checks the version it was read at (409 when someone saved first), a Command
  * may be run dry (`dry_run: true` answers what it would do), a `Preview` says what the record
- * becomes, a draft is kept per record with its own version, and every change leaves a business
- * event in `/ventas-events` with its label. The customers speak sincpro_framework's `Edit`, a
+ * becomes, a draft is kept per record with its own version, an invoice is deleted by its key
+ * (`Delete`: run dry, or refused when it moved past `origin_version`), and every change leaves a
+ * business event in `/ventas-events` with its label. The customers speak sincpro_framework's `Edit`, a
  * new one created under the id the client minted.
  *
  * Each call to `servidorVentas()` starts from fresh copies: one story's writes never leak into
@@ -386,6 +387,20 @@ export function servidorVentas() {
       f.version += 1;
       event(f, "Factura anulada", from);
       return { number: f.number, state: f.state };
+    }
+
+    // sincpro_framework's `Delete`: by its key, run dry or checked against the version read; it
+    // answers nothing. Over REST its fields come from the URL (`restServer` reads them there).
+    if (method === "DELETE" && action === undefined) {
+      if (sent["origin_version"] != null && sent["origin_version"] !== f.version)
+        throw stale(route, f);
+      if (sent["dry_run"] === true)
+        return {
+          text: `Would delete Factura ${f.number}`,
+          data: { id: f.number, version: f.version },
+        };
+      facturas.splice(facturas.indexOf(f), 1);
+      return undefined;
     }
 
     throw refuse(route, 404, {

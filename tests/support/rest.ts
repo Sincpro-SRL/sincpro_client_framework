@@ -22,11 +22,33 @@ import type { servidorVentas } from "./servidor";
  *     GET  /v1/facturas?criteria={…}   → {facturas: […], cursor, count, model_version, dropped}
  *     GET  /v1/facturas/F-1            → {factura: {…}, model_version, dropped, draft}
  *     POST /v1/facturas/F-1/confirm    → the Command's response, as JSON
+ *     DELETE /v1/facturas/F-1?dry_run=true → read from its URL, never its body
+ *     a Command that answers nothing   → 204, no body
  *     a refusal                        → its status, `application/problem+json`
  *
  * `calls` keeps every request, for a story or a test to check what really travelled.
  */
 export type Call = { method: string; url: string; body: unknown; key?: string };
+
+/** The methods the wire reads from the URL alone (sincpro_framework's `READ_FROM_URL`). */
+const FROM_URL = new Set(["DELETE"]);
+
+/**
+ * A DELETE's fields, as the wire reads them from its query string (`payload_from_query`): a
+ * plain value as it came, which the DTO coerces — here, decoded as JSON when it reads as JSON
+ * (`true`, `3`), kept as text otherwise —, and anything else decoded from JSON.
+ */
+function fieldsOfQuery(query: URLSearchParams): AnyRecord {
+  return Object.fromEntries(
+    [...query].map(([name, value]) => {
+      try {
+        return [name, JSON.parse(value) as unknown];
+      } catch {
+        return [name, value];
+      }
+    }),
+  );
+}
 
 export function restServer(
   servidor: ReturnType<typeof servidorVentas>,
@@ -47,17 +69,17 @@ export function restServer(
     body: unknown,
     key: string | undefined,
   ) {
-    if (method !== "GET")
-      return json(
-        200,
-        await engine.send(
-          method as Method,
-          path,
-          body,
-          undefined,
-          key === undefined ? {} : { idempotencyKey: key },
-        ),
+    if (method !== "GET") {
+      const answered = await engine.send(
+        method as Method,
+        path,
+        // A DELETE is read from its URL: a body it carried is never read.
+        FROM_URL.has(method) ? fieldsOfQuery(query) : body,
+        undefined,
+        key === undefined ? {} : { idempotencyKey: key },
       );
+      return answered === null ? new Response(null, { status: 204 }) : json(200, answered);
+    }
 
     if (path === "/openapi.json") return json(200, discoveryDocument(tables, base));
 

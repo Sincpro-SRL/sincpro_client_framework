@@ -52,9 +52,10 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  * Everything a screen needs to know about where an entity lives on the server, declared once.
  *
  * Context: a screen should not know a URL. It names the entity, and the entity says where its
- * list is, where one record is, which Commands it takes, how it is saved, previewed and deleted,
- * where a draft is kept and where its history is. `key` is how the workspace refers to it
- * (`domain:kind`, the shape of a composer `ResourceRef`).
+ * list is, where one record is, which Commands it takes, how it is saved, previewed and deleted
+ * — or put in a trash, brought back and purged —, where a draft is kept and where its history
+ * is. `key` is how the workspace refers to it (`domain:kind`, the shape of a composer
+ * `ResourceRef`).
  *
  * The routes are declared, not guessed: sincpro_framework publishes a route per use case and
  * its model definition does not list them (yet). A route is `"METHOD /path/{id}"` for a write.
@@ -65,6 +66,9 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  *       save: "PUT /invoices/{id}",
  *       preview: "POST /invoices/preview",
  *       delete: "DELETE /invoices/{id}",
+ *       archive: "POST /invoices/{id}/archive",
+ *       restore: "POST /invoices/{id}/restore",
+ *       purge: "POST /invoices/purge",
  *       commands: { confirm: "POST /invoices/{id}/confirm", cancel: "POST /invoices/{id}/cancel" },
  *       history: "/invoices/{id}/events",
  *     });
@@ -86,15 +90,21 @@ export type Entity<
   kind: string;
   /** Where the workspace finds it: the list without an id, one record with it — the shape of a
    *  composer `ResourceRef`, built here so no screen writes `{ domain, kind, id }` by hand. */
-  ref: (id?: string) => EntityRef;
+  ref: (id?: string) => ResourceRef;
   /** A record that does not exist yet — the form that creates one. Its view is the record's.
    *  With `values`, the form starts with them over the model's defaults: an invoice created
    *  from its customer starts with that customer (`startingValuesOf`). */
-  newRef: (values?: AnyRecord) => EntityRef;
+  newRef: (values?: AnyRecord) => ResourceRef;
   /** Its list opened to CHOOSE one: a row answers whoever asked (composer's `api.pick`). With
    *  `query`, the list opens on that literal search — what was typed in the picker; with
    *  `scope`, it offers only what the picker may choose (`scopeOfRef`). */
-  chooserRef: (query?: string, scope?: Expression) => EntityRef;
+  chooserRef: (query?: string, scope?: Expression) => ResourceRef;
+  /** Its list opened under a cut — «this member's payments», what a smart button opens. With
+   *  `name`, the list says whose it is («Payments · María»): a cut that travels without one
+   *  reads as the whole list. The cut travels as a chooser's does (`scopeOfRef`), the name
+   *  under `SCOPE_NAME_PARAM` (`scopeNameOf`). A method, so an `Entity<Invoice>` is still an
+   *  `Entity`. */
+  listRef(cut: Expression<T>, name?: string): ResourceRef;
   /** The route of its list. */
   list: string;
   /** The route of one record. */
@@ -119,6 +129,23 @@ export type Entity<
    *  nothing, and `origin_version` refuses it when the record moved past the version read. Over
    *  REST those fields travel in the query string — a `DELETE` is read from its URL. */
   delete?: WriteRoute;
+  /** sincpro_framework's `Archive`: the record put in the trash by its key, `{id}` in the path —
+   *  left out of every reading, nothing lost. It answers nothing (`null`); with `dry_run: true`
+   *  it answers the `Preview` of what would be archived and archives nothing, and
+   *  `origin_version` refuses it when the record moved past the version read. The trash itself
+   *  is the entity's list asked for what is archived (`archived_at` not null), which every other
+   *  reading leaves out. */
+  archive?: WriteRoute;
+  /** sincpro_framework's `Restore`: an archived record brought back by its key, `{id}` in the
+   *  path — into every reading again. It answers as `archive` does, `dry_run` and
+   *  `origin_version` included. */
+  restore?: WriteRoute;
+  /** sincpro_framework's `Purge`: every record archived longer ago than `older_than` — a
+   *  duration as the contract writes it (`"P30D"`) — deleted for good. The route of the whole
+   *  collection, no `{id}`. It answers nothing; with `dry_run: true`, the `Preview` of how many
+   *  would go (`data: { count }`), deleting nothing. The backend never purges on its own: a cron
+   *  of the project runs it, or a screen's «empty the trash». */
+  purge?: WriteRoute;
   /** Its business events: where ONE record's events are read (sincpro_framework's
    *  `DomainEvents`), `{id}` where its key goes — a page of them, as a list answers. */
   history?: string;
@@ -138,8 +165,15 @@ export type Entity<
   readonly _answers?: A;
 };
 
-/** A composer `ResourceRef`, structurally: `core/` does not import the composer. */
-export type EntityRef = {
+/**
+ * Where the workspace opens an entity — its list, one record, a new one, a chooser —: a composer
+ * `ResourceRef`, structurally, since nothing here imports the composer.
+ *
+ * Context: named as composer names it. `EntityRef` is sincpro_framework's word for something
+ * else — a record of any bounded context written as one text (`billing.Invoice:01a1…`), what a
+ * payload carries —, and two types of one name cannot both be public.
+ */
+export type ResourceRef = {
   domain: string;
   kind: string;
   id?: string;
@@ -160,9 +194,12 @@ export const TRAIL_PARAM = "from";
 /** What a new record starts with, as JSON: one param keeps each value's type (a number stays
  *  a number), where a param per field would turn all of them into text. */
 export const WITH_PARAM = "with";
-/** What a chooser may offer at all, as JSON: the picker's cut — its criteria, the keys it
- *  excludes, its named list's scope — that the list it opens ANDs under everything. */
+/** What a chooser may offer at all, or what a list opened under a cut shows (`listRef`), as
+ *  JSON: the cut — its criteria, the keys it excludes, its named list's scope — that the list
+ *  it opens ANDs under everything. */
 export const SCOPE_PARAM = "scope";
+/** Whose a list opened under a cut is (`listRef(cut, name)`): «María» of «Payments · María». */
+export const SCOPE_NAME_PARAM = "of";
 
 /**
  * What a new record's reference says it starts with (`newRef(values)`), or nothing.
@@ -170,7 +207,7 @@ export const SCOPE_PARAM = "scope";
  * Context: a reference survives a reload and a link, so its params can be anything a person
  * typed in the address bar — a value that is not a JSON object is not a start, never an error.
  */
-export function startingValuesOf(ref: Pick<EntityRef, "params">): AnyRecord {
+export function startingValuesOf(ref: Pick<ResourceRef, "params">): AnyRecord {
   const written = ref.params?.[WITH_PARAM];
   if (written === undefined) return {};
   try {
@@ -193,7 +230,7 @@ export function startingValuesOf(ref: Pick<EntityRef, "params">): AnyRecord {
  * (`readExpression`), and one that does not read is no cut, never an error. It narrows what is
  * OFFERED; the server still decides what may be stored.
  */
-export function scopeOfRef(ref: Pick<EntityRef, "params">): Expression | undefined {
+export function scopeOfRef(ref: Pick<ResourceRef, "params">): Expression | undefined {
   const written = ref.params?.[SCOPE_PARAM];
   if (written === undefined) return undefined;
   try {
@@ -201,6 +238,19 @@ export function scopeOfRef(ref: Pick<EntityRef, "params">): Expression | undefin
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Whose a list opened under a cut is (`listRef(cut, name)`), or nothing: what its heading, its
+ * tab and its breadcrumb say beside the list's name.
+ *
+ * Context: a cut that travels without a name reads as the whole list — «Payments» showing one
+ * member's. The name travels beside the cut, in the reference, so a reload and a link keep it;
+ * an empty one is none.
+ */
+export function scopeNameOf(ref: Pick<ResourceRef, "params">): string | undefined {
+  const name = ref.params?.[SCOPE_NAME_PARAM];
+  return name === undefined || name === "" ? undefined : name;
 }
 
 /**
@@ -236,6 +286,12 @@ export type EntityRoutes<C extends CommandBodies = CommandBodies> = CommandRoute
   edit?: string;
   /** `"DELETE /invoices/{id}"`: the use case that answers sincpro_framework's `Delete`. */
   delete?: string;
+  /** `"POST /invoices/{id}/archive"`: the use case that answers sincpro_framework's `Archive`. */
+  archive?: string;
+  /** `"POST /invoices/{id}/restore"`: the use case that answers sincpro_framework's `Restore`. */
+  restore?: string;
+  /** `"POST /invoices/purge"`: the use case that answers sincpro_framework's `Purge`. */
+  purge?: string;
   /** `"/invoices/{id}/events"`: a record's events (`DomainEvents[Invoice, …]`), oldest first. */
   history?: string;
   /** `"/invoices/export"`: every record of a criteria as a file (`Export[Invoice, Streamed]`),
@@ -395,6 +451,14 @@ export function entity<
         ...(scope === undefined ? {} : { [SCOPE_PARAM]: JSON.stringify(scope) }),
       },
     }),
+    listRef: (cut, name) => ({
+      domain,
+      kind,
+      params: {
+        [SCOPE_PARAM]: JSON.stringify(cut),
+        ...(name === undefined || name.trim() === "" ? {} : { [SCOPE_NAME_PARAM]: name }),
+      },
+    }),
     list: routes.list,
     one: (id) => template.replace("{id}", encodeURIComponent(id)),
     // Built from exactly the names `routes.commands` was typed with.
@@ -410,6 +474,9 @@ export function entity<
     ...(routes.draft === undefined ? {} : { draft: writeRoute(routes.draft) }),
     ...(routes.edit === undefined ? {} : { edit: writeRoute(routes.edit) }),
     ...(routes.delete === undefined ? {} : { delete: writeRoute(routes.delete) }),
+    ...(routes.archive === undefined ? {} : { archive: writeRoute(routes.archive) }),
+    ...(routes.restore === undefined ? {} : { restore: writeRoute(routes.restore) }),
+    ...(routes.purge === undefined ? {} : { purge: writeRoute(routes.purge) }),
     ...(routes.history === undefined ? {} : { history: routes.history }),
     ...(routes.export === undefined ? {} : { export: routes.export }),
     summary: routes.summary ?? {},

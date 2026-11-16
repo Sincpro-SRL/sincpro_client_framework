@@ -1,6 +1,7 @@
 /**
  * The values of the wire, as the backend writes them: ids, a day and an instant, `Decimal`,
- * `Money`, a to-many as a page of its records, and how any value is written and read.
+ * `Money`, a to-many as a page of its records, a ref to a record of any bounded context, and how
+ * any value is written and read.
  */
 export {
   collectionOf,
@@ -13,6 +14,13 @@ export {
   totalOf,
 } from "@sincpro/client-framework/common/collection";
 export { Decimal, type DecimalLike } from "@sincpro/client-framework/common/decimal";
+export {
+  type EntityRef,
+  entityRefOf,
+  type EntityRefParts,
+  isEntityRef,
+  parseEntityRef,
+} from "@sincpro/client-framework/common/entity-ref";
 export {
   type DeclaredFailure,
   type Failure,
