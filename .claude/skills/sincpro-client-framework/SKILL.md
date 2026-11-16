@@ -143,7 +143,9 @@ types them. A local Command may `implements remote.CommandX` (`import type * as 
 edit's method mints the record's key when the input names none (`newEntityId`), so a new record
 is created with no key in hand; a Command that answers nothing (a 204) resolves `null`. A
 `DELETE` is read from its URL: `restTransport` sends its fields (`dry_run`, `origin_version`) in
-the query string, never in a body. A field published as `format: "entity-ref"` — the backend's
+the query string, never in a body. A trash's `Archive` and `Restore` (by the record's key) and
+`Purge` (the whole collection) are an entity's `archive`, `restore` and `purge` routes, never
+Commands; each answers `null`, or its `Preview` with `dry_run: true`. A field published as `format: "entity-ref"` — the backend's
 `EntityRef`, a record of any bounded context as one text (`billing.Invoice:0192…`) — is typed
 `EntityRef`: read one with `parseEntityRef`, write one with `entityRefOf`; resolving it is the
 backend's `Resolve`, a generated operation like any other.

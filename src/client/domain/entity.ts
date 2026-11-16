@@ -52,9 +52,10 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  * Everything a screen needs to know about where an entity lives on the server, declared once.
  *
  * Context: a screen should not know a URL. It names the entity, and the entity says where its
- * list is, where one record is, which Commands it takes, how it is saved, previewed and deleted,
- * where a draft is kept and where its history is. `key` is how the workspace refers to it
- * (`domain:kind`, the shape of a composer `ResourceRef`).
+ * list is, where one record is, which Commands it takes, how it is saved, previewed and deleted
+ * — or put in a trash, brought back and purged —, where a draft is kept and where its history
+ * is. `key` is how the workspace refers to it (`domain:kind`, the shape of a composer
+ * `ResourceRef`).
  *
  * The routes are declared, not guessed: sincpro_framework publishes a route per use case and
  * its model definition does not list them (yet). A route is `"METHOD /path/{id}"` for a write.
@@ -65,6 +66,9 @@ export type CommandAnswers = Readonly<Record<string, unknown>>;
  *       save: "PUT /invoices/{id}",
  *       preview: "POST /invoices/preview",
  *       delete: "DELETE /invoices/{id}",
+ *       archive: "POST /invoices/{id}/archive",
+ *       restore: "POST /invoices/{id}/restore",
+ *       purge: "POST /invoices/purge",
  *       commands: { confirm: "POST /invoices/{id}/confirm", cancel: "POST /invoices/{id}/cancel" },
  *       history: "/invoices/{id}/events",
  *     });
@@ -119,6 +123,23 @@ export type Entity<
    *  nothing, and `origin_version` refuses it when the record moved past the version read. Over
    *  REST those fields travel in the query string — a `DELETE` is read from its URL. */
   delete?: WriteRoute;
+  /** sincpro_framework's `Archive`: the record put in the trash by its key, `{id}` in the path —
+   *  left out of every reading, nothing lost. It answers nothing (`null`); with `dry_run: true`
+   *  it answers the `Preview` of what would be archived and archives nothing, and
+   *  `origin_version` refuses it when the record moved past the version read. The trash itself
+   *  is the entity's list asked for what is archived (`archived_at` not null), which every other
+   *  reading leaves out. */
+  archive?: WriteRoute;
+  /** sincpro_framework's `Restore`: an archived record brought back by its key, `{id}` in the
+   *  path — into every reading again. It answers as `archive` does, `dry_run` and
+   *  `origin_version` included. */
+  restore?: WriteRoute;
+  /** sincpro_framework's `Purge`: every record archived longer ago than `older_than` — a
+   *  duration as the contract writes it (`"P30D"`) — deleted for good. The route of the whole
+   *  collection, no `{id}`. It answers nothing; with `dry_run: true`, the `Preview` of how many
+   *  would go (`data: { count }`), deleting nothing. The backend never purges on its own: a cron
+   *  of the project runs it, or a screen's «empty the trash». */
+  purge?: WriteRoute;
   /** Its business events: where ONE record's events are read (sincpro_framework's
    *  `DomainEvents`), `{id}` where its key goes — a page of them, as a list answers. */
   history?: string;
@@ -243,6 +264,12 @@ export type EntityRoutes<C extends CommandBodies = CommandBodies> = CommandRoute
   edit?: string;
   /** `"DELETE /invoices/{id}"`: the use case that answers sincpro_framework's `Delete`. */
   delete?: string;
+  /** `"POST /invoices/{id}/archive"`: the use case that answers sincpro_framework's `Archive`. */
+  archive?: string;
+  /** `"POST /invoices/{id}/restore"`: the use case that answers sincpro_framework's `Restore`. */
+  restore?: string;
+  /** `"POST /invoices/purge"`: the use case that answers sincpro_framework's `Purge`. */
+  purge?: string;
   /** `"/invoices/{id}/events"`: a record's events (`DomainEvents[Invoice, …]`), oldest first. */
   history?: string;
   /** `"/invoices/export"`: every record of a criteria as a file (`Export[Invoice, Streamed]`),
@@ -417,6 +444,9 @@ export function entity<
     ...(routes.draft === undefined ? {} : { draft: writeRoute(routes.draft) }),
     ...(routes.edit === undefined ? {} : { edit: writeRoute(routes.edit) }),
     ...(routes.delete === undefined ? {} : { delete: writeRoute(routes.delete) }),
+    ...(routes.archive === undefined ? {} : { archive: writeRoute(routes.archive) }),
+    ...(routes.restore === undefined ? {} : { restore: writeRoute(routes.restore) }),
+    ...(routes.purge === undefined ? {} : { purge: writeRoute(routes.purge) }),
     ...(routes.history === undefined ? {} : { history: routes.history }),
     ...(routes.export === undefined ? {} : { export: routes.export }),
     summary: routes.summary ?? {},

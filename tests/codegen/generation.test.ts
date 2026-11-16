@@ -941,3 +941,132 @@ test("a ref to a record of any bounded context is an EntityRef, imported; anothe
     ),
   );
 });
+
+/** What sincpro_framework's trash DTOs are sent with (3.37): a record by its key, run dry or
+ *  checked against the version read. */
+const byKey: Operation["input"] = {
+  type: "object",
+  required: ["id"],
+  properties: {
+    id: { type: "string" },
+    origin_version: { anyOf: [{ type: "integer" }, { type: "null" }] },
+    dry_run: { type: "boolean" },
+  },
+};
+
+/** `shop` with a trash: `Archive[Order]`, `Restore[Order]` and `Purge[Order]`. */
+const trashed: Metamodel = {
+  ...shop,
+  operations: {
+    ...shop.operations,
+    "shop.CommandArchiveOrder": operation({
+      role: "archive",
+      entities: ["Order"],
+      targets: { Order: "id" },
+      dry_run: true,
+      input: byKey,
+      output: { type: "null" },
+    }),
+    "shop.CommandRestoreOrder": operation({
+      role: "restore",
+      entities: ["Order"],
+      targets: { Order: "order_id" },
+      dry_run: true,
+      input: byKey,
+      output: { type: "null" },
+    }),
+    "shop.CommandPurgeOrders": operation({
+      role: "purge",
+      entities: ["Order"],
+      dry_run: true,
+      input: {
+        type: "object",
+        required: ["older_than"],
+        properties: {
+          older_than: { type: "string", format: "duration" },
+          dry_run: { type: "boolean" },
+        },
+      },
+      output: { type: "null" },
+    }),
+  },
+  bindings: {
+    rest: {
+      ...shop.bindings!.rest,
+      "shop.CommandArchiveOrder": {
+        method: "POST",
+        path: "/v1/orders/{id}/archive",
+        path_fields: ["id"],
+      },
+      "shop.CommandRestoreOrder": {
+        method: "POST",
+        path: "/v1/orders/{order_id}/restore",
+        path_fields: ["order_id"],
+      },
+      "shop.CommandPurgeOrders": {
+        method: "POST",
+        path: "/v1/orders/purge",
+        path_fields: [],
+      },
+    },
+  },
+};
+
+test("a trash's Archive, Restore and Purge are the entity's routes, never its Commands; their methods answer null", () => {
+  const entities = entitiesFileOf(trashed, options);
+  assert.ok(
+    entities.includes(
+      [
+        '  delete: "DELETE /orders/{id}",',
+        '  archive: "POST /orders/{id}/archive",',
+        // Its key under another name is written `{id}`, as `entity()` fills it.
+        '  restore: "POST /orders/{id}/restore",',
+        // A purge names no record: the collection's own route.
+        '  purge: "POST /orders/purge",',
+      ].join("\n"),
+    ),
+    entities,
+  );
+  for (const method of ["archiveOrder", "restoreOrder", "purgeOrders"])
+    assert.ok(!entities.includes(method), method);
+  // The client calls each by who it is, as any other operation.
+  const client = clientFileOf(trashed, options);
+  for (const name of ["CommandArchiveOrder", "CommandRestoreOrder", "CommandPurgeOrders"])
+    assert.ok(
+      client.includes(
+        `transport.call<dto.${name}Answer>(operations.${name}, input, options),`,
+      ),
+      name,
+    );
+  const domain = domainOf(trashed);
+  assert.ok(domain.includes("export type CommandPurgeOrdersAnswer = null;"));
+  assert.ok(domain.includes("  older_than: string;\n"));
+});
+
+test("two archives of one entity and none `own`: no archive route, and the file says which", () => {
+  const twice: Metamodel = {
+    ...trashed,
+    operations: {
+      ...trashed.operations,
+      "shop.CommandShelveOrder": { ...trashed.operations["shop.CommandArchiveOrder"]! },
+    },
+    bindings: {
+      rest: {
+        ...trashed.bindings!.rest,
+        "shop.CommandShelveOrder": {
+          method: "POST",
+          path: "/v1/orders/{id}/shelve",
+          path_fields: ["id"],
+        },
+      },
+    },
+  };
+  const entities = entitiesFileOf(twice, options);
+  assert.ok(!entities.includes("  archive:"));
+  assert.ok(
+    entities.includes(
+      " * - archive: 2 of role `archive` (`CommandArchiveOrder`, `CommandShelveOrder`) and none `own`.",
+    ),
+    entities,
+  );
+});

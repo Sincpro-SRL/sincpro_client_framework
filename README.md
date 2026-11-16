@@ -695,6 +695,13 @@ them (plain values as text, anything else as JSON): `DELETE /projects/acme?dry_r
 the `Preview` of what would go, and `origin_version` refuses a delete of a record that moved on.
 Sent in a body they are dropped, and a rehearsal would run the real delete.
 
+A trash — the backend's `Archive`, `Restore` and `Purge`, roles `archive`, `restore` and `purge` —
+is three more routes of an entity: `archive` and `restore` by the record's key, `purge` over the
+whole collection (`older_than`, a duration as the contract writes it: `"P30D"`). Each answers
+nothing — `null` — or, with `dry_run: true`, the `Preview` of what it would do; a purge's says how
+many would go (`data: { count }`). The trash itself is the entity's list asked for what is
+archived (`archived_at` not null), which every other reading leaves out.
+
 Which of the ways a screen reaches the backend fits a call — an entity's screens, the generated
 client over the screens transport, or a Command and its Feature — is in
 [docs/WEB.md](docs/WEB.md#which-way-a-screen-reaches-the-backend).
@@ -771,7 +778,7 @@ each file in the layer it belongs to, under the bounded context's folder (`--out
 | `domain/generated/events.ts`     | the domain events and `DomainEvent`, their union — when the contract carries them             |
 | `domain/generated/index.ts`      | the three, re-exported: `import type * as remote from "../domain/generated"`                  |
 | `adapters/generated/client.ts`   | `clientOf(operations)`: a method per operation, over any wire; `operations` and `events` data |
-| `adapters/generated/entities.ts` | each entity's list, record, edit, delete, export, Commands and history, for screens           |
+| `adapters/generated/entities.ts` | each entity's list, record, edit, delete, trash, export, Commands and history, for screens    |
 
 The backend keeps them apart — the domain's words, the application layer's DTOs, the facts, the
 adapters to another system —, and so does the application: each beside its own code of that layer.

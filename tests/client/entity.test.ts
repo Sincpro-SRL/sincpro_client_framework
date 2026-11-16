@@ -117,3 +117,31 @@ test("an entity keeps its export route, and a record route with a question reads
   const read = await transport.one<{ id: string }>(groups.one("g1"));
   assert.equal(read.record.id, "g1");
 });
+
+test("an entity knows its trash: archive and restore by the record's key, purge over all of it", () => {
+  const banners = entity("site:banner", {
+    list: "/banners",
+    delete: "DELETE /banners/{id}",
+    archive: "POST /banners/{id}/archive",
+    restore: "POST /banners/{id}/restore",
+    purge: "POST /banners/purge",
+  });
+  assert.deepEqual(banners.archive, { method: "POST", path: "/banners/{id}/archive" });
+  assert.deepEqual(banners.restore, { method: "POST", path: "/banners/{id}/restore" });
+  assert.deepEqual(banners.purge, { method: "POST", path: "/banners/purge" });
+  assert.equal(pathFor(banners.archive!, "b 1"), "/banners/b%201/archive");
+  assert.equal(pathFor(banners.restore!, "b1"), "/banners/b1/restore");
+  // A purge names no record: its path is the collection's.
+  assert.equal(pathFor(banners.purge!), "/banners/purge");
+  // None of them is a Command, and an entity without a trash has none of them.
+  assert.deepEqual(banners.commands, {});
+  const plain = entity("site:page", { list: "/pages" });
+  assert.equal(plain.archive, undefined);
+  assert.equal(plain.restore, undefined);
+  assert.equal(plain.purge, undefined);
+  // A route without its method is refused when the entity is declared.
+  assert.throws(
+    () => entity("site:banner", { list: "/banners", purge: "/banners/purge" }),
+    /is not "METHOD \/path"/,
+  );
+});
