@@ -18,7 +18,13 @@ import {
 } from "@sincpro/client-framework/client/services/discovery";
 import { bindableTransport } from "@sincpro/client-framework/client/services/propagation";
 import { valuesOf } from "@sincpro/client-framework/common/serialization";
-import { type Criteria, type Dropped, type Meta, readProblem } from "@sincpro/criteria";
+import {
+  type Criteria,
+  type Dropped,
+  type Meta,
+  type Page,
+  readProblem,
+} from "@sincpro/criteria";
 import { RestError, restSource } from "@sincpro/criteria/rest";
 
 /**
@@ -289,7 +295,12 @@ export function restTransport(options: RestOptions = {}): Transport {
         ...(decoders.length === 0 ? {} : { decode }),
       });
       try {
-        const page = await source.read(criteria as never, signal);
+        // A grouped question is answered with the groups, as sincpro_framework's `Search`
+        // answers it on the same route (3.37.2) and `memoryTransport` does: read by name.
+        const grouped = ((criteria as Criteria).grouping?.group_by?.length ?? 0) > 0;
+        const page = grouped
+          ? ((await source.group!(criteria as never, signal)) as Page<never>)
+          : await source.read(criteria as never, signal);
         return {
           ...page,
           meta: page.meta ?? (await definitionAt(`${base}${route}`, "get", page.version)),
