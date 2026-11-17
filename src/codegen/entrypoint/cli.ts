@@ -24,7 +24,8 @@ import { scaffoldFilesOf } from "@sincpro/client-framework/codegen/services/scaf
  * - `domain/generated/events.ts`: the domain events and `DomainEvent`, their union — when the
  *   contract was exported with them (`export-client-contract --events`);
  * - `domain/generated/index.ts`: the three, re-exported;
- * - `domain/generated/contract.json`: the snapshot they were written from, for `metasOf`;
+ * - `domain/generated/contract.json`: the snapshot they were written from, for `metasOf` and
+ *   `eventMetasOf`;
  * - `adapters/generated/client.ts`: every operation (and event) as data, and
  *   `clientOf(operations)` over any wire;
  * - `adapters/generated/entities.ts`: an `entity<T, C>()` per model a screen can list.

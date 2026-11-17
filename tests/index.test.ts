@@ -81,6 +81,7 @@ const PUBLIC = [
   "envelopeOf",
   "eventFrom",
   "eventMessageOf",
+  "eventMetasOf",
   "exportRoute",
   "failureOf",
   "field",

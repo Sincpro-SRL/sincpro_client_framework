@@ -813,6 +813,17 @@ function subjectOf(event: remote.DomainEvent): string {
 `events` in `adapters/generated/client.ts` says, per event, its wire name and whether the bounded context records it
 (its aggregates' own) or handles it (a Feature subscribes).
 
+The words of each event's fields are in the contract too (sincpro_framework 3.37.1 or later):
+`eventMetasOf(contract)` reads the snapshot (`domain/generated/contract.json`) into one
+definition per event, by its wire name, as `metasOf` does for the entities. What one occurrence
+says — what happened, the record, who — travels in the event itself (`label`, `entity_display`,
+`actor`).
+
+```ts
+const metas = eventMetasOf(contract);
+labelOf(metas["project.issue.v1.closed"], "reason", "es"); // "Motivo"
+```
+
 ### Types, not classes
 
 What is generated is the remote service's contract and an adapter over it, so it is written as

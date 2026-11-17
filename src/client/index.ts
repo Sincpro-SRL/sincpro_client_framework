@@ -35,6 +35,7 @@ export {
 export {
   type ClientContract,
   entityKeyOf,
+  eventMetasOf,
   kindOf,
   metasOf,
   versionsOf,
