@@ -52,6 +52,26 @@ test("the records come out of the field named after them", async () => {
   assert.deepEqual(page.rows, [{ id: "odoo-acme" }]);
 });
 
+test("a grouped list answers the groups the server wrote beside the records — what memoryTransport answers", async () => {
+  // sincpro_framework 3.37.2: a `Search` whose criteria groups answers `groups` on its route.
+  const bucket = {
+    field: "status",
+    value: "open",
+    count: 3,
+    criteria: {},
+    ids: ["odoo-acme"],
+  };
+  const grouped = { groups: [bucket], ...PAGE };
+  const transport = restTransport({ fetch: server(200, grouped, []) });
+
+  const groups = await transport.list(
+    "/projects",
+    plain(criteria().groupBy("status").limit(1)),
+  );
+
+  assert.deepEqual(groups.rows, [bucket]);
+});
+
 test("a read of the context's own goes as a GET and comes back as it was answered", async () => {
   const calls: Call[] = [];
   const transport = restTransport({
