@@ -134,3 +134,23 @@ test("past the ceiling a selection is refused, never cut: counted before reading
   // Declared `invalid`: a caller narrows the question.
   assert.equal(SelectionTooLarge.failureKind, "invalid");
 });
+
+test("a selection of a typed record goes through every function, typed", async () => {
+  type Contact = { id: string; name: string; company: string };
+  const typed = allMatching<Contact>(
+    { field: "company", operator: "=", value: "SINCPRO" },
+    5,
+  );
+  const butOne = toggled(typed, "S-1");
+  assert.equal(isChosen(butOne, "S-1"), false);
+  assert.equal(sizeOf(butOne), 4);
+  assert.equal(isEmpty(butOne), false);
+  const { transport } = contacts();
+  const keys = await keysOf(butOne, {
+    transport,
+    route: "/contacts",
+    identity: "id",
+    limit: 10,
+  });
+  assert.equal(keys.length, 4);
+});

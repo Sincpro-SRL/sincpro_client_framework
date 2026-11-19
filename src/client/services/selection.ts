@@ -5,7 +5,7 @@ import {
   sizeOf,
 } from "@sincpro/client-framework/client/domain/selection";
 import type { Transport } from "@sincpro/client-framework/client/domain/transport";
-import type { AnyRecord } from "@sincpro/criteria";
+import type { AnyRecord, Expression } from "@sincpro/criteria";
 
 /**
  * The keys of the chosen records — what a Command run once per record needs, what a many2many
@@ -27,8 +27,8 @@ import type { AnyRecord } from "@sincpro/criteria";
  *    ceiling — the one more says the ceiling was passed.
  * Final: the keys, in the order the server answered them.
  */
-export async function keysOf(
-  selection: Selection,
+export async function keysOf<T>(
+  selection: Selection<T>,
   options: {
     transport: Transport;
     /** Where the entity is listed: `listRoute(entity.list)`. */
@@ -44,7 +44,8 @@ export async function keysOf(
   const size = sizeOf(selection);
   if (size !== null && size > limit) throw new SelectionTooLarge(limit, size);
   if (selection.by === "keys") return selection.keys;
-  const question = criteriaOf(selection, identity);
+  // Read untyped: what comes back is references — the identity alone —, never a `T`.
+  const question = criteriaOf(selection, identity) as Expression | undefined;
   const page = await transport.list<AnyRecord>(
     route,
     {

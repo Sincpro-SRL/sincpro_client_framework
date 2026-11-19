@@ -51,7 +51,7 @@ export function allMatching<T = AnyRecord>(
 }
 
 /** Whether the record of `key` is among the chosen. */
-export function isChosen(selection: Selection, key: string): boolean {
+export function isChosen<T>(selection: Selection<T>, key: string): boolean {
   return selection.by === "keys"
     ? selection.keys.includes(key)
     : !selection.except.includes(key);
@@ -76,7 +76,7 @@ export function toggled<T>(selection: Selection<T>, key: string): Selection<T> {
 }
 
 /** How many records are chosen; `null` when «all that match» has no count from the server. */
-export function sizeOf(selection: Selection): number | null {
+export function sizeOf<T>(selection: Selection<T>): number | null {
   if (selection.by === "keys") return selection.keys.length;
   return selection.total === null
     ? null
@@ -84,7 +84,7 @@ export function sizeOf(selection: Selection): number | null {
 }
 
 /** Whether nothing is chosen — an «all that match» of unknown size is not known to be empty. */
-export function isEmpty(selection: Selection): boolean {
+export function isEmpty<T>(selection: Selection<T>): boolean {
   return sizeOf(selection) === 0;
 }
 
