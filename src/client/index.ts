@@ -3,10 +3,11 @@
  * commands, the service's client contract, and how a run's trace and context reach the wire.
  *
  *   domain/    the port and the server's words: `Transport`, `TransportError`, `entity()`, the
- *              client contract, what a write changed (`Change`, `ChangeFeed`)
+ *              client contract, what a write changed (`Change`, `ChangeFeed`), which records
+ *              were chosen (`Selection`)
  *   adapters/  REST, memory, and Parquet (optional entry `./parquet`)
  *   services/  discovery, retry keys, propagation (`traceparent`, `sincpro-context`), the
- *              process's change feed (`processChanges`)
+ *              process's change feed (`processChanges`), the keys of a selection (`keysOf`)
  */
 export {
   JsonRpcError,
@@ -75,6 +76,20 @@ export {
   type RemoteOperation,
 } from "@sincpro/client-framework/client/domain/operation";
 export {
+  type AllMatching,
+  allMatching,
+  chosen,
+  type ChosenKeys,
+  criteriaOf,
+  isChosen,
+  isEmpty,
+  NOTHING_CHOSEN,
+  type Selection,
+  SelectionTooLarge,
+  sizeOf,
+  toggled,
+} from "@sincpro/client-framework/client/domain/selection";
+export {
   type CallOptions,
   type Decoder,
   type Download,
@@ -108,3 +123,4 @@ export {
   retryKeys,
   unanswered,
 } from "@sincpro/client-framework/client/services/retry";
+export { keysOf } from "@sincpro/client-framework/client/services/selection";

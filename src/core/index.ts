@@ -4,11 +4,13 @@
  * handlers — and the process they run in.
  *
  *   domain/          DTOs (classes, and generated ones the bus recognizes), the bus, the service
- *                    bases (`servicesWith`: typed with a context's dependencies), the error handlers
+ *                    bases (`servicesWith`: typed with a context's dependencies), the error
+ *                    handlers, a batch's outcomes (`BatchResult`)
  *   services/        the execution pipeline, dependency binding, the handler chain
- *   entrypoint/      `BoundedContext`, `screensTransport`
+ *   entrypoint/      `BoundedContext`, `screensTransport`, `runBatch`
  *   infrastructure/  `configureProcess`, `configureLogger`
  */
+export type { BatchResult, ItemOutcome } from "@sincpro/client-framework/core/domain/batch";
 export { type CommandBus, FeatureBus } from "@sincpro/client-framework/core/domain/bus";
 export type {
   EventConsumer,
@@ -60,6 +62,11 @@ export {
   type ServiceInput,
   servicesWith,
 } from "@sincpro/client-framework/core/domain/services";
+export {
+  type BatchOptions,
+  type BatchStep,
+  runBatch,
+} from "@sincpro/client-framework/core/entrypoint/batch";
 export {
   BoundedContext,
   type Registrar,

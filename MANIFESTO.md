@@ -54,7 +54,8 @@ server-side render, in a script and in a test, unchanged.**
    wire — with its REST and JSON-RPC adapters (a platform adds gRPC or its own); the `Transport`
    port and its implementations (REST, memory), `entity()` with
    typed commands and answers, the service's client contract, model definitions read once from
-   the server and the server's `Problem`.
+   the server and the server's `Problem`; which records were chosen (`Selection`) and a step run
+   once per record with one outcome each (`runBatch`, the backend's `BatchResult`).
 7. **The values of the wire.** How every value travels, as the backend writes it — a decimal as
    text, a money with its currency, a day that is never an instant, bytes tagged, ids as UUID v7 —
    and the exact arithmetic a client needs on them (`Decimal`, `Money`). Only the wire form and
