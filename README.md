@@ -731,6 +731,51 @@ history — is each reader's to decide. A transport given `changes` announces th
 a transport that must not be heard), and a platform's own adapter wraps its `send` in
 `announced(feed, method, route, body, send)`.
 
+### Acting on many records
+
+What a person chose — or a script found — is a `Selection`: a value, plain data, never a store.
+THESE records by their keys (`chosen(keys)`), or EVERY ONE a question matches but some
+(`allMatching(question, total)`, then `toggled` unticks one). `criteriaOf` is the one question
+that asks for exactly them; `keysOf` reads their keys when someone needs them, as one page of
+references, and refuses past a ceiling (`SelectionTooLarge`) instead of answering a part.
+
+```ts
+const recipients = toggled(
+  allMatching({ field: "company", operator: "=", value: "SINCPRO" }, 37),
+  "C-9",
+);
+sizeOf(recipients); // 36
+const keys = await keysOf(recipients, {
+  transport,
+  route: "/contacts",
+  identity: "id",
+  limit: 200,
+});
+```
+
+`runBatch` is `for rec in self:` — a step once per item, one outcome per item, a failure that
+item's and never the batch's. The step is any work for one item; through a bounded context each
+item is its own use case (span, context, error handling):
+
+```ts
+const result = await runBatch(
+  keys,
+  (key, { signal }) =>
+    billingBoundedContext.execute(new CommandConfirmInvoice(key), { signal }),
+  {
+    concurrency: 1,
+    signal,
+    onOutcome: (outcome, { settled, total }) => progress(settled, total),
+  },
+);
+result.outcomes; // [done F-1, failed F-7 (conflict: ALREADY_CANCELLED), done F-9]
+```
+
+In order by default; `concurrency` runs more at once, the outcomes still in the items' order.
+`stopOnFailure` starts nothing after a failure; a cancelled batch skips what had not started and
+hands its signal to what runs. `BatchResult` is sincpro_framework's (#185, «per index, the answer
+or the problem»): a batch the server runs at once, when the backend has one, answers the same.
+
 ### Writing an adapter for another wire
 
 An adapter is one function: read the operation's binding for its wire, send the input, answer the
