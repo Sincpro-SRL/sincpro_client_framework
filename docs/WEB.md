@@ -16,7 +16,11 @@ how a web application adopts it — a plan, not a claim that it is adopted.
 ## Startup
 
 A production build keeps class names — a service's name is its class's, taken at registration —:
-Vite's `esbuild: { keepNames: true }` (and `build.minify` left to esbuild).
+Vite's `esbuild: { keepNames: true }` (and `build.minify` left to esbuild). Next.js has no such
+option, and an application on it registers with legacy decorators (`experimentalDecorators`),
+which hand over no name: each registration names its service,
+`@cursosBoundedContext.feature(CommandLeerCursos, { name: "LeerCursos" })`, and a Command that
+travels declares `static commandName` — the README's «Names that survive a minifier».
 
 ```ts
 // entrypoints/main.tsx

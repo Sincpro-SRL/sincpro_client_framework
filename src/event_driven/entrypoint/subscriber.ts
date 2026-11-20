@@ -26,6 +26,7 @@ import { identityOf, keyIdentity } from "@sincpro/client-framework/core/services
 import {
   eventKeysOf,
   type HandlerClass,
+  type HandlerOptions,
   type HandlerRegistrar,
   handlerRegistrar,
   type HandlerRegistration,
@@ -248,13 +249,26 @@ export class Subscriber<D extends object = Record<never, never>> implements Subs
    *     export class OnSaleChanged extends EventHandler<SalePaid | SaleCancelled> { … }
    *
    *     appSubscriber.handler([SalePaid, SaleCancelled])(OnSaleChanged);
+   *
+   * Its name (`app/OnSaleChanged`) is the consumer the stored queue acknowledges: a build that
+   * renames classes gives it one, `handler([SalePaid], { name: "OnSaleChanged" })`.
    */
   handler<const K extends readonly EventKey[]>(
     events: K,
+    options?: HandlerOptions,
   ): HandlerRegistrar<ExecutableOf<K[number]> & HandledEvent>;
-  handler<E extends DomainEvent>(event: EventClass<E>): HandlerRegistrar<E>;
-  handler<E extends RemoteEvent = RemoteEvent>(event: EventDescriptor): HandlerRegistrar<E>;
-  handler(events: EventKey | readonly EventKey[]): HandlerRegistrar<HandledEvent> {
+  handler<E extends DomainEvent>(
+    event: EventClass<E>,
+    options?: HandlerOptions,
+  ): HandlerRegistrar<E>;
+  handler<E extends RemoteEvent = RemoteEvent>(
+    event: EventDescriptor,
+    options?: HandlerOptions,
+  ): HandlerRegistrar<E>;
+  handler(
+    events: EventKey | readonly EventKey[],
+    options?: HandlerOptions,
+  ): HandlerRegistrar<HandledEvent> {
     const keys = eventKeysOf(events);
     return handlerRegistrar((Handler, name) => {
       if (this.name === "") {
@@ -269,7 +283,7 @@ export class Subscriber<D extends object = Record<never, never>> implements Subs
         throw new Error(`Event handler name already registered: ${name}`);
       }
       this.handlers.push({ name, Handler, events: keys });
-    });
+    }, options);
   }
 
   /** What an event of that wire name is rebuilt as, or `undefined` when nobody here hears it. */

@@ -102,7 +102,9 @@ src/
 - **Names say what a thing is.** `salesBoundedContext` — never `sales`, `ctx` or `bc`; `context` is
   the run's (`this.context`). A service's name is its class's, taken by the framework when it
   registers it; a production build keeps class names (Metro `keep_classnames`, esbuild/Vite
-  `keepNames`).
+  `keepNames`) — or, where it cannot (Next.js, legacy decorators), the registration names it:
+  `@cursosBoundedContext.feature(CommandLeerCursos, { name: "LeerCursos" })`,
+  `handler([Event], { name })`, and a Command declares `static commandName`.
 
 `sincpro-client scaffold <contract> --out src/domains/<context>` writes the application-owned files
 once; `sincpro-client check --root src` enforces the layers (a service never imports an

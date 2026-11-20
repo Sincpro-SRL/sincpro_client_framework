@@ -26,7 +26,8 @@ A generated remote client and a local repository are different dependencies.
 
 The platform must provide compatible random values and URL APIs before using ids/transports.
 A production build keeps class names — a service's name is its class's, taken at registration —:
-the host's `metro.config.js` sets `transformer.minifierConfig = { keep_classnames: true }`. It
+the host's `metro.config.js` sets `transformer.minifierConfig = { keep_classnames: true }`, or
+each registration names its service (`feature(Command, { name: "Cancel" })`). It
 initializes telemetry once and hands the common process simple port implementations:
 
 ```ts

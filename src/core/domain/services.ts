@@ -185,3 +185,30 @@ export const RESERVED_MEMBERS: ReadonlySet<string> = new Set([
   "signal",
   "execution",
 ]);
+
+/**
+ * A name given at registration (`{ name }`): it stands where a class's name would, so it is one —
+ * an identifier, as `LeerCursos` —, with no `/` or `.` inside the span's `<context>/<Name>`, the
+ * use case's `<context>.<Name>` or the consumer a stored queue acknowledges (`<owner>/<Name>`).
+ */
+const SERVICE_NAME = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*$/u;
+
+/**
+ * @internal — the name a registration gives its service or event handler, or `undefined` when
+ * it gives none (the framework then takes the class's). A string literal: no minifier rewrites
+ * it, and every realm that evaluates the module — a browser, a server rendering it — reads the
+ * same one.
+ */
+export function givenNameOf(
+  options: { readonly name?: unknown } | undefined,
+): string | undefined {
+  const name = options?.name;
+  if (name === undefined) return undefined;
+  if (typeof name !== "string" || !SERVICE_NAME.test(name)) {
+    const shown = typeof name === "string" ? JSON.stringify(name) : String(name);
+    throw new TypeError(
+      `${shown} is not a service's name: an identifier, as its class would be called (LeerCursos)`,
+    );
+  }
+  return name;
+}
