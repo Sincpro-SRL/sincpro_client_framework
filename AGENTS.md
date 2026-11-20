@@ -210,6 +210,12 @@ options)`: no route, no verb, no RPC method. The contract's bindings (`rest`, `r
   its optional entry, and nothing else imports one (`make doctor`).
 - **A span nothing records claims no trace.** OpenTelemetry's API with no provider answers an
   all-zeros span: the adapter gives no ids, so no `traceparent` of zeros reaches the server.
+- **A run with no parent may start under the application's active span — only when asked.**
+  `openTelemetryTracer(tracer, { adoptActiveSpan: true })` reads `context.active()` for a span
+  given no parent, and nowhere else: a span given one (the run above, a delivered message) keeps
+  it, the framework never makes its own spans active (no `context.with`) and registers no context
+  manager — that is the application's (Node: what `NodeSDK` or `@vercel/otel` register, or
+  `AsyncLocalStorageContextManager`). Without one, as in a browser, it changes nothing.
 - **Reported means unexpected.** A `TransportError` the server answered with a 4xx is `refused`,
   an `AbortError` is `aborted`; neither is reported (`outcomeOf`). A bounded context adds its own
   with `expectErrors(...)`; a process replaces the rule with `ProcessOptions.outcomeOf`. Never

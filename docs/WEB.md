@@ -31,6 +31,13 @@ configureProcess({
 });
 ```
 
+A server that renders pages (Next.js) and runs use cases while it renders traces them on its own
+provider, with `openTelemetryTracer`. Built with `{ adoptActiveSpan: true }`, a use case with no
+parent starts under the render's span — one trace: render → use case → API — when a context
+manager is registered on the server (`NodeSDK` and `@vercel/otel` register one; with a bare
+`TracerProvider`, `AsyncLocalStorageContextManager` from `@opentelemetry/context-async-hooks`).
+In the browser the option changes nothing. The README's «One trace from a server render».
+
 ## Reaching the services
 
 ```ts
