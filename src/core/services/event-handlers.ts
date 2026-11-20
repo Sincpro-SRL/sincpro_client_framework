@@ -9,6 +9,7 @@ import type {
 } from "@sincpro/client-framework/core/domain/pipeline";
 import {
   EventHandler,
+  givenNameOf,
   type HandledEvent,
 } from "@sincpro/client-framework/core/domain/services";
 import {
@@ -73,20 +74,34 @@ export function eventKeysOf(events: EventKey | readonly EventKey[]): readonly Ev
   return keys;
 }
 
+/** How an event handler is registered: what it is called. */
+export type HandlerOptions = {
+  /**
+   * Its name — `<owner>/<Name>` on its spans and logs, and the consumer a stored queue
+   * acknowledges —, given as a string literal so no minifier rewrites it: an identifier, as its
+   * class would be called (`"OnSaleChanged"`). Without it, a standard decorator's
+   * `context.name`, else the class's `name`, as always.
+   */
+  name?: string;
+};
+
 /**
  * Registers `Handler` with `register`, at once or — applied as a standard decorator — once its
- * class is defined; its name is the class's as the code wrote it (a decorator's `context.name`,
- * untouched by a minifier), else its `name`.
+ * class is defined; its name is the one `options` gives (a string, untouched by a minifier),
+ * else the class's as the code wrote it (a decorator's `context.name`, untouched too), else its
+ * `name`.
  */
 export function handlerRegistrar<E extends HandledEvent>(
   register: (Handler: HandlerClass, name: string) => void,
+  options?: HandlerOptions,
 ): HandlerRegistrar<E> {
+  const given = givenNameOf(options);
   return (Handler, decorator) => {
     const take = () => {
       if (!(Handler.prototype instanceof EventHandler)) {
         throw new TypeError("An event handler extends EventHandler");
       }
-      const name = decorator?.name ?? Handler.name;
+      const name = given ?? decorator?.name ?? Handler.name;
       if (typeof name !== "string" || name.trim() === "") {
         throw new Error(
           "An event handler is a named class: its name is said in spans and logs",

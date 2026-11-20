@@ -48,6 +48,7 @@ import type {
 import {
   ApplicationService,
   Feature,
+  givenNameOf,
   type HandledEvent,
   RESERVED_MEMBERS,
 } from "@sincpro/client-framework/core/domain/services";
@@ -65,6 +66,7 @@ import { handled } from "@sincpro/client-framework/core/services/error-handlers"
 import {
   eventKeysOf,
   type HandlerClass,
+  type HandlerOptions,
   type HandlerRegistrar,
   handlerRegistrar,
   type HandlerRegistration,
@@ -100,8 +102,19 @@ type ServiceClass<C extends Executable, R> = new () => Executor<C, R>;
 /** What a registration is for when it names none: everything; else the DTOs it names. */
 type Of<K> = [K] extends [never] ? Executable : ExecutableOf<K>;
 
-/** The service a registration takes the place of, as the backend's `replaces=`. */
-export type RegistrationOptions = { replaces?: abstract new (...args: never[]) => object };
+/** How a service is registered: what it takes the place of, and what it is called. */
+export type RegistrationOptions = {
+  /** The service registered now that this one takes the place of, as the backend's `replaces=`. */
+  replaces?: abstract new (...args: never[]) => object;
+  /**
+   * Its name — what its spans, logs and reports say, and what this bounded context keys it by
+   * —, given as a string literal so no minifier rewrites it: an identifier, as its class would be
+   * called (`"LeerCursos"`). Without it, a standard decorator's `context.name`, else the class's
+   * `name`, as always. A build that renames classes and registers with legacy decorators
+   * (`experimentalDecorators`) or a call — Next.js, which has no `keepNames` — gives it.
+   */
+  name?: string;
+};
 
 /** What `feature(...)` and `appService(...)` answer: the function that registers the service. */
 export type Registrar<T extends Executable> = <
@@ -266,10 +279,14 @@ export class BoundedContext<
    * Registers the Feature that executes a DTO — or each DTO listed, as the backend's
    * `feature([CommandX, EventY])`: a Command's class, a domain event's (the use case of the event:
    * registering it is the subscription), or a generated one's entry (`operations.X`, `events.X`).
-   * With `replaces`, it takes the place of the service registered now for each.
+   * With `replaces`, it takes the place of the service registered now for each; with `name`, it
+   * is called that instead of its class's name — which a minifier rewrites.
    *
    *     @billingBoundedContext.feature([CommandIssueInvoice, OrderPaid])
    *     class IssueInvoice extends Feature<CommandIssueInvoice | OrderPaid, ResponseInvoice> { … }
+   *
+   *     @cursosBoundedContext.feature(CommandLeerCursos, { name: "LeerCursos" })
+   *     class LeerCursos extends Feature<CommandLeerCursos, ResponseCursos> { … }
    */
   feature<const K extends readonly DtoKey[]>(
     dtos: K,
@@ -338,16 +355,30 @@ export class BoundedContext<
    *     salesBoundedContext.handler([SalePaid, SaleCancelled])(OnSaleChanged);
    *
    * An event may have its use case and N handlers here; each is its own consumer
-   * (`sales/OnSaleChanged`), acknowledged apart by the queue.
+   * (`sales/OnSaleChanged`), acknowledged apart by the queue — by that name, so a build that
+   * renames classes gives it one: `handler([SalePaid], { name: "OnSaleChanged" })`.
    */
   handler<const K extends readonly EventKey[]>(
     events: K,
+    options?: HandlerOptions,
   ): HandlerRegistrar<ExecutableOf<K[number]> & HandledEvent>;
-  handler<E extends DomainEvent>(event: EventClass<E>): HandlerRegistrar<E>;
-  handler<E extends RemoteEvent = RemoteEvent>(event: EventDescriptor): HandlerRegistrar<E>;
-  handler(events: EventKey | readonly EventKey[]): HandlerRegistrar<HandledEvent> {
+  handler<E extends DomainEvent>(
+    event: EventClass<E>,
+    options?: HandlerOptions,
+  ): HandlerRegistrar<E>;
+  handler<E extends RemoteEvent = RemoteEvent>(
+    event: EventDescriptor,
+    options?: HandlerOptions,
+  ): HandlerRegistrar<E>;
+  handler(
+    events: EventKey | readonly EventKey[],
+    options?: HandlerOptions,
+  ): HandlerRegistrar<HandledEvent> {
     const keys = eventKeysOf(events);
-    return handlerRegistrar((Handler, name) => this.registerHandler(Handler, name, keys));
+    return handlerRegistrar(
+      (Handler, name) => this.registerHandler(Handler, name, keys),
+      options,
+    );
   }
 
   /** The service registered now for a DTO — what a `replaces` names. */
@@ -588,14 +619,16 @@ export class BoundedContext<
     const dtos: readonly DtoKey[] = Array.isArray(dto) ? dto : [dto as DtoKey];
     if (dtos.length === 0)
       throw new TypeError("A service is registered for one DTO at least");
+    const given = givenNameOf(options);
     return (Service, decorator) => {
       // All the DTOs listed, or none: a refused one leaves the registrations as they were.
       const register = () => {
         const before = [...this.registrations];
         const revision = this.revision;
+        const written = given ?? decorator?.name;
         try {
           for (const one of dtos)
-            this.registerService(one, Service, layer, options.replaces, decorator?.name);
+            this.registerService(one, Service, layer, options.replaces, written);
         } catch (error) {
           this.registrations.clear();
           for (const [dto, registration] of before) this.registrations.set(dto, registration);
@@ -614,9 +647,10 @@ export class BoundedContext<
    * 1. The service is of the layer it is registered in, for a DTO: a Command's or a domain event's
    *    class, or a generated one's entry.
    * 2. The DTO has no service yet — or, with `replaces`, the one it has is that one.
-   * 3. Its name is the framework's to take, at registration: the class's name as the code wrote it
-   *    (a standard decorator's `context.name`, which a minifier does not touch), else the class's
-   *    `name` — a production build keeps class names (`keep_classnames`, `keepNames`). No other
+   * 3. Its name is the one its registration gives (`{ name }`, a string no minifier touches); else
+   *    the framework's to take, at registration: the class's name as the code wrote it (a standard
+   *    decorator's `context.name`, which a minifier does not touch), else the class's `name` — a
+   *    production build keeps class names (`keep_classnames`, `keepNames`) or names it. No other
    *    service here has it; the same service may take N DTOs.
    * 4. An event's wire name is given, and no other event here has it; a Command's identity, when
    *    it declares one, likewise: a name or an identity means one DTO.

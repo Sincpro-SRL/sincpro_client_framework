@@ -79,10 +79,12 @@ only). A Response may be a class, a plain object, a page, a primitive or `void`.
   the bases every dependency typed on `this` — the backend's `class Feature(_Feature,
 DependencyContextType)` —; `addDependency` supplies them, and reading one never supplied fails.
   A replacement names what it replaces: `addDependency(name, next, { replaces: previous })`.
-- **The framework names a service when it registers it**: its class, as the code wrote it — a
-  standard decorator hands the name over before any minifier runs —, else the class's `name`. A
-  production build keeps class names (`keep_classnames` in Metro's minifier, `keepNames` in
-  esbuild and Vite). Nothing on the class declares it.
+- **The framework names a service when it registers it**: the name the registration gives
+  (`{ name: "Total" }`), else its class, as the code wrote it — a standard decorator hands the
+  name over before any minifier runs —, else the class's `name`. A production build keeps class
+  names (`keep_classnames` in Metro's minifier, `keepNames` in esbuild and Vite) or names each
+  service ([Names that survive a minifier](#names-that-survive-a-minifier)). Nothing on the class
+  declares it.
 - **One service, N DTOs.** `feature([CommandX, EventY])` registers one service for each, as the
   backend's `DTORegistration`; a DTO still has one service, across both layers, dispatched by
   its exact class — or, generated, by its identity.
@@ -105,6 +107,53 @@ called: `salesBoundedContext.feature(CommandTotal)(Total)`. No DI library and no
 (Vite, Metro/Babel) is each application's to configure and test. A service registers itself
 where it is written; `services/index.ts` imports each file, so all are registered before anyone
 executes.
+
+### Names that survive a minifier
+
+A service's name is what its spans, logs and reports say (`cursos/LeerCursos`), and what its
+bounded context keys it by; an event handler's is also the consumer a stored queue acknowledges
+(`app/OnCursoCreado`). Taken from the class, it is only as stable as the build: a production
+minifier renames classes, so the same service reads `cursos/c5`, and two services renamed alike
+collide — `Service name already registered: l` — and the application does not start.
+
+A standard decorator hands over the name as written (`context.name`), and Vite and Metro can keep
+class names. Next.js can do neither: its compiler lowers standard decorators in a version this
+package does not read, so an application on Next uses legacy decorators
+(`experimentalDecorators`), which hand over no name, and it has no `keepNames`. There — or
+anywhere a build renames classes — the registration gives the name, a string literal no minifier
+touches:
+
+```ts
+@cursosBoundedContext.feature(CommandLeerCursos, { name: "LeerCursos" })
+class LeerCursos extends Feature<CommandLeerCursos, ResponseCursos> { … }
+
+@cursosBoundedContext.appService(CommandInscribir, { name: "Inscribir" })
+class Inscribir extends ApplicationService<CommandInscribir, ResponseInscripcion> { … }
+
+@appSubscriber.handler([CursoCreado], { name: "AvisarCursoCreado" })
+class AvisarCursoCreado extends EventHandler<CursoCreado> { … }
+
+class CommandLeerCursos extends Command<ResponseCursos> {
+  static readonly commandName = "cursos.CommandLeerCursos"; // its identity, likewise
+}
+```
+
+- **Precedence:** `{ name }`, then a standard decorator's `context.name`, then the class's
+  `name`. Without `{ name }` nothing changes, in any of the three forms (standard decorator,
+  legacy decorator, a call).
+- **It is a class's name:** an identifier (`LeerCursos`, `AñadirCurso`) — never `cursos/leer` or
+  `leer cursos` —, unique in its bounded context or subscriber, as a class's is; refused where the
+  registration is written otherwise. With `replaces`, the replacement says the name it replaced.
+- **The same in every realm.** It is a string in the module, nothing read from the platform: a
+  browser and a server rendering the same modules (SSR, React server components) name the
+  service alike.
+- **A Command's identity comes from its class's name too** (`<context>.<Command>`): a Command
+  that must keep it under a minifier — two renamed alike collide as
+  `Command identity already registered` — declares `static commandName`. An event's wire name is
+  always declared (`eventName`).
+
+The tests lower legacy decorators with TypeScript and minify with Vite's own minifier, and read
+the names back from the spans.
 
 ### Replacing a service
 
@@ -260,7 +309,8 @@ await appSubscriber.receive(message); // CloudEvents, structured or { headers, b
   the ones that do not have it yet.
 - **A handler** runs in the pipeline of a use case, in its own layer (`event_handler`): its span
   `<owner>/<Handler>`, `this.logger`, `this.execution.causationId` (the message's id), and what it
-  executes is its child. A handler takes N events: its type is their union, and TypeScript checks
+  executes is its child. `<owner>/<Handler>` is the key a stored queue keeps: a build that renames
+  classes names it (`handler([SalePaid], { name: "OnSalePaid" })`). A handler takes N events: its type is their union, and TypeScript checks
   it accepts every event listed.
 - **A Command** is executed by the one bounded context that registered it, continuing the
   message's flow — **only when declared** (`commands`). A bus never hands all its Commands to

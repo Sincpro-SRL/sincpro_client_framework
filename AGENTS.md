@@ -70,12 +70,15 @@ module has only the layers it needs, and says what it offers in its own `index.t
 - **A service is a singleton of its generation.** What a method writes on `this` lands on the
   instance, shared by the next call, the call beside it and every `scoped` variant — as in
   sincpro_framework. What belongs to one request goes in its arguments or its context.
-- **A service's name is the framework's, taken at registration.** A standard decorator hands it
-  the class's name as the code wrote it (`context.name`, untouched by a minifier); otherwise the
-  class's `name` — so a production build keeps class names (`keep_classnames`, `keepNames`).
-  `class Cancel` gives `project/Cancel`, identity `project.Cancel`. Nothing on a service declares
-  it. Commands and events route by exact constructor identity — a generated one by its identity
-  or wire name.
+- **A service's name is the framework's, taken at registration.** The registration may give it
+  (`feature(dto, { name })`, `appService`, `handler` — a string literal, so a minifier never
+  touches it); else a standard decorator hands it the class's name as the code wrote it
+  (`context.name`, untouched by a minifier); otherwise the class's `name` — so a production build
+  keeps class names (`keep_classnames`, `keepNames`) or names each service (Next.js: legacy
+  decorators, no `keepNames`). `class Cancel` gives `project/Cancel`, identity `project.Cancel`.
+  Nothing on a service declares it, and `{ name }` stays optional: without it every form —
+  standard decorator, legacy decorator, a call — behaves as before. Commands and events route by
+  exact constructor identity — a generated one by its identity or wire name.
 - **An event's name is declared; a Command's identity is the framework's.** `static eventName` is
   required and dotted (`<context>.<aggregate>.vN.<fact>`); `name` is reserved for it. A Command's
   identity is given when a bounded context registers it — `<context>.<Command>`, the backend's

@@ -81,4 +81,7 @@ export {
   processIdentity,
   type ProcessOptions,
 } from "@sincpro/client-framework/core/infrastructure/process";
-export type { HandlerRegistrar } from "@sincpro/client-framework/core/services/event-handlers";
+export type {
+  HandlerOptions,
+  HandlerRegistrar,
+} from "@sincpro/client-framework/core/services/event-handlers";

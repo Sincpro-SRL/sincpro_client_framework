@@ -114,9 +114,10 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 | Log filter          | Which INFO and DEBUG lines speak, by level, layer and bounded context; WARN and ERROR always do; spans are never filtered — `LogFilter`, `speaks`, `filteredLogger`                                                                      |
 
 Span names use `<bounded context>/<Service>` and use-case identity `<bounded context>.<Service>`:
-the service's class name, taken by the framework when it registers it (a standard decorator's
+the name its registration gives (`{ name: "Cancel" }`, a string no minifier touches), else the
+service's class name, taken by the framework when it registers it (a standard decorator's
 `context.name`, untouched by a minifier; else the class's `name`, so a production build keeps
-class names). An event's wire name is declared (`eventName`, dotted); a Command's identity is the
+class names or names each service). An event's wire name is declared (`eventName`, dotted); a Command's identity is the
 framework's too: `<context>.<Command>`, the backend's `registered_name`, given at registration.
 
 Context travels per call, never in a global async stack. An injected generated client is bound
@@ -173,7 +174,10 @@ A generic type annotation is not a reader, and a class constructor is not Pydant
   bounded context; the backend also has process-wide ones and `publish_*` to a Publisher.
 - An event's wire name is declared (`eventName`); the backend defaults it to the class's name.
   A Command's identity is computed as the backend's (`<context>.<Command>`), so production builds
-  keep class names.
+  keep class names — or the Command declares `static commandName`.
+- A registration may name its service or event handler (`{ name }`), which the backend's
+  `feature`/`app_service` do not take: Python has no minifier, and a client built without
+  `keepNames` (Next.js, legacy decorators) has no other name that survives its build.
 - Backend/client tracing attribute naming must evolve together when its canonical vocabulary
   changes; `sincpro.context` currently identifies the bounded context.
 - Web and mobile adopt it in their own releases. Mobile keeps SQLite, workers, outbox/DLQ,
