@@ -23,11 +23,18 @@ The backend already answers how a use case is written, traced and reported. This
 every client the same answer, once: **a Feature written here runs in a browser, on a phone, in a
 server-side render, in a script and in a test, unchanged.**
 
+And it serves many projects, not one. Each application chooses its shape — a single-page app, a
+server render, both in one, a phone, a script —, its shell, its bundler and its style; this
+package fixes only how a use case is written, run and observed, so every one of them is built
+the same way underneath and read the same way when something goes wrong.
+
 ## What it is responsible for
 
 1. **Services.** A `Feature` executes a registered Command through `execute(dto)`;
    an `ApplicationService` composes its context's Features through `featureBus`, never another
-   ApplicationService. Dependencies are typed attributes supplied by the bounded context.
+   ApplicationService. Dependencies are typed attributes supplied by the bounded context. A
+   service's name — what its span, its logs and its reports say — survives any build: where a
+   bundler renames classes, its registration gives it (`{ name }`).
 2. **Execution.** Every Command and event enters one execution pipeline, defined here: context,
    chain, span, log lines, outcome, report, error handlers — not handwritten by each service. An
    application changes it from outside through its extension points, as the backend's
@@ -38,7 +45,10 @@ server-side render, in a script and in a test, unchanged.**
    with its trace id; what the server already explained (a validation, a conflict), or what a
    bounded context declares expected, not reported.
    The platform plugs the implementation — OpenTelemetry, GlitchTip, a queue on the phone, memory
-   in a test — once, for the process (`configureProcess`). Structured logs are tagged by layer
+   in a test — once, for the process (`configureProcess`). One trace crosses the platforms: a run
+   carries its `traceparent` to the server, and where the platform holds a span of its own — a
+   server render's request — a run can start under it (`adoptActiveSpan`), so a page, its reads
+   and what the backend did are one tree. Structured logs are tagged by layer
    (infrastructure, adapter, bounded context, ApplicationService, Feature) and by execution;
    console filtering never controls another sink's delivery.
 4. **Context.** The levels a call sees — the process, its bounded context, a scope — read once
@@ -131,6 +141,10 @@ server-side render, in a script and in a test, unchanged.**
    dependency it can avoid.
 9. **Grow by evidence.** Nothing before its second use; every change ships with a test that fails
    without it.
+10. **Grow without breaking.** A new capability arrives as an option, never as a change to what
+    exists. Every form keeps working — standard decorators, legacy decorators, the plain call —
+    on every platform and in every rendering: a single-page app, a server render, a phone. An
+    application upgrades by changing a version number; nothing is deprecated to make room.
 
 ## How it is composed
 
@@ -194,6 +208,11 @@ first and delivered by the backend's store-and-forward rules (`storedQueue`) ove
 whatever backend — in the backend's kinds and next steps; retrying, setting aside, reporting and
 a screen's answer follow from it. A run can be cancelled, and its requests with it. The
 backend's circuit breaker guards any transport.
+
+**A server render is one more client.** It runs the same use cases through the same pipeline;
+its runs keep the names their registrations give, and nest under the request the server traces
+when the application opts in. Nothing here knows which renderer, router or framework drew the
+page.
 
 **Consumers have a guide.** The `sincpro-client-framework` skill says, for an application and for
 a platform's framework, what goes where and how each thing is done.
