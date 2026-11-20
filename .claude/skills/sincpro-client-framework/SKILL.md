@@ -126,6 +126,11 @@ processContext.set({ tenant_id, company_id });
 ```
 
 `configureProcess` replaces every port; `configureLogger(...)` changes only logging (a debug switch).
+A server that renders pages (Next.js) traces its use cases with
+`openTelemetryTracer(tracer, { adoptActiveSpan: true })`: a run with no parent starts under the
+render's span — one trace, render → use case → API — when the server registers a context manager
+(`NodeSDK`, `@vercel/otel`, or `AsyncLocalStorageContextManager`); without one, and in a browser,
+it changes nothing. Off by default.
 
 ### Reach the backend's services, over any wire
 

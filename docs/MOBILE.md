@@ -47,6 +47,9 @@ processContext.set({ tenant_id: session.tenant, company_id: session.company });
 The provider, error client and store are built by mobile, not this package. The process opens
 one span per Feature/ApplicationService execution; a generated client injected into a Feature
 propagates that run's headers. It does not configure destinations or automatically deliver to Loki.
+A run with no parent starts a trace of its own: `openTelemetryTracer`'s `adoptActiveSpan` is a
+server's option, and with no context manager registered — React Native registers none — it
+changes nothing.
 
 ## Reaching the services
 

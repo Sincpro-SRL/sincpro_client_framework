@@ -102,6 +102,7 @@ rule: the wire is JSON, and the local bus routes only the application's own Comm
 | ContextStore        | Synchronous values/version/subscription port; persistence belongs to the platform                                                                                                                                                        |
 | Execution           | One run: id, service identity, context snapshot, span and parent                                                                                                                                                                         |
 | Tracer              | Opens a span; the application supplies/export configures its implementation                                                                                                                                                              |
+| Active span         | The span OpenTelemetry's context holds where code runs, made active by the platform (a server render); a run with no parent starts under it only with `adoptActiveSpan`, a run with a parent never                                       |
 | ErrorReporter       | Reports unexpected failures with trace/execution correlation                                                                                                                                                                             |
 | Outcome             | `ok`, `refused`, `aborted` or `failed`; a business refusal is not an incident                                                                                                                                                            |
 | Failure             | What an error is: `kind`, `nextStep`, retryable, permanent, fault — `failureOf(error)`                                                                                                                                                   |
@@ -123,7 +124,11 @@ framework's too: `<context>.<Command>`, the backend's `registered_name`, given a
 Context travels per call, never in a global async stack. An injected generated client is bound
 through `BIND` and propagates trace/context headers; an injected bounded context is bound the
 same way, so what it executes is a child of the run that holds it; an unrelated direct call has
-no automatic execution span. The generator does not add an independent HTTP span.
+no automatic execution span. The generator does not add an independent HTTP span. A run with no
+parent starts a trace of its own; with `openTelemetryTracer(tracer, { adoptActiveSpan: true })`
+it starts under the active span the application's context manager holds (a server render), as
+the backend's use case starts under the span active in its process — the one place the
+platform's context is read, and never written.
 
 A bounded context is named for what it is — `salesBoundedContext` —, never a bare noun that reads
 as an entity (`sales`) and never an abbreviation (`ctx`, `bc`): `context` is the run's

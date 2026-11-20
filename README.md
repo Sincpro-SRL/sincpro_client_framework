@@ -581,10 +581,42 @@ name: an application's own object (an Odoo client with a `call`) reaches its use
 ignored: telling about a use case never changes its answer.
 
 The vendor entries wrap what the application built — they initialize nothing, read no
-environment and register nothing global. There is no context manager: the trace reaches the
+environment and register nothing global. No context manager is needed: the trace reaches the
 wire through the transport. On the web, leave the backend's origin out of OpenTelemetry's
 automatic `fetch` instrumentation (`ignoreUrls`), or it writes a `traceparent` of a trace of its
 own over this one.
+
+### One trace from a server render
+
+A run's parent is the run above it, or the message it continues — never what is active in
+OpenTelemetry's context —, so a use case with neither starts a trace of its own. A server that
+renders pages (Next.js) keeps a span of its own active while it renders; to have the use cases
+the render runs start under it — one trace: render → use case → API —, opt in:
+
+```ts
+import { context } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+
+// once, where the server registers its provider — NodeSDK and @vercel/otel already do this
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+
+configureProcess({
+  tracer: openTelemetryTracer(provider.getTracer("forge-web"), { adoptActiveSpan: true }),
+});
+```
+
+- **Only a run with no parent reads the active span.** A Feature under its ApplicationService, a
+  bounded context injected into a run, a run continuing a delivered message keep the parent they
+  are given — the active span is never mixed in —, and the framework never makes its own spans
+  active, so two renders at once never take each other's use cases. It is the backend's rule at
+  its root: sincpro_framework's use case is a child of the span active in its process.
+- **It reads what the application registered, and registers nothing.** On Node that is a context
+  manager: `NodeSDK` and `@vercel/otel` register one; a bare `TracerProvider` does not, and then
+  the application registers `AsyncLocalStorageContextManager` itself, as above. Without one the
+  active context is the root and the option changes nothing.
+- **In a browser it is harmless.** With no context manager registered (`browserTracer` registers
+  none) every root run starts its own trace, as without the option.
+- **Off by default.** `openTelemetryTracer(tracer)` behaves as it always has.
 
 ### Logging
 
