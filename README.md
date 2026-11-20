@@ -618,6 +618,22 @@ configureProcess({
   none) every root run starts its own trace, as without the option.
 - **Off by default.** `openTelemetryTracer(tracer)` behaves as it always has.
 
+### A failure's detail: in the trace, or in the error tracker
+
+A failed run's span carries its exception — an `exception` event with its type, message and stack
+— and its message as the status. Where errors go to an error tracker with their trace id
+(GlitchTip, through `sentryReporter`), keep the detail there:
+
+```ts
+openTelemetryTracer(provider.getTracer("forge-web"), { recordExceptions: false });
+```
+
+The failed span still says what failed — `error.type`, `sincpro.outcome`, `sincpro.fault` and an
+ERROR status —, and the error tracker holds the message and the stack under its access rules, not
+every backend that stores traces: in an ERP a failure's message can name a customer or an amount.
+OpenTelemetry, too, moves away from exceptions as span events (2026). Default `true`: a span keeps
+its exception, as it always has.
+
 ### Logging
 
 The application layer imports no logger. Two are predefined, for the code around the use cases:

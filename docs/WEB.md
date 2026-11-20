@@ -36,7 +36,9 @@ provider, with `openTelemetryTracer`. Built with `{ adoptActiveSpan: true }`, a 
 parent starts under the render's span — one trace: render → use case → API — when a context
 manager is registered on the server (`NodeSDK` and `@vercel/otel` register one; with a bare
 `TracerProvider`, `AsyncLocalStorageContextManager` from `@opentelemetry/context-async-hooks`).
-In the browser the option changes nothing. The README's «One trace from a server render».
+In the browser the option changes nothing. The README's «One trace from a server render». Where
+errors go to GlitchTip, `{ recordExceptions: false }` keeps a failure's message and stack out of
+the traces — the README's «A failure's detail».
 
 ## Reaching the services
 
