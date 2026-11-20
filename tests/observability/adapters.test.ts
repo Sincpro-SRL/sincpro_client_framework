@@ -188,3 +188,23 @@ test("an unexpected error reaches the application's Sentry-compatible client wit
   assert.match(hint.captureContext.tags["trace_id"] ?? "", /^[0-9a-f]{32}$/);
   assert.deepEqual(hint.captureContext.contexts.sincpro["context"], { tenant_id: "acme" });
 });
+
+test("recordExceptions: false — a failure is an error with its type, without its message or stack", async () => {
+  const exporter = new InMemorySpanExporter();
+  const provider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter })],
+  });
+  configureProcess({
+    tracer: openTelemetryTracer(provider.getTracer("an-application"), {
+      recordExceptions: false,
+    }),
+  });
+  await assert.rejects(project.execute(new FailCommand()));
+  const [failed] = exporter.getFinishedSpans();
+  assert.equal(failed?.status.code, 2); // ERROR
+  assert.equal(failed?.status.message, undefined, "no message");
+  assert.equal(failed?.events.length, 0, "no exception event: no message, no stack");
+  assert.equal(failed?.attributes["error.type"], "TypeError");
+  assert.equal(failed?.attributes["sincpro.outcome"], "internal");
+  assert.equal(failed?.attributes["sincpro.fault"], true);
+});

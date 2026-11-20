@@ -34,6 +34,18 @@ export type OpenTelemetryTracerOptions = {
    * does (`ZoneContextManager`) has a root run start under the span active where it is executed.
    */
   readonly adoptActiveSpan?: boolean;
+  /**
+   * A failed run's span carries its exception — an `exception` event with its type, message and
+   * stack — and its message as the status. Default `true`, as always.
+   *
+   * `false` keeps a failed span to what the run sets (`error.type`, `sincpro.outcome`,
+   * `sincpro.fault`) and an ERROR status, without the message or the stack. Recommended where
+   * errors go to an error tracker with their trace id (GlitchTip, through `sentryReporter`): the
+   * detail lives there, under its access rules, and not in every backend that stores traces — in
+   * an ERP the message of a failure can name a customer or an amount. OpenTelemetry, too, moves
+   * away from exceptions as span events (2026).
+   */
+  readonly recordExceptions?: boolean;
 };
 
 /**
@@ -62,7 +74,7 @@ export type OpenTelemetryTracerOptions = {
  */
 export function openTelemetryTracer(
   tracer: OtelTracer,
-  { adoptActiveSpan = false }: OpenTelemetryTracerOptions = {},
+  { adoptActiveSpan = false, recordExceptions = true }: OpenTelemetryTracerOptions = {},
 ): Tracer {
   return {
     start(name, options): Span {
@@ -83,7 +95,7 @@ export function openTelemetryTracer(
         sampled: valid && (own.traceFlags & TraceFlags.SAMPLED) === TraceFlags.SAMPLED,
         ...(state ? { state } : {}),
         set: (attributes) => void span.setAttributes(attributes),
-        end: (outcome, error) => close(span, outcome, error),
+        end: (outcome, error) => close(span, outcome, recordExceptions ? error : undefined),
       };
     },
   };
@@ -107,7 +119,8 @@ function parentContextOf(parent: Span | undefined, adoptActiveSpan: boolean): Ot
 
 /**
  * How the use case ended, said the way OpenTelemetry reads it: `failed` is an error — with its
- * exception on the span where it was raised, the only one handed it —; `refused` and `aborted`
+ * exception on the span where it was raised, the only one handed it, unless the application keeps
+ * the detail out of its traces (`recordExceptions: false`: no error is handed over) —; `refused` and `aborted`
  * are expected answers, never an error, the way the backend leaves a refusal out of its error
  * rate. `sincpro.outcome` (`ok` or the failure's kind), `sincpro.fault` and `error.type` are set
  * by the run before it ends.
